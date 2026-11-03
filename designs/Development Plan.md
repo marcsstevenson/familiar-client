@@ -61,6 +61,8 @@ Fallbacks, tried in order and each recorded:
 4. **Publisher verification** of the app, which some tenants require for user consent. This needs a Microsoft Partner ID and is worth doing for open source users anyway.
 5. **Accept the block:** iM3 stays on Outlook on the web and its current connector, and Familiar ships for Hotmail and Parklands.
 
+**Chosen 2026-11-03:** fallback 5. User consent was refused for both the full and the read-only scopes, and Marc decided not to send the admin request for now (see the Results log).
+
 **Step B: token spike.** A throwaway Rust binary (`spikes/auth`) that:
 
 - signs in with authorisation code + PKCE through the system browser, and separately through device code;
@@ -214,7 +216,7 @@ Phase 0 results are recorded here as they come in.
 
 | WP | Date | Result |
 | --- | --- | --- |
-| 0.2 | 2026-11-03 | Step A: app registered in Marc's own Azure directory (not Parklands). iM3 Dental user, `organizations` endpoint: full scopes → "Need admin approval"; read-only scopes (`User.Read offline_access Mail.Read Calendars.Read`) → "Need admin approval". User consent is blocked in iM3 for this app. Device code skipped: consent policy is per tenant, not per flow, so it gives the same answer. Next: admin request drafted (`docs/im3-admin-consent-request.md`), Marc deciding whether to send. |
+| 0.2 | 2026-11-03 | Step A: app registered in Marc's own Azure directory (not Parklands). iM3 Dental user, `organizations` endpoint: full scopes → "Need admin approval"; read-only scopes (`User.Read offline_access Mail.Read Calendars.Read`) → "Need admin approval". User consent is blocked in iM3 for this app. Device code skipped: consent policy is per tenant, not per flow, so it gives the same answer. Decision (Marc, 2026-11-03): omit iM3 for now. The admin request is not sent; it's kept in `docs/im3-admin-consent-request.md` for later. Familiar targets Hotmail and Parklands; iM3 stays on Outlook web and its current connector. |
 | 0.3 | | |
 | 0.4 | | |
 | 0.5 | | |
