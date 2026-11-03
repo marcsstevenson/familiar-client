@@ -1,0 +1,219 @@
+# Familiar Development Plan
+
+3 Nov 2026 · Companion to [Email Client Design Document](Email%20Client%20Design%20Document.md)
+
+## Summary
+
+Familiar is built in six gated phases. Each phase ends with a gate that Marc approves before the next one starts, and each phase leaves something useful behind even if the project stops there.
+
+| Phase | Goal | Gate (Marc approves) |
+| --- | --- | --- |
+| **0. Prove it can work** | Sign-in on all three accounts, UI toolkit choice, performance at 500k messages, signature API check | iM3 Dental sign-in answered; Tauri or GPUI chosen; perf targets look reachable |
+| **1. Read-only headless engine** | `famd` + `fam` sync, store and search real mail, read-only | All three accounts (or those that sign in) sync fully and search instantly from the CLI |
+| **2. Writes and agent parity** | Drafts, send, organise, calendar writes, MCP, agent permissions | Past Composio tasks work through `fam`: find a thread, save a draft, create a Family Room event from an email |
+| **3. Desktop mail** | Tauri app for daily mail | Marc uses Familiar for mail on one account for a week |
+| **4. Calendar, rules, contacts and migration** | Remaining V1 features in the GUI | Every V1 row in the design doc's requirements table is done |
+| **5. Parallel run and release** | Packaging, reinstall test, open source release | Two weeks with Outlook closed; reinstall from `config.toml` works; Outlook retired |
+
+The work is split into **work packages** (WP) below. Each one is sized for a single thread, names what it depends on, and says what "done" means, so a later thread can pick one up from this file alone.
+
+## Ground rules for every thread
+
+- **Repo:** `familiar-client`, branch per work package (`wp/0.2-auth-spike`), PR to `main`. Commits and pushes use the `marcsstevenson` identity (see project memory). Ask Marc before committing.
+- **Live Microsoft access** happens only on Marc's computer. Cloud threads use the mock Graph server (WP 1.1) and synthetic mail.
+- **Real accounts stay read-only until Phase 2.** Write tests then use a `Familiar Test` folder and send only to Marc.
+- **No personal data in the repo.** No real mail, tokens, addresses or signatures. Secret scanning runs in CI from WP 1.0.
+- **Marc's jobs:** register the Microsoft app, do every sign-in, approve each gate, and review PRs.
+
+## Phase 0: Prove it can work
+
+Phase 0 answers the questions that could change the design. The iM3 Dental sign-in test runs first, because it decides whether iM3 can ever leave its current connector. The other Phase 0 packages can run in parallel once 0.1 has started.
+
+### WP 0.1 Register the Microsoft app (Marc, with a guide from Claude)
+
+- **Who:** Marc does the clicks; Claude writes the step-by-step guide.
+- **What:** In the Entra admin centre under the Parklands tenant (where Marc is admin), register a public client app named "Familiar":
+  - Supported accounts: *any organisational directory and personal Microsoft accounts*.
+  - Platform: *Mobile and desktop*, redirect URI `http://localhost` (loopback, any port).
+  - "Allow public client flows" on, so device code works.
+  - Delegated permissions: `User.Read`, `offline_access`, `Mail.ReadWrite`, `Mail.Send`, `Calendars.ReadWrite`, `Contacts.Read`, `MailboxSettings.ReadWrite`.
+  - Grant admin consent for the Parklands tenant.
+- **Done when:** the client ID is recorded (it's public, so it can go in the repo's example config).
+
+### WP 0.2 iM3 Dental sign-in test (the first real test)
+
+This runs in two steps, cheapest first.
+
+**Step A: consent probe, no code.** Claude gives Marc an authorise URL for the `organizations` endpoint with the full scope list. Marc opens it in a private browser window and signs in as his iM3 Dental user. The screen that comes back answers the question:
+
+| What Marc sees | Meaning | Next step |
+| --- | --- | --- |
+| A normal consent prompt listing the permissions | Users can consent; iM3 will work | Go to step B |
+| "Need admin approval" | User consent is blocked for this app | Try the fallbacks below |
+| "Your sign-in was blocked" or a Conditional Access error | A policy blocks unknown apps or devices | Record the error code and go to the fallbacks |
+
+Fallbacks, tried in order and each recorded:
+
+1. **Read-only scopes:** retry with only `User.Read offline_access Mail.Read Calendars.Read`. Some tenants allow user consent to low-impact permissions only. If this works, iM3 can be read and searched but not written.
+2. **Device code:** retry through device code, in case the tenant treats it differently (the risk table notes some tenants block it).
+3. **Ask the iM3 admin** for consent, with a one-page explanation Claude drafts. Marc decides whether to send it.
+4. **Publisher verification** of the app, which some tenants require for user consent. This needs a Microsoft Partner ID and is worth doing for open source users anyway.
+5. **Accept the block:** iM3 stays on Outlook on the web and its current connector, and Familiar ships for Hotmail and Parklands.
+
+**Step B: token spike.** A throwaway Rust binary (`spikes/auth`) that:
+
+- signs in with authorisation code + PKCE through the system browser, and separately through device code;
+- calls `/me`, `/me/mailFolders?$top=5`, `/me/messages?$top=1` and `/me/calendars`;
+- refreshes the token once to prove `offline_access` works;
+- runs against all three accounts (Hotmail on `consumers`, Parklands and iM3 on `organizations`).
+
+Tokens are printed as "ok/failed" only and never written to disk.
+
+- **Runs on:** Marc's computer.
+- **Done when:** a results table (account × flow × scope set → result + error code) is added to this file, and project memory is updated with the iM3 answer.
+
+### WP 0.3 Signature API recheck
+
+- Check current Graph docs and the beta endpoint for any signature or roaming-settings API on both consumer and work accounts. Try `GET /me/mailboxSettings` on each account during WP 0.2 step B and note what comes back.
+- **Done when:** the design doc's signature section is confirmed or corrected.
+
+### WP 0.4 UI toolkit bake-off: Tauri 2 vs GPUI
+
+- Build the same tiny prototype twice: a three-pane window with a virtualised list of 500k synthetic rows, and a reading pane showing a sanitised HTML newsletter in a sandboxed frame.
+- Measure on Windows (primary), plus macOS and Linux where available: cold start, idle memory, scroll frame times, keypress latency, HTML render time.
+- Note the developer-experience side too: how easily Claude can drive and screenshot each one in CI.
+- **Done when:** a results table and a recommendation are added here, and Marc chooses.
+
+### WP 0.5 Store and search at 500k messages
+
+- Synthetic mail generator (`tools/synth`) producing realistic headers, threads across folders and bodies, with a fixed seed.
+- Prototype the SQLite (WAL) schema and a Tantivy index; load 500k messages.
+- Measure: first page of a folder, search first page, thread assembly, `list --json` equivalent, index size, DB size.
+- **Done when:** numbers are compared against the design doc's targets, with any target that looks out of reach called out.
+
+### Phase 0 gate
+
+Marc reviews the WP 0.2 to 0.5 results and decides: which accounts are in scope, Tauri or GPUI, and whether the performance targets stand. The design doc is updated with the outcomes.
+
+## Phase 1: Read-only headless engine
+
+The goal is a daemon and CLI that keep a complete, correct, read-only local copy of every account that can sign in. No GUI yet.
+
+| WP | Work | Depends on | Done when |
+| --- | --- | --- | --- |
+| 1.0 | **Workspace and CI.** Cargo workspace with `core`, `provider-graph`, `store`, `search`, `rules`, `daemon`, `cli`, `gui` (stub). CI on Windows, macOS, Linux; the non-GUI crates build on a runner with no display libraries; clippy, fmt, tests, secret scanning, licence headers | Phase 0 gate | Empty crates build and CI is green |
+| 1.1 | **Mock Graph server.** A local server that replays recorded and synthetic responses for folders, messages, delta, `$search`, calendars, throttling (429 + `Retry-After`) and auth errors | 1.0 | Provider tests run fully offline in the cloud |
+| 1.2 | **Command registry.** Typed command definitions in `core`; generators for CLI args, JSON schema (`fam schema --json`), MCP tool list and TS bindings; the parity test that fails CI if a command is missing from a surface; stable exit codes | 1.0 | One sample command appears on every surface and the parity test catches a deliberately missing one |
+| 1.3 | **Config.** `config.toml` parsing and validation (`fam config validate`), comment-preserving write-back, example config in the repo | 1.2 | Round-trip test keeps comments and ordering |
+| 1.4 | **Auth.** PKCE and device code from the spike, made production: token storage in the OS keychain (Windows Credential Manager, macOS Keychain, Secret Service), encrypted-file fallback for containers, refresh, `fam auth login/status/logout` | 1.2, WP 0.2 | Sign-in survives restart on Marc's machine for each in-scope account |
+| 1.5 | **Store.** SQLite schema (accounts, folders, messages, threads, sync state, op queue), migrations, body files keyed by content hash, the single-writer rule | 1.0, WP 0.5 | Schema and migrations tested; readers don't block the writer |
+| 1.6 | **Graph provider: mail read.** Folder tree, header paging, body fetch, per-folder delta with saved links, move detection by immutable ID and Internet message ID, throttling scheduler (4 concurrent, `Retry-After`, user actions first) | 1.1, 1.4, 1.5 | Passes against the mock, including moves and throttling |
+| 1.7 | **Sync engine and daemon.** `famd`: first sync (headers for all history, then bodies for the window, newest first), incremental polling (Inbox 30 s, others 5 min), window ageing, pinning, body cache limit, local socket or named pipe, `fam sync status` | 1.6 | A synthetic 500k mailbox syncs from the mock and stays consistent |
+| 1.8 | **Threads.** Local conversation assembly from `conversationId` across all folders | 1.7 | Inbox + Sent Items threads assemble correctly in tests |
+| 1.9 | **Search.** Tantivy index, query language (`from:`, `subject:`, `has:attachment`, `before:`, `after:`, `folder:`, `account:`, `is:unread`), server `$search` for older bodies merged and labelled online, offline notice | 1.7 | Search targets from WP 0.5 met; online results labelled |
+| 1.10 | **CLI read commands.** `fam mail list/search/thread/fetch/pin`, `fam folder list`, `fam api` escape hatch (GET only in this phase), JSON output to the schema | 1.2, 1.7–1.9 | Every command has `--json`, tests and documentation |
+| 1.11 | **Calendar read.** Calendars and events by delta for a rolling window, IANA ↔ Windows time-zone mapping, `fam cal list` | 1.6, 1.7 | Family Room events list correctly on Marc's machine |
+| 1.12 | **Consistency check.** Store versus server comparison that reports drift without fixing it | 1.7 | Runs clean after a full sync of each real account |
+| 1.13 | **Live read-only run (Marc's computer).** Full sync of each in-scope account; measure time, disk and memory | 1.4–1.12 | Results recorded here |
+
+**Phase 1 gate:** Marc runs `fam` against his real accounts for a few days, read-only, and confirms sync is complete and search is fast.
+
+## Phase 2: Writes and agent parity
+
+The goal is a CLI that can replace Composio and the Microsoft 365 connector for mail and calendar.
+
+| WP | Work | Depends on | Done when |
+| --- | --- | --- | --- |
+| 2.1 | **Durable op queue.** Local-first writes with optimistic store updates, idempotent retries, restart survival, operation IDs and `--wait`, `--dry-run` on every write | Phase 1 | Kill-and-restart tests lose nothing |
+| 2.2 | **Mail writes.** Mark read, flag, move, archive, delete to Deleted Items, folder create/rename/move/delete | 2.1 | Passes against the mock, then in the `Familiar Test` folder |
+| 2.3 | **Compose and send.** Drafts (create, update, attachments, inline images), reply/reply all/forward, sending identity, per-account new/reply signatures from config, undo-send delay, outbox while offline, warning for many visible outside recipients | 2.1, 1.3 | Sends to Marc only work from each account |
+| 2.4 | **Calendar writes.** Create, edit, delete, RSVP, recurrence (server-expanded), reminders, purposes (`--purpose family`), `fam cal add --from-mail` with link back and suggested details | 2.1, 1.11 | A Family Room event is created from a real email |
+| 2.5 | **Contacts.** Read and search Outlook contacts plus a local list of past correspondents, for autocomplete | 1.6 | `fam contacts search` works |
+| 2.6 | **Agent permissions and audit log.** `[agent] allow` enforced by `famd`, per-account grants for send, delete, rules and forward, audit log of every automated write with its source, non-interactive mode with `--yes` rules | 2.1 | Denied actions fail with the documented exit code and are logged |
+| 2.7 | **MCP server and local JSON-RPC API.** Generated from the registry; `fam mcp serve --allow read,draft` | 1.2, 2.6 | Claude Code can use it through MCP and through the shell |
+| 2.8 | **Agent skill.** The shipped skill describing common workflows, built from `fam schema --json` | 2.7 | Claude completes the gate tasks using only the skill |
+| 2.9 | **Gate tasks on real accounts.** Find a thread, save a draft, create a Family Room event from an email, all through `fam` | 2.1–2.8 | Marc confirms each task |
+
+**Phase 2 gate:** the WP 2.9 tasks pass. At this point Marc can switch Claude from Composio to `fam` for mail and calendar.
+
+## Phase 3: Desktop mail
+
+Assumes Tauri 2 + SolidJS wins Phase 0; if GPUI wins, the UI packages are rewritten but the core and command list are unchanged.
+
+| WP | Work | Depends on | Done when |
+| --- | --- | --- | --- |
+| 3.1 | **Shell and design tokens.** Tauri app, custom title bar per OS, light/dark/system themes, generated TS bindings, daemon auto-start | Phase 2 | App opens to an empty three-pane layout |
+| 3.2 | **Folder tree and message list.** Unified and per-account views, virtualised list, sorting in Rust, rows-on-screen only | 3.1 | 60 fps scrolling at 500k |
+| 3.3 | **Reading pane.** Rust HTML sanitiser, sandboxed frame with strict CSP, remote images blocked with per-message and per-sender overrides, link destinations shown, attachment preview and save, prefetch of likely next messages, HTML test set | 3.1 | Test set renders safely; open-message target met |
+| 3.4 | **Compose window.** Rich and plain text, inline images, drag-and-drop attachments, autocomplete, identity and signature switching | 3.1, 2.3 | Compose round-trips with the CLI's drafts |
+| 3.5 | **Command palette and keyboard.** Every command reachable, showing its keybinding and CLI equivalent; single-key actions rebindable from config; `fam ui` commands | 3.2 | Every registered command is in the palette (checked in CI) |
+| 3.6 | **Search UI and smart folders.** Query bar, online results labelled, saved searches from `[[views]]` | 3.2, 1.9 | Search target met in the GUI |
+| 3.7 | **Performance and accessibility CI.** Automated checks for the design doc's targets; screen reader labels; WCAG 2.1 AA contrast | 3.2–3.6 | CI fails on a regression |
+
+**Phase 3 gate:** Marc uses Familiar for mail on one account for a week.
+
+## Phase 4: Calendar, rules, contacts and migration
+
+| WP | Work | Depends on | Done when |
+| --- | --- | --- | --- |
+| 4.1 | **Calendar views.** Day, week, month and agenda, multiple calendars together, event editor, RSVP | Phase 3, 2.4 | Daily calendar use works |
+| 4.2 | **Event from email panel.** Side panel with that day's events while creating from a message | 4.1 | Clashes are visible while creating |
+| 4.3 | **Server rules as code.** `fam rules plan/apply/test`, ordering, enable/disable, Junk-folder rule example | 2.1 | Config and server stay in sync |
+| 4.4 | **Local rules.** Conditions the server can't express, run by `famd`, clearly labelled | 4.3 | Junk sender clean-up rule works locally |
+| 4.5 | **Rules and contacts in the GUI** | 4.3, 2.5 | Editable from the GUI, written back to config |
+| 4.6 | **First-run migration.** Import server rules and folder favourites into config; guided one-time signature copy | 4.3, 1.3 | A fresh config is generated from a real account |
+
+**Phase 4 gate:** every V1 requirement in the design doc is done, checked row by row.
+
+## Phase 5: Parallel run and release
+
+| WP | Work | Depends on | Done when |
+| --- | --- | --- | --- |
+| 5.1 | **Packaging.** winget, Homebrew, deb/rpm/AppImage, OCI image with `famd` as the main process | Phase 4 | One-command install on each OS |
+| 5.2 | **Code signing and publisher verification** (Marc supplies certificates and Partner ID) | 5.1 | Signed installers; verified publisher in Entra |
+| 5.3 | **Reinstall drill.** Wipe, install, restore `config.toml`, sign in, sync | 5.1 | Working install with nothing else restored |
+| 5.4 | **Parallel run.** Two weeks of daily use with Outlook closed; daily consistency checks | 5.1 | No lost or misfiled mail |
+| 5.5 | **Open source release.** README, contributing guide, security policy, docs site, public HTML test set | 5.3 | Public release tagged |
+
+**Phase 5 gate:** Marc retires New Outlook on the desktop.
+
+## Ordering and parallel work
+
+```
+Phase 0:  0.1 ──► 0.2A ──► 0.2B ──► 0.3
+                   │
+          0.4 ─────┼──────────────────┐   (0.4 and 0.5 start any time, in the cloud)
+          0.5 ─────┘                  ▼
+                                 Phase 0 gate
+Phase 1:  1.0 ─► 1.1, 1.2, 1.5 ─► 1.3, 1.4, 1.6 ─► 1.7 ─► 1.8, 1.9, 1.11, 1.12 ─► 1.10 ─► 1.13
+Phase 2:  2.1 ─► 2.2, 2.3, 2.4, 2.6 (parallel) ─► 2.7 ─► 2.8 ─► 2.9
+Phase 3:  3.1 ─► 3.2, 3.3, 3.4 (parallel) ─► 3.5, 3.6 ─► 3.7
+Phase 4:  4.1 ─► 4.2;  4.3 ─► 4.4, 4.5, 4.6
+Phase 5:  5.1 ─► 5.2, 5.3, 5.4 ─► 5.5
+```
+
+Workstreams that can run as separate threads at the same time:
+
+- **Auth and Microsoft setup** (0.1, 0.2, 1.4): needs Marc's computer.
+- **Engine** (1.5–1.9, 2.1): cloud, against the mock.
+- **Surfaces and parity** (1.2, 1.10, 2.6–2.8): cloud.
+- **UI** (0.4, then Phase 3): cloud, with Windows checks on Marc's computer.
+- **Calendar** (1.11, 2.4, 4.1–4.2).
+- **Rules and migration** (4.3–4.6).
+
+## Suggested first threads
+
+1. **"Test iM3 Dental sign-in"**: WP 0.1 guide and WP 0.2 step A. This is the next thing to do and needs about 15 minutes of Marc's time.
+2. **"Compare Tauri and GPUI"**: WP 0.4, can start in the cloud straight away.
+3. **"Benchmark store at 500k messages"**: WP 0.5, including the synthetic mail generator.
+
+## Results log
+
+Phase 0 results are recorded here as they come in.
+
+| WP | Date | Result |
+| --- | --- | --- |
+| 0.2 | | |
+| 0.3 | | |
+| 0.4 | | |
+| 0.5 | | |
