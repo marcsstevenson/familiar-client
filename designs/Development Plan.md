@@ -39,6 +39,7 @@ Phase 0 answers the questions that could change the design. The iM3 Dental sign-
   - Delegated permissions: `User.Read`, `offline_access`, `Mail.ReadWrite`, `Mail.Send`, `Calendars.ReadWrite`, `Contacts.Read`, `MailboxSettings.ReadWrite`.
   - Grant admin consent for the Parklands tenant.
 - **Done when:** the client ID is recorded (it's public, so it can go in the repo's example config).
+- **Outcome (2026-11-03):** the app is registered in Marc's own Azure directory instead of the Parklands tenant. Parklands admin consent link is in the guide (Part 1 step 7), not yet done. The sign-in steps are in `docs/sign-in-test-guide.md`.
 
 ### WP 0.2 iM3 Dental sign-in test (the first real test)
 
@@ -213,7 +214,7 @@ Phase 0 results are recorded here as they come in.
 
 | WP | Date | Result |
 | --- | --- | --- |
-| 0.2 | | |
+| 0.2 | 2026-11-03 | Step A: app registered in Marc's own Azure directory (not Parklands). iM3 Dental user, `organizations` endpoint: full scopes → "Need admin approval"; read-only scopes (`User.Read offline_access Mail.Read Calendars.Read`) → "Need admin approval". User consent is blocked in iM3 for this app. Device code skipped: consent policy is per tenant, not per flow, so it gives the same answer. Next: admin request drafted (`docs/im3-admin-consent-request.md`), Marc deciding whether to send. |
 | 0.3 | | |
 | 0.4 | | |
 | 0.5 | | |
