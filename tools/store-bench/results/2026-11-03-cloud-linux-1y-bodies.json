@@ -1,0 +1,265 @@
+{
+  "conversations": 290392,
+  "folders": 72,
+  "host": "linux x86_64, 4 logical CPUs, Intel(R) Xeon(R) Processor @ 2.10GHz",
+  "largest_folder": [
+    1,
+    75193
+  ],
+  "largest_thread": 13,
+  "load": {
+    "bodies_kept": 47062,
+    "bodies_secs": 4.819819271,
+    "body_window_days": 365,
+    "finalise_secs": 1.604831916,
+    "generate_secs": 27.399991695,
+    "messages": 500000,
+    "raw_body_bytes": 86643967,
+    "seed": 42,
+    "sqlite_secs": 61.307836892,
+    "tantivy_add_secs": 6.693319261,
+    "tantivy_commit_secs": 0.66942392,
+    "total_secs": 103.089489062,
+    "unique_bodies": 47062
+  },
+  "memory_after_queries": {
+    "peak_rss_mb": 644.63671875,
+    "rss_mb": 359.83203125
+  },
+  "messages": 500000,
+  "sizes": {
+    "bodies_apparent_bytes": 47788175,
+    "bodies_on_disk_bytes": 193593344,
+    "body_files": 47062,
+    "db_bytes": 674390016,
+    "index_bytes": 81359690,
+    "wal_bytes": 0
+  },
+  "stats": [
+    {
+      "max_ms": 0.854372,
+      "n": 1000,
+      "name": "folder first page (any folder)",
+      "note": "50 rows, newest first, random non-empty folder",
+      "p50_ms": 0.085311,
+      "p95_ms": 0.149948,
+      "p99_ms": 0.209313
+    },
+    {
+      "max_ms": 0.119175,
+      "n": 1000,
+      "name": "folder first page (largest)",
+      "note": "50 rows, newest first, the largest folder",
+      "p50_ms": 0.05977,
+      "p95_ms": 0.079978,
+      "p99_ms": 0.097452
+    },
+    {
+      "max_ms": 0.238285,
+      "n": 1000,
+      "name": "folder page deep (keyset)",
+      "note": "50 rows after a random position in the largest folder, by (received_at, id) cursor",
+      "p50_ms": 0.159095,
+      "p95_ms": 0.19870200000000002,
+      "p99_ms": 0.213028
+    },
+    {
+      "max_ms": 2.792212,
+      "n": 200,
+      "name": "folder page deep (OFFSET)",
+      "note": "50 rows at a random OFFSET in the largest folder; what a naive virtual list would do",
+      "p50_ms": 1.364784,
+      "p95_ms": 2.5425180000000003,
+      "p99_ms": 2.639349
+    },
+    {
+      "max_ms": 2.322658,
+      "n": 200,
+      "name": "folder page deep (OFFSET, ids only)",
+      "note": "same, but the OFFSET walks only the covering index and rows are fetched by id",
+      "p50_ms": 1.384609,
+      "p95_ms": 2.1721079999999997,
+      "p99_ms": 2.3044540000000002
+    },
+    {
+      "max_ms": 0.27323000000000003,
+      "n": 1000,
+      "name": "threaded folder first page",
+      "note": "50 conversations, newest first, from the folder_threads summary table, largest folder",
+      "p50_ms": 0.061982,
+      "p95_ms": 0.086617,
+      "p99_ms": 0.099208
+    },
+    {
+      "max_ms": 0.22886900000000002,
+      "n": 1000,
+      "name": "folder tree with counts",
+      "note": "all folders with stored total/unread counters",
+      "p50_ms": 0.022275,
+      "p95_ms": 0.033469,
+      "p99_ms": 0.065983
+    },
+    {
+      "max_ms": 846.1059210000001,
+      "n": 10,
+      "name": "folder counts recomputed (scan)",
+      "note": "GROUP BY over all messages; shows why counters must be stored",
+      "p50_ms": 824.772305,
+      "p95_ms": 846.1059210000001,
+      "p99_ms": 846.1059210000001
+    },
+    {
+      "max_ms": 0.042735999999999996,
+      "n": 1000,
+      "name": "thread assembly",
+      "note": "all messages of a random message's conversation, across folders, oldest first",
+      "p50_ms": 0.009438,
+      "p95_ms": 0.014763,
+      "p99_ms": 0.028685000000000002
+    },
+    {
+      "max_ms": 0.057122,
+      "n": 1000,
+      "name": "thread assembly (largest)",
+      "note": "the largest conversation in the store",
+      "p50_ms": 0.022631000000000002,
+      "p95_ms": 0.029486,
+      "p99_ms": 0.042038
+    },
+    {
+      "max_ms": 0.120373,
+      "n": 1000,
+      "name": "open message (local body)",
+      "note": "header row + read and decompress the body file",
+      "p50_ms": 0.038695,
+      "p95_ms": 0.053718999999999996,
+      "p99_ms": 0.066321
+    },
+    {
+      "max_ms": 5.329282,
+      "n": 1000,
+      "name": "search: common word",
+      "note": "one word from frequency ranks 0-50 (matches a large share of mail); 50 newest hits, hydrated",
+      "p50_ms": 0.8868739999999999,
+      "p95_ms": 3.0045610000000003,
+      "p99_ms": 3.452016
+    },
+    {
+      "max_ms": 1.308144,
+      "n": 1000,
+      "name": "search: mid word",
+      "note": "one word from ranks 500-3000; 50 newest hits, hydrated",
+      "p50_ms": 0.288773,
+      "p95_ms": 0.35503500000000004,
+      "p99_ms": 0.445827
+    },
+    {
+      "max_ms": 0.453258,
+      "n": 1000,
+      "name": "search: rare word",
+      "note": "one word from ranks 10k-39k; 50 newest hits, hydrated",
+      "p50_ms": 0.214726,
+      "p95_ms": 0.276881,
+      "p99_ms": 0.290742
+    },
+    {
+      "max_ms": 4.9954730000000005,
+      "n": 1000,
+      "name": "search: two words (AND)",
+      "note": "common + mid word; 50 newest hits, hydrated",
+      "p50_ms": 0.49019700000000005,
+      "p95_ms": 0.9053009999999999,
+      "p99_ms": 1.262761
+    },
+    {
+      "max_ms": 26.728914,
+      "n": 1000,
+      "name": "search: phrase",
+      "note": "two common words as a phrase; 50 newest hits, hydrated",
+      "p50_ms": 6.353219,
+      "p95_ms": 14.358893,
+      "p99_ms": 20.218113
+    },
+    {
+      "max_ms": 0.699597,
+      "n": 1000,
+      "name": "search: from:",
+      "note": "from:<surname>, frequent correspondents more likely; 50 newest hits, hydrated",
+      "p50_ms": 0.25293,
+      "p95_ms": 0.5438339999999999,
+      "p99_ms": 0.607632
+    },
+    {
+      "max_ms": 0.505698,
+      "n": 1000,
+      "name": "search: subject:",
+      "note": "subject:<mid word>; 50 newest hits, hydrated",
+      "p50_ms": 0.246855,
+      "p95_ms": 0.298787,
+      "p99_ms": 0.330646
+    },
+    {
+      "max_ms": 0.648923,
+      "n": 1000,
+      "name": "search: word + folder",
+      "note": "mid word restricted to the largest folder; 50 newest hits, hydrated",
+      "p50_ms": 0.311689,
+      "p95_ms": 0.38496199999999997,
+      "p99_ms": 0.43806999999999996
+    },
+    {
+      "max_ms": 4.428401,
+      "n": 1000,
+      "name": "search: word + has:attachment",
+      "note": "common word AND attachment; 50 newest hits, hydrated",
+      "p50_ms": 1.255791,
+      "p95_ms": 2.9050629999999997,
+      "p99_ms": 3.413245
+    },
+    {
+      "max_ms": 8.357083,
+      "n": 1000,
+      "name": "search: word + date range",
+      "note": "common word in a random year; 50 newest hits, hydrated",
+      "p50_ms": 1.204656,
+      "p95_ms": 3.9227410000000003,
+      "p99_ms": 5.8046549999999995
+    },
+    {
+      "max_ms": 4.940954,
+      "n": 1000,
+      "name": "search: common word by relevance",
+      "note": "BM25 top 50 instead of newest first",
+      "p50_ms": 0.912053,
+      "p95_ms": 2.5015240000000003,
+      "p99_ms": 3.6464760000000003
+    },
+    {
+      "max_ms": 3.9261649999999997,
+      "n": 1000,
+      "name": "list --json (in process, new conn)",
+      "note": "open a new SQLite connection, first 50 rows of the largest folder, serialise to JSON",
+      "p50_ms": 0.576521,
+      "p95_ms": 0.736404,
+      "p99_ms": 1.074595
+    },
+    {
+      "max_ms": 7.67847,
+      "n": 200,
+      "name": "list --json (new process)",
+      "note": "spawn `store-bench list --json`, wait for all output; a cold CLI invocation",
+      "p50_ms": 2.892412,
+      "p95_ms": 4.131929,
+      "p99_ms": 4.617652
+    },
+    {
+      "max_ms": 0.7626189999999999,
+      "n": 1000,
+      "name": "folder first page under write load",
+      "note": "largest folder while a writer inserts and flags (3563 msgs/s written during the run)",
+      "p50_ms": 0.146262,
+      "p95_ms": 0.278203,
+      "p99_ms": 0.42323099999999997
+    }
+  ]
+}

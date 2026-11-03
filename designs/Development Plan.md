@@ -234,7 +234,7 @@ Phase 0 results are recorded here as they come in.
 | 0.2 | 2026-11-04 | Step B: auth spike run on Marc's PC, full scopes, iM3 omitted. Hotmail passes on both flows. Parklands passes on PKCE; device code signed in and read fine, but its refresh against `organizations` failed (AADSTS65001). Refreshing against the tenant ID worked on PKCE. Results table below. |
 | 0.3 | 2026-11-04 | Partial: `GET /me/mailboxSettings` on Hotmail and Parklands returns `archiveFolder, automaticRepliesSetting, dateFormat, delegateMeetingMessageDeliveryOptions, language, timeFormat, timeZone, userPurpose, workingHours`. No signature field on either. Graph docs and beta endpoint still to check. |
 | 0.4 | 2026-11-04 | Windows and Linux measured; see the WP 0.4 table and `spikes/ui-bakeoff/RESULTS.md`. Recommendation: Tauri 2 + SolidJS (meets start, keypress, open and scroll targets on Windows). No webview design meets the 150 MB GUI memory target, so raise it to about 400 MB. Marc chose Tauri 2 + SolidJS (2026-11-04). |
-| 0.5 | | |
+| 0.5 | 2026-11-03 | Store and search meet the targets at 500k messages on a 4-vCPU cloud VM; most operations are under 1 ms at p95. Three design changes for WP 1.5/1.9: store folder counters (a recount takes 0.86 s), keep the one-year body index (phrase search over all bodies is 109 ms p95), and pack small bodies (one file each uses 2.0 GB on disk for 510 MB). Details: [WP 0.5 Store benchmark](WP%200.5%20Store%20benchmark.md) |
 
 ### WP 0.2 step B results (2026-11-04)
 
