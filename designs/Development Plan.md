@@ -39,6 +39,7 @@ Phase 0 answers the questions that could change the design. The iM3 Dental sign-
   - Delegated permissions: `User.Read`, `offline_access`, `Mail.ReadWrite`, `Mail.Send`, `Calendars.ReadWrite`, `Contacts.Read`, `MailboxSettings.ReadWrite`.
   - Grant admin consent for the Parklands tenant.
 - **Done when:** the client ID is recorded (it's public, so it can go in the repo's example config).
+- **Outcome (2026-11-03):** the app is registered in Marc's own Azure directory instead of the Parklands tenant. Parklands admin consent link is in the guide (Part 1 step 7), not yet done. The sign-in steps are in `docs/sign-in-test-guide.md`.
 
 ### WP 0.2 iM3 Dental sign-in test (the first real test)
 
@@ -59,6 +60,8 @@ Fallbacks, tried in order and each recorded:
 3. **Ask the iM3 admin** for consent, with a one-page explanation Claude drafts. Marc decides whether to send it.
 4. **Publisher verification** of the app, which some tenants require for user consent. This needs a Microsoft Partner ID and is worth doing for open source users anyway.
 5. **Accept the block:** iM3 stays on Outlook on the web and its current connector, and Familiar ships for Hotmail and Parklands.
+
+**Chosen 2026-11-03:** fallback 5. User consent was refused for both the full and the read-only scopes, and Marc decided not to send the admin request for now (see the Results log).
 
 **Step B: token spike.** A throwaway Rust binary (`spikes/auth`) that:
 
@@ -213,7 +216,7 @@ Phase 0 results are recorded here as they come in.
 
 | WP | Date | Result |
 | --- | --- | --- |
-| 0.2 | | |
+| 0.2 | 2026-11-03 | Step A: app registered in Marc's own Azure directory (not Parklands). iM3 Dental user, `organizations` endpoint: full scopes → "Need admin approval"; read-only scopes (`User.Read offline_access Mail.Read Calendars.Read`) → "Need admin approval". User consent is blocked in iM3 for this app. Device code skipped: consent policy is per tenant, not per flow, so it gives the same answer. Decision (Marc, 2026-11-03): omit iM3 for now. The admin request is not sent; it's kept in `docs/im3-admin-consent-request.md` for later. Familiar targets Hotmail and Parklands; iM3 stays on Outlook web and its current connector. |
 | 0.3 | | |
 | 0.4 | | |
 | 0.5 | | |
