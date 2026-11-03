@@ -19,7 +19,7 @@ The work is split into **work packages** (WP) below. Each one is sized for a sin
 
 ## Ground rules for every thread
 
-- **Repo:** `familiar-client`, branch per work package (`wp/0.2-auth-spike`), PR to `main`. Commits and pushes use the `marcsstevenson` identity (see project memory). Ask Marc before committing.
+- **Repo:** `familiar-client`, commit and push straight to `main` (no branches or PRs) once the work is in a good state. Commits and pushes use the `marcsstevenson` identity (see project memory).
 - **Live Microsoft access** happens only on Marc's computer. Cloud threads use the mock Graph server (WP 1.1) and synthetic mail.
 - **Real accounts stay read-only until Phase 2.** Write tests then use a `Familiar Test` folder and send only to Marc.
 - **No personal data in the repo.** No real mail, tokens, addresses or signatures. Secret scanning runs in CI from WP 1.0.
