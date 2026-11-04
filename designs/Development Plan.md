@@ -218,6 +218,24 @@ Phase 0 results are recorded here as they come in.
 | WP | Date | Result |
 | --- | --- | --- |
 | 0.2 | 2026-11-03 | Step A: app registered in Marc's own Azure directory (not Parklands). iM3 Dental user, `organizations` endpoint: full scopes → "Need admin approval"; read-only scopes (`User.Read offline_access Mail.Read Calendars.Read`) → "Need admin approval". User consent is blocked in iM3 for this app. Device code skipped: consent policy is per tenant, not per flow, so it gives the same answer. Decision (Marc, 2026-11-03): omit iM3 for now. The admin request is not sent; it's kept in `docs/im3-admin-consent-request.md` for later. Familiar targets Hotmail and Parklands; iM3 stays on Outlook web and its current connector. |
-| 0.3 | | |
+| 0.2 | 2026-11-04 | Step B: auth spike run on Marc's PC, full scopes, iM3 omitted. Hotmail passes on both flows. Parklands passes on PKCE; device code signed in and read fine, but its refresh against `organizations` failed (AADSTS65001). Refreshing against the tenant ID worked on PKCE. Results table below. |
+| 0.3 | 2026-11-04 | Partial: `GET /me/mailboxSettings` on Hotmail and Parklands returns `archiveFolder, automaticRepliesSetting, dateFormat, delegateMeetingMessageDeliveryOptions, language, timeFormat, timeZone, userPurpose, workingHours`. No signature field on either. Graph docs and beta endpoint still to check. |
 | 0.4 | | |
 | 0.5 | | |
+
+### WP 0.2 step B results (2026-11-04)
+
+Client ID `c6057b6a-a692-47dd-b34e-12629372e32a`, full scope set. "Graph calls" means `/me`, `/me/mailFolders`, `/me/messages`, `/me/calendars` and `/me/mailboxSettings`.
+
+| Account | Authority | Flow | Sign-in | Graph calls | Refresh | Notes |
+| --- | --- | --- | --- | --- | --- | --- |
+| Hotmail | `consumers` | device code | ok | all 200 | ok | |
+| Hotmail | `consumers` | PKCE | ok | all 200 | ok | Granted exactly the requested scopes |
+| Parklands | `organizations` | device code | ok | all 200 | failed: HTTP 400 `invalid_grant` AADSTS65001 (not consented) | Refresh was sent to `organizations` |
+| Parklands | `organizations` | PKCE | ok | all 200 | ok | Refresh sent to the tenant ID from the token's `tid` claim. Granted also included `Contacts.ReadWrite` and `email`, so an earlier grant exists in Parklands |
+
+Findings:
+
+- Both in-scope accounts work with this app and these scopes. No admin consent was needed for Parklands.
+- `offline_access` never appears in the granted scope string; the refresh token is the proof it was granted.
+- WP 1.4 should refresh work accounts against the tenant ID, not `organizations`. Open: a device code rerun on Parklands with the tenant refresh, to confirm that was the cause (the first rerun code expired unused).
