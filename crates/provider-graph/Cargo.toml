@@ -9,7 +9,20 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
+familiar-auth.workspace = true
 familiar-core.workspace = true
+familiar-store.workspace = true
+chrono = { version = "0.4", default-features = false, features = ["std"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "http2"] }
+serde.workspace = true
+serde_json.workspace = true
+thiserror = "2"
+tokio = { version = "1", features = ["rt", "sync", "time", "macros"] }
+
+[dev-dependencies]
+familiar-mock-graph.workspace = true
+tempfile = "3"
+tokio = { version = "1", features = ["rt-multi-thread", "macros", "sync", "time"] }
 
 [lints]
 workspace = true
