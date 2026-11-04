@@ -70,6 +70,8 @@ jobs:
         run: cargo fmt --all --check
       - name: Licence headers
         run: bash scripts/check-licence-headers.sh
+      - name: Type-check generated TypeScript bindings
+        run: npx --yes -p typescript@5.9.3 tsc --strict --noEmit --target es2022 bindings/commands.ts
 
   secrets:
     name: Secret scanning
