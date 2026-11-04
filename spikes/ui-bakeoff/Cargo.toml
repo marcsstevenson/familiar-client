@@ -1,0 +1,6 @@
+[workspace]
+resolver = "3"
+members = ["common", "gpui", "tauri/src-tauri"]
+
+[profile.release]
+debug = 1

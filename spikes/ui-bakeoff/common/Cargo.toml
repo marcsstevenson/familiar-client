@@ -1,0 +1,11 @@
+[package]
+name = "bakeoff-common"
+version = "0.0.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[dependencies]
+ammonia = "4.2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"

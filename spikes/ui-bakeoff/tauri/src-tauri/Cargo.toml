@@ -1,0 +1,18 @@
+[package]
+name = "bakeoff-tauri"
+version = "0.0.0"
+edition = "2024"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[build-dependencies]
+tauri-build = { version = "2.5", features = [] }
+
+[dependencies]
+bakeoff-common = { path = "../../common" }
+tauri = { version = "2.12", features = [] }
+serde_json = "1"
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]

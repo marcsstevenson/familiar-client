@@ -1,0 +1,5 @@
+tauri/node_modules/
+tauri/dist/
+tauri/src-tauri/gen/
+bench/results/*.jsonl
+bench/results/*.stderr
