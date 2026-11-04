@@ -14,6 +14,10 @@ use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
+/// How long [`Writer::open`] waits for the lock before reporting
+/// [`Error::WriterLocked`].
+const LOCK_WAIT: Duration = Duration::from_secs(2);
+
 /// The one process allowed to change a store. Holds an exclusive lock on
 /// `store.lock` until dropped.
 pub struct Writer {
@@ -52,10 +56,21 @@ impl Writer {
             .write(true)
             .open(&paths.lock)
             .map_err(|e| Error::io("open", &paths.lock, e))?;
-        match lock.try_lock_exclusive() {
-            Ok(true) => {}
-            Ok(false) => return Err(Error::WriterLocked(paths.root)),
-            Err(e) => return Err(Error::io("lock", &paths.lock, e)),
+        // Wait briefly before giving up. On Unix a child process spawned by
+        // any thread inherits every open descriptor until it calls exec, so
+        // a lock released by a writer that just closed can stay held for a
+        // moment by someone else's fork. A real second writer holds it for
+        // much longer than this.
+        let deadline = std::time::Instant::now() + LOCK_WAIT;
+        loop {
+            match lock.try_lock_exclusive() {
+                Ok(true) => break,
+                Ok(false) if std::time::Instant::now() < deadline => {
+                    std::thread::sleep(Duration::from_millis(10));
+                }
+                Ok(false) => return Err(Error::WriterLocked(paths.root)),
+                Err(e) => return Err(Error::io("lock", &paths.lock, e)),
+            }
         }
 
         let mut conn = Connection::open_with_flags(
