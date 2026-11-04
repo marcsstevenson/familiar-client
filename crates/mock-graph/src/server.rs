@@ -17,6 +17,7 @@ use serde_json::{Value, json};
 use tokio::sync::oneshot;
 
 use crate::faults::{Fault, FaultKind};
+use crate::identity::{self, IdReply, Identity};
 use crate::model::{
     Calendar, Event, FOLDERS, Folder, Mailbox, MailboxState, Message, MutationError, ROOT_ID,
 };
@@ -68,6 +69,7 @@ pub(crate) struct State {
     origin: String,
     base_url: String,
     request_counter: u64,
+    identity: Identity,
 }
 
 struct Shared {
@@ -89,6 +91,9 @@ pub struct Builder {
     max_concurrent: Option<usize>,
     budget: Option<(u32, Duration)>,
     port: u16,
+    tenants: HashMap<String, String>,
+    token_lifetime: Duration,
+    device_interval: u64,
 }
 
 impl Builder {
@@ -134,6 +139,26 @@ impl Builder {
         self
     }
 
+    /// Puts mailbox `key`'s user in tenant `tid` for the identity mock. Use
+    /// [`crate::CONSUMER_TENANT`] for a personal account such as Hotmail. Mailboxes default
+    /// to the work tenant [`crate::DEFAULT_TENANT`].
+    pub fn tenant(mut self, key: impl Into<String>, tid: impl Into<String>) -> Self {
+        self.tenants.insert(key.into(), tid.into());
+        self
+    }
+
+    /// Lifetime of access tokens issued by the identity mock. Defaults to an hour.
+    pub fn token_lifetime(mut self, lifetime: Duration) -> Self {
+        self.token_lifetime = lifetime;
+        self
+    }
+
+    /// The device code polling interval the identity mock asks for, in seconds. Defaults to 1.
+    pub fn device_interval(mut self, secs: u64) -> Self {
+        self.device_interval = secs;
+        self
+    }
+
     /// Listens on this port instead of a free one.
     pub fn port(mut self, port: u16) -> Self {
         self.port = port;
@@ -150,6 +175,9 @@ impl Builder {
         let addr = listener.local_addr()?;
         let origin = format!("http://{addr}");
         let base_url = format!("{origin}/v1.0");
+        let mut identity = Identity::new(self.tenants);
+        identity.lifetime = self.token_lifetime;
+        identity.device_interval = self.device_interval;
         let state = State {
             mailboxes: self
                 .mailboxes
@@ -182,6 +210,7 @@ impl Builder {
             origin,
             base_url: base_url.clone(),
             request_counter: 0,
+            identity,
         };
         let shared = Arc::new(Shared {
             state: Mutex::new(state),
@@ -245,6 +274,9 @@ impl MockGraph {
             max_concurrent: Some(4),
             budget: None,
             port: 0,
+            tenants: HashMap::new(),
+            token_lifetime: Duration::from_secs(3600),
+            device_interval: 1,
         }
     }
 
@@ -261,6 +293,37 @@ impl MockGraph {
     /// The listening address.
     pub fn addr(&self) -> SocketAddr {
         self.addr
+    }
+
+    /// `http://127.0.0.1:<port>`, the identity mock's authority host: use it where the client
+    /// would use `https://login.microsoftonline.com`.
+    pub fn login_url(&self) -> String {
+        format!("http://{}", self.addr)
+    }
+
+    /// Makes mailbox `key`'s user the one signed in to the "browser": `/authorize` and
+    /// device code approval sign in as this user unless `login_hint` names another.
+    /// `None` signs out, so device code polling stays pending.
+    pub fn sign_in_as(&self, key: Option<&str>) {
+        self.shared
+            .lock()
+            .identity
+            .sign_in_as(key.map(str::to_string));
+    }
+
+    /// Revokes every refresh token issued for mailbox `key`, as a password change or
+    /// "sign out everywhere" would. Refreshing then fails with `invalid_grant`.
+    pub fn revoke_refresh_tokens(&self, key: &str) {
+        self.shared.lock().identity.revoke(key);
+    }
+
+    /// Makes every access token of mailbox `key` answer 401 as expired.
+    pub fn expire_access_tokens(&self, key: &str) {
+        for t in self.shared.lock().tokens.values_mut() {
+            if t.mailbox == key {
+                t.expired = true;
+            }
+        }
     }
 
     /// Changes the mailbox `key`. Panics if there is no such mailbox.
@@ -590,9 +653,24 @@ async fn dispatch(AxState(shared): AxState<Arc<Shared>>, req: Request) -> Respon
     let method = req.method().as_str().to_ascii_uppercase();
     let path = req.uri().path().to_string();
     let query = req.uri().query().unwrap_or("").to_string();
-    let params: Vec<(String, String)> = form_urlencoded::parse(query.as_bytes())
+    let mut params: Vec<(String, String)> = form_urlencoded::parse(query.as_bytes())
         .into_owned()
         .collect();
+    if let Some((tenant, op)) = identity::parse_path(&path) {
+        let body = axum::body::to_bytes(req.into_body(), 1 << 20)
+            .await
+            .unwrap_or_default();
+        params.extend(form_urlencoded::parse(&body).into_owned());
+        let (status, resp) = serve_identity(&shared, &tenant, &op, &method, &params);
+        shared.lock().log.push(LoggedRequest {
+            method,
+            path,
+            query,
+            mailbox: None,
+            status,
+        });
+        return resp;
+    }
     let (status, mailbox, resp) = serve(&shared, &method, &path, &params, req.headers()).await;
     shared.lock().log.push(LoggedRequest {
         method,
@@ -602,6 +680,65 @@ async fn dispatch(AxState(shared): AxState<Arc<Shared>>, req: Request) -> Respon
         status,
     });
     resp
+}
+
+fn serve_identity(
+    shared: &Arc<Shared>,
+    tenant: &str,
+    op: &str,
+    method: &str,
+    params: &[(String, String)],
+) -> (u16, Response) {
+    let mut st = shared.lock();
+    let users = st
+        .mailboxes
+        .iter()
+        .map(|(k, m)| (k.clone(), m.user.clone()))
+        .collect();
+    let mut issued = Vec::new();
+    let reply = identity::handle(
+        &mut st.identity,
+        &users,
+        tenant,
+        op,
+        method,
+        params,
+        &mut issued,
+    );
+    for (token, mailbox) in issued {
+        st.tokens.insert(
+            token,
+            TokenInfo {
+                mailbox,
+                expired: false,
+            },
+        );
+    }
+    let (status, body, content_type, location) = match reply {
+        IdReply::Json(status, body) => (
+            status,
+            Body::from(body.to_string()),
+            Some("application/json; charset=utf-8"),
+            None,
+        ),
+        IdReply::Text(status, text) => (
+            status,
+            Body::from(text),
+            Some("text/plain; charset=utf-8"),
+            None,
+        ),
+        IdReply::Redirect(url) => (302, Body::empty(), None, Some(url)),
+    };
+    let mut resp = Response::new(body);
+    *resp.status_mut() = StatusCode::from_u16(status).unwrap_or(StatusCode::INTERNAL_SERVER_ERROR);
+    if let Some(ct) = content_type {
+        resp.headers_mut()
+            .insert("content-type", HeaderValue::from_static(ct));
+    }
+    if let Some(v) = location.and_then(|u| HeaderValue::from_str(&u).ok()) {
+        resp.headers_mut().insert("location", v);
+    }
+    (status, resp)
 }
 
 enum Admit {

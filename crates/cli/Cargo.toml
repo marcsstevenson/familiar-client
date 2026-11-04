@@ -28,3 +28,5 @@ workspace = true
 [dev-dependencies]
 schemars.workspace = true
 serde.workspace = true
+familiar-mock-graph.workspace = true
+tokio = { version = "1", features = ["rt-multi-thread"] }

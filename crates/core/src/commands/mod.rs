@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //! Built-in commands. Each one is registered in [`crate::Registry::builtin`].
 
+pub mod auth;
 pub mod config;
 pub mod schema;
 pub mod version;

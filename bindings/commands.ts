@@ -41,6 +41,72 @@ export type CommandError = {
 
 export type Access = "read" | "draft" | "write" | "send" | "delete" | "rules";
 
+export type AccountSignIn = {
+  /** When the current access token expires (RFC 3339, UTC). */
+  access_expires_at?: string | null;
+  /** The account name. */
+  account: string;
+  /** The authority used to sign in (for a signed-out account, the tenant in `config.toml`). */
+  authority: string;
+  /** Why a check failed. */
+  detail?: string | null;
+  /** The display name. */
+  display_name?: string | null;
+  /** The authority refreshes go to: `consumers` or the tenant ID. */
+  refresh_authority?: string | null;
+  /** When the tokens were last refreshed (RFC 3339, UTC). */
+  refreshed_at?: string | null;
+  /** Granted scopes. */
+  scopes: Array<string>;
+  /** When the account signed in (RFC 3339, UTC). */
+  signed_in_at?: string | null;
+  /** The state. */
+  state: SignInState;
+  /** The account's tenant ID. */
+  tenant_id?: string | null;
+  /** The sign-in name, usually the email address. */
+  username?: string | null;
+};
+
+export type AuthLoginInput = {
+  /** The account name, for example `hotmail` (lowercase letters, digits, - and _). */
+  account: string;
+  /** Where to sign in: `consumers` for Hotmail and Outlook.com, `organizations` or the tenant ID or domain for a work account, or `common`. Defaults to the account's `tenant` in config.toml. */
+  authority?: string | null;
+  /** The app (client) ID. Defaults to `[app] client_id` in config.toml, then Familiar's. */
+  client_id?: string | null;
+  /** Use a device code (enter it at microsoft.com/devicelogin on any device) instead of opening a browser here. */
+  device_code?: boolean;
+  /** The address to sign in as. Defaults to the account's `email` in config.toml. Sent as a hint to the sign-in page; a sign-in as anyone else is refused. */
+  email?: string | null;
+};
+
+export type AuthLogoutInput = {
+  /** The account to sign out. */
+  account?: string | null;
+  /** Sign out every account. */
+  all?: boolean;
+};
+
+export type AuthLogoutOutput = {
+  /** Accounts whose tokens were removed. Empty if none were signed in. */
+  removed: Array<string>;
+};
+
+export type AuthStatusInput = {
+  /** Only this account. With --check, a failed check is an error (exit code 4 or 7). */
+  account?: string | null;
+  /** Prove each sign-in works: refresh the token if needed and call Graph /me. */
+  check?: boolean;
+};
+
+export type AuthStatusOutput = {
+  /** Signed-in accounts and accounts in config.toml, by name. */
+  accounts: Array<AccountSignIn>;
+  /** Where tokens are kept: `keychain` or `file`. */
+  store: string;
+};
+
 export type CommandDoc = {
   /** What the command may do. */
   access: Access;
@@ -172,6 +238,8 @@ export type SchemaOutput = SchemaDocument | McpToolList | {
   typescript: string;
 };
 
+export type SignInState = "signed_in" | "signed_out" | "ok" | "auth_required" | "offline" | "error";
+
 export type SignatureState = {
   /** A signature for new messages is set. */
   new: boolean;
@@ -197,6 +265,12 @@ export type VersionOutput = {
 
 /** Every command, by dotted name, with its input and output types. */
 export interface Commands {
+  /** Sign in to a Microsoft account */
+  "auth.login": { input: AuthLoginInput; output: AccountSignIn };
+  /** Sign out: forget an account's tokens */
+  "auth.logout": { input: AuthLogoutInput; output: AuthLogoutOutput };
+  /** Show which accounts are signed in */
+  "auth.status": { input: AuthStatusInput; output: AuthStatusOutput };
   /** Show which config file is used */
   "config.path": { input: ConfigPathInput; output: ConfigPathOutput };
   /** Check config.toml for errors */
@@ -212,6 +286,9 @@ export type CommandName = keyof Commands;
 
 /** Every command name, in order. */
 export const COMMAND_NAMES = [
+  "auth.login",
+  "auth.logout",
+  "auth.status",
   "config.path",
   "config.validate",
   "schema",

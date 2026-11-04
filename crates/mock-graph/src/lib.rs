@@ -19,6 +19,11 @@
 //! - **Sync state loss.** [`MailboxHandle::expire_delta_tokens`] makes old delta links
 //!   answer 410 `SyncStateNotFound`.
 //!
+//! The same port also mocks the Microsoft identity platform (`/{tenant}/oauth2/v2.0/...`):
+//! authorisation code with PKCE, device code and refresh tokens, with Entra's tenant rules.
+//! Point the sign-in code at [`MockGraph::login_url`]; tokens it issues work on the Graph
+//! routes. See [`MockGraph::sign_in_as`].
+//!
 //! Data comes from JSON fixtures ([`Mailbox::from_json`], [`Mailbox::small`]), generated
 //! mailboxes of any size ([`SyntheticSpec`]) and recorded exchanges replayed verbatim
 //! ([`Recording`]). Tests change a mailbox while the server runs through
@@ -34,6 +39,7 @@
 //! ```
 
 mod faults;
+mod identity;
 mod model;
 mod recorded;
 mod render;
@@ -41,6 +47,7 @@ mod server;
 mod synthetic;
 
 pub use faults::Fault;
+pub use identity::{CONSUMER_TENANT, DEFAULT_TENANT};
 pub use model::{Calendar, EmailAddress, Event, Folder, Mailbox, Message, MutationError, User};
 pub use recorded::{RecordedExchange, Recording};
 pub use server::{Builder, LoggedRequest, MailboxHandle, MockGraph};

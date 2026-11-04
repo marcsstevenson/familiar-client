@@ -15,6 +15,7 @@ publish = false
 
 [workspace.dependencies]
 familiar-core = { path = "crates/core" }
+familiar-auth = { path = "crates/auth" }
 familiar-provider-graph = { path = "crates/provider-graph" }
 familiar-store = { path = "crates/store" }
 familiar-search = { path = "crates/search" }

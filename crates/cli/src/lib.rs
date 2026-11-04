@@ -388,7 +388,8 @@ where
         Ok(a) => a,
         Err(e) => return fail(&mut stderr, CommandError::internal(e)),
     };
-    match registry.run(&name, input_from(m, &args)) {
+    let notify = |line: &str| eprintln!("{line}");
+    match registry.run_with(&name, input_from(m, &args), &notify) {
         Ok(out) => {
             if json_out {
                 let _ = writeln!(

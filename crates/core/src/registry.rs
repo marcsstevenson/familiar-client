@@ -81,6 +81,9 @@ impl CommandSpec {
 pub struct Context<'a> {
     /// The registry the command was dispatched from.
     pub registry: &'a Registry,
+    /// Shows a line to the person while the command runs, such as a sign-in code. The CLI
+    /// prints it to stderr so `--json` output stays clean.
+    pub notify: &'a dyn Fn(&str),
 }
 
 /// A command definition. Implement this, then add the type to [`Registry::builtin`].
@@ -173,6 +176,9 @@ impl Registry {
         r.register(crate::commands::schema::SchemaCmd);
         r.register(crate::commands::config::ConfigValidate);
         r.register(crate::commands::config::ConfigPath);
+        r.register(crate::commands::auth::AuthLogin);
+        r.register(crate::commands::auth::AuthStatus);
+        r.register(crate::commands::auth::AuthLogout);
         r
     }
 
@@ -216,11 +222,27 @@ impl Registry {
         self.commands().find(|c| c.spec().name() == name)
     }
 
-    /// Runs a command by dotted name with JSON input.
+    /// Runs a command by dotted name with JSON input. Progress lines are dropped.
     pub fn run(&self, name: &str, input: Value) -> Result<Output, CommandError> {
+        self.run_with(name, input, &|_| {})
+    }
+
+    /// Runs a command, passing progress lines (see [`Context::notify`]) to `notify`.
+    pub fn run_with(
+        &self,
+        name: &str,
+        input: Value,
+        notify: &dyn Fn(&str),
+    ) -> Result<Output, CommandError> {
         let cmd = self
             .get(name)
             .ok_or_else(|| CommandError::usage(format!("unknown command `{name}`")))?;
-        cmd.run_json(&Context { registry: self }, input)
+        cmd.run_json(
+            &Context {
+                registry: self,
+                notify,
+            },
+            input,
+        )
     }
 }
