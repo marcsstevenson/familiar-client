@@ -78,7 +78,7 @@ async fn main() -> std::io::Result<()> {
     let mock = b.start().await?;
     println!("mock Graph listening on {}", mock.base_url());
     println!(
-        "try: curl -H 'Authorization: Bearer {token}' {}/me/mailFolders",
+        "try: curl --oauth2-bearer {token} {}/me/mailFolders",
         mock.base_url()
     );
     tokio::signal::ctrl_c().await?;
