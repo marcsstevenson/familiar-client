@@ -1,0 +1,21 @@
+[package]
+name = "familiar-cli"
+description = "fam, the Familiar command line."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "fam"
+path = "src/main.rs"
+
+[dependencies]
+familiar-core.workspace = true
+familiar-store.workspace = true
+familiar-search.workspace = true
+
+[lints]
+workspace = true

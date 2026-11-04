@@ -1,0 +1,82 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  RUSTFLAGS: -D warnings
+
+jobs:
+  test:
+    name: Test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: Test
+        run: cargo test --workspace --locked
+
+  # The engine, daemon and CLI must build on a machine with no display
+  # libraries, so they fit a small container image. The slim Debian image has
+  # no GTK, WebKit or X11. Only familiar-gui may need them.
+  headless:
+    name: Headless build (no display libraries)
+    runs-on: ubuntu-latest
+    container: rust:1-slim
+    steps:
+      - uses: actions/checkout@v4
+      - name: Confirm no display libraries
+        run: |
+          if ls /usr/lib/*/libgtk-3* /usr/lib/*/libwebkit2gtk* /usr/lib/*/libX11* 2>/dev/null; then
+            echo "display libraries found on the headless runner"; exit 1
+          fi
+      - name: Build and test without the GUI
+        run: |
+          cargo build --workspace --exclude familiar-gui --locked
+          cargo test --workspace --exclude familiar-gui --locked
+      - name: No GUI dependencies outside familiar-gui
+        run: bash scripts/check-headless-deps.sh
+
+  lint:
+    name: Format and licence headers
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - name: rustfmt
+        run: cargo fmt --all --check
+      - name: Licence headers
+        run: bash scripts/check-licence-headers.sh
+
+  secrets:
+    name: Secret scanning
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

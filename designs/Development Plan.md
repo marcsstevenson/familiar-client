@@ -23,7 +23,7 @@ The work is split into **work packages** (WP) below. Each one is sized for a sin
 - **Live Microsoft access** happens only on Marc's computer. Cloud threads use the mock Graph server (WP 1.1) and synthetic mail.
 - **Real accounts stay read-only until Phase 2.** Write tests then use a `Familiar Test` folder and send only to Marc.
 - **No personal data in the repo.** No real mail, tokens, addresses or signatures. Secret scanning runs in CI from WP 1.0.
-- **Marc's jobs:** register the Microsoft app, do every sign-in, approve each gate, and review PRs.
+- **Marc's jobs:** register the Microsoft app, do every sign-in, and approve each gate.
 
 ## Phase 0: Prove it can work
 
@@ -111,6 +111,8 @@ Linux numbers (cloud, no GPU) are in RESULTS.md. There, GPUI started and respond
 ### Phase 0 gate
 
 Marc reviews the WP 0.2 to 0.5 results and decides: which accounts are in scope, Tauri or GPUI, and whether the performance targets stand. The design doc is updated with the outcomes.
+
+**Approved by Marc on 2026-11-04.** Accounts in scope: Hotmail and Parklands (iM3 Dental omitted). UI: Tauri 2 + SolidJS. Performance targets stand, with the GUI idle memory target raised to 400 MB private. Phase 1 is open.
 
 ## Phase 1: Read-only headless engine
 
@@ -226,7 +228,7 @@ Workstreams that can run as separate threads at the same time:
 
 ## Results log
 
-Phase 0 results are recorded here as they come in.
+Results are recorded here as they come in.
 
 | WP | Date | Result |
 | --- | --- | --- |
@@ -235,6 +237,8 @@ Phase 0 results are recorded here as they come in.
 | 0.3 | 2026-11-04 | Partial: `GET /me/mailboxSettings` on Hotmail and Parklands returns `archiveFolder, automaticRepliesSetting, dateFormat, delegateMeetingMessageDeliveryOptions, language, timeFormat, timeZone, userPurpose, workingHours`. No signature field on either. Graph docs and beta endpoint still to check. |
 | 0.4 | 2026-11-04 | Windows and Linux measured; see the WP 0.4 table and `spikes/ui-bakeoff/RESULTS.md`. Recommendation: Tauri 2 + SolidJS (meets start, keypress, open and scroll targets on Windows). No webview design meets the 150 MB GUI memory target, so raise it to about 400 MB. Marc chose Tauri 2 + SolidJS (2026-11-04). |
 | 0.5 | 2026-11-03 | Store and search meet the targets at 500k messages on a 4-vCPU cloud VM; most operations are under 1 ms at p95. Three design changes for WP 1.5/1.9: store folder counters (a recount takes 0.86 s), keep the one-year body index (phrase search over all bodies is 109 ms p95), and pack small bodies (one file each uses 2.0 GB on disk for 510 MB). Details: [WP 0.5 Store benchmark](WP%200.5%20Store%20benchmark.md) |
+| Gate | 2026-11-04 | Phase 0 gate approved by Marc: Hotmail + Parklands in scope (iM3 omitted), Tauri 2 + SolidJS, performance targets stand with GUI idle memory raised to 400 MB. |
+| 1.0 | 2026-11-04 | Cargo workspace (`crates/`: core, provider-graph, store, search, rules, daemon → `famd`, cli → `fam`, gui stub) and CI (`.github/workflows/ci.yml`): clippy and tests on Windows, macOS and Linux; headless build and GUI-dependency check in a `rust:1-slim` container with no display libraries; rustfmt; SPDX licence headers; gitleaks secret scanning. |
 
 ### WP 0.2 step B results (2026-11-04)
 

@@ -1,0 +1,31 @@
+# Familiar product workspace. The Phase 0 spikes and tools under `spikes/` and
+# `tools/` are separate workspaces and are not built from here.
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+exclude = ["spikes", "tools"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+license = "MIT OR Apache-2.0"
+repository = "https://github.com/marcsstevenson/familiar-client"
+publish = false
+
+[workspace.dependencies]
+familiar-core = { path = "crates/core" }
+familiar-provider-graph = { path = "crates/provider-graph" }
+familiar-store = { path = "crates/store" }
+familiar-search = { path = "crates/search" }
+familiar-rules = { path = "crates/rules" }
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+missing_docs = "warn"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+
+[profile.release]
+debug = 1
