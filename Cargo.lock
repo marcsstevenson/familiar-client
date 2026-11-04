@@ -782,6 +782,7 @@ version = "0.1.0"
 dependencies = [
  "familiar-auth",
  "familiar-config",
+ "familiar-store",
  "schemars",
  "serde",
  "serde_json",
@@ -791,11 +792,19 @@ dependencies = [
 name = "familiar-daemon"
 version = "0.1.0"
 dependencies = [
+ "chrono",
+ "familiar-auth",
+ "familiar-config",
  "familiar-core",
+ "familiar-mock-graph",
  "familiar-provider-graph",
  "familiar-rules",
  "familiar-search",
  "familiar-store",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
 ]
 
 [[package]]
@@ -856,7 +865,6 @@ name = "familiar-store"
 version = "0.1.0"
 dependencies = [
  "blake3",
- "familiar-core",
  "fs4",
  "rusqlite",
  "serde",

@@ -9,7 +9,6 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
-familiar-core.workspace = true
 blake3 = "1"
 fs4 = { version = "0.13", features = ["sync"] }
 rusqlite = { version = "0.41", features = ["bundled"] }

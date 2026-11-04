@@ -207,6 +207,9 @@ pub struct Message {
     pub body: Option<BodyRef>,
     /// Body is kept even outside the body window.
     pub body_pinned: bool,
+    /// When the body joined the on-demand cache (Unix seconds); `None` for
+    /// bodies kept because they are in the window or pinned.
+    pub body_cached_at: Option<i64>,
 }
 
 /// A conversation's summary within one folder.
@@ -337,4 +340,32 @@ pub struct Op {
     pub created_at: i64,
     /// When it last changed (Unix seconds).
     pub updated_at: i64,
+}
+
+/// How much of an account's mail has a local body. See [`crate::Reader::body_stats`].
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+pub struct BodyStats {
+    /// Messages (headers) stored.
+    pub messages: i64,
+    /// Messages with a local body.
+    pub with_body: i64,
+    /// Messages inside the window that have no body yet.
+    pub window_missing: i64,
+    /// Messages whose body is pinned.
+    pub pinned: i64,
+    /// Bodies in the on-demand cache.
+    pub cached: i64,
+    /// Stored (compressed) bytes of the cached bodies.
+    pub cached_bytes: i64,
+}
+
+/// What [`crate::WriteTx::evict_cached_bodies`] dropped.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize)]
+pub struct EvictReport {
+    /// Cached bodies before eviction.
+    pub before_bytes: i64,
+    /// Bodies dropped.
+    pub evicted: usize,
+    /// Stored bytes of the dropped bodies.
+    pub evicted_bytes: i64,
 }

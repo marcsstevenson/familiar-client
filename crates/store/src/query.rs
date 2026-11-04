@@ -74,7 +74,7 @@ pub(crate) fn folder_by_remote(
 const MESSAGE_COLS: &str = "m.id, m.account_id, m.folder_id, m.thread_id, m.remote_id,
     m.internet_message_id, m.subject, m.from_name, m.from_addr, m.to_json, m.cc_json,
     m.received_at, m.sent_at, m.is_read, m.is_flagged, m.importance, m.has_attachments,
-    m.preview, m.body_hash, m.body_is_html, m.body_pinned";
+    m.preview, m.body_hash, m.body_is_html, m.body_pinned, m.body_cached_at";
 
 fn json_col<T: serde::de::DeserializeOwned>(r: &Row<'_>, i: usize) -> rusqlite::Result<T> {
     let s: String = r.get(i)?;
@@ -112,6 +112,7 @@ fn message(r: &Row<'_>) -> rusqlite::Result<Message> {
             .transpose()?
             .map(|hash| BodyRef { hash, is_html }),
         body_pinned: r.get(20)?,
+        body_cached_at: r.get(21)?,
     })
 }
 
@@ -270,6 +271,59 @@ pub(crate) fn open_ops(c: &Connection) -> Result<Vec<Op>> {
         "SELECT {OP_COLS} FROM ops WHERE state != 'done' ORDER BY id"
     ))?;
     Ok(s.query_map([], op)?.collect::<Result<_, _>>()?)
+}
+
+/// Messages of `account` received at or after `since` with no body, newest
+/// first, strictly older than `before` when given.
+pub(crate) fn bodies_wanted(
+    c: &Connection,
+    account: AccountId,
+    since: i64,
+    before: Option<Cursor>,
+    limit: usize,
+) -> Result<Vec<MessageId>> {
+    let (t, id) = before.map_or((i64::MAX, i64::MAX), |k| (k.received_at, k.id));
+    let mut s = c.prepare_cached(
+        "SELECT id FROM messages
+          WHERE account_id = ?1 AND received_at >= ?2 AND body_hash IS NULL
+            AND (received_at, id) < (?3, ?4)
+          ORDER BY received_at DESC, id DESC LIMIT ?5",
+    )?;
+    Ok(
+        s.query_map(params![account, since, t, id, limit as i64], |r| r.get(0))?
+            .collect::<Result<_, _>>()?,
+    )
+}
+
+pub(crate) fn body_stats(c: &Connection, account: AccountId, since: i64) -> Result<BodyStats> {
+    let mut s = c.prepare_cached(
+        "SELECT count(*),
+                coalesce(sum(m.body_hash IS NOT NULL), 0),
+                coalesce(sum(m.body_hash IS NULL AND m.received_at >= ?2), 0),
+                coalesce(sum(m.body_pinned), 0),
+                coalesce(sum(m.body_cached_at IS NOT NULL AND m.body_hash IS NOT NULL), 0),
+                coalesce(sum(CASE WHEN m.body_cached_at IS NOT NULL THEN b.stored_size END), 0)
+           FROM messages m LEFT JOIN bodies b ON b.hash = m.body_hash
+          WHERE m.account_id = ?1",
+    )?;
+    Ok(s.query_row(params![account, since], |r| {
+        Ok(BodyStats {
+            messages: r.get(0)?,
+            with_body: r.get(1)?,
+            window_missing: r.get(2)?,
+            pinned: r.get(3)?,
+            cached: r.get(4)?,
+            cached_bytes: r.get(5)?,
+        })
+    })?)
+}
+
+pub(crate) fn stored_body_bytes(c: &Connection) -> Result<i64> {
+    Ok(c.query_row(
+        "SELECT coalesce(sum(stored_size), 0) FROM bodies",
+        [],
+        |r| r.get(0),
+    )?)
 }
 
 pub(crate) fn require<T>(v: Option<T>, what: impl FnOnce() -> String) -> Result<T> {

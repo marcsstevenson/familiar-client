@@ -2,6 +2,7 @@
 //! Command definitions and shared types. Every surface (CLI, MCP, GUI, local API) is generated from the registry here.
 
 pub mod commands;
+pub mod daemon;
 pub mod error;
 pub mod parity;
 pub mod registry;

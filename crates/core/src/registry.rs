@@ -179,6 +179,8 @@ impl Registry {
         r.register(crate::commands::auth::AuthLogin);
         r.register(crate::commands::auth::AuthStatus);
         r.register(crate::commands::auth::AuthLogout);
+        r.register(crate::commands::sync::SyncStatus);
+        r.register(crate::commands::mail::MailPin);
         r
     }
 

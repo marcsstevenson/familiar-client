@@ -35,16 +35,19 @@ mod migrate;
 mod model;
 mod query;
 mod reader;
+mod shared;
 mod writer;
 
 pub use bodies::{BodyHash, INLINE_BODY_MAX};
 pub use error::{Error, Result};
 pub use migrate::{MIGRATIONS, Migration, SCHEMA_VERSION};
 pub use model::{
-    Account, AccountId, Address, BodyRef, Cursor, Folder, FolderId, FolderThread, Message,
-    MessageId, NewAccount, NewFolder, NewMessage, NewOp, Op, OpId, OpState, SyncState, ThreadId,
+    Account, AccountId, Address, BodyRef, BodyStats, Cursor, EvictReport, Folder, FolderId,
+    FolderThread, Message, MessageId, NewAccount, NewFolder, NewMessage, NewOp, Op, OpId, OpState,
+    SyncState, ThreadId,
 };
 pub use reader::Reader;
+pub use shared::{SharedWriter, StoreWriter};
 pub use writer::{GcReport, WriteTx, Writer};
 
 use std::path::{Path, PathBuf};

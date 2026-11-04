@@ -373,9 +373,12 @@ impl WriteTx<'_> {
 
     /// Sets or clears a message's body. Clearing (when a message leaves the
     /// body window) keeps the header; [`Writer::gc_bodies`] frees the bytes.
+    /// Either way the body leaves the on-demand cache; see
+    /// [`WriteTx::mark_body_cached`].
     pub fn set_body(&self, id: MessageId, body: Option<BodyRef>) -> Result<()> {
         let n = self.tx.execute(
-            "UPDATE messages SET body_hash = ?2, body_is_html = ?3 WHERE id = ?1",
+            "UPDATE messages SET body_hash = ?2, body_is_html = ?3, body_cached_at = NULL
+              WHERE id = ?1",
             params![
                 id,
                 body.as_ref().map(|b| &b.hash.0[..]),
@@ -392,6 +395,87 @@ impl WriteTx<'_> {
             params![id, pinned],
         )?;
         found(n, || format!("message {}", id.0))
+    }
+
+    /// Puts a message's body in the on-demand cache (`at` is Unix seconds),
+    /// or takes it out with `None`. Cached bodies are kept outside the window
+    /// until [`WriteTx::evict_cached_bodies`] needs the room.
+    pub fn mark_body_cached(&self, id: MessageId, at: Option<i64>) -> Result<()> {
+        let n = self.tx.execute(
+            "UPDATE messages SET body_cached_at = ?2 WHERE id = ?1",
+            params![id, at],
+        )?;
+        found(n, || format!("message {}", id.0))
+    }
+
+    /// Messages of `account` received at or after `since` with no body,
+    /// newest first. See [`crate::Reader::bodies_wanted`].
+    pub fn bodies_wanted(
+        &self,
+        account: AccountId,
+        since: i64,
+        before: Option<Cursor>,
+        limit: usize,
+    ) -> Result<Vec<MessageId>> {
+        query::bodies_wanted(self.c(), account, since, before, limit)
+    }
+
+    /// Drops the bodies of `account`'s messages received before `before`
+    /// that are neither pinned nor cached: they have aged out of the window.
+    /// Headers stay. Returns how many. [`Writer::gc_bodies`] frees the bytes.
+    pub fn age_out_bodies(&self, account: AccountId, before: i64) -> Result<usize> {
+        Ok(self.tx.execute(
+            "UPDATE messages
+                SET body_hash = NULL, body_is_html = 0
+              WHERE account_id = ?1 AND received_at < ?2 AND body_hash IS NOT NULL
+                AND body_pinned = 0 AND body_cached_at IS NULL",
+            params![account, before],
+        )?)
+    }
+
+    /// Drops cached bodies, least recently cached first, until the cache
+    /// holds at most `limit` stored bytes. Pinned bodies are never cached.
+    pub fn evict_cached_bodies(&self, limit: i64) -> Result<EvictReport> {
+        let rows: Vec<(MessageId, i64)> = {
+            let mut s = self.tx.prepare_cached(
+                "SELECT m.id, coalesce(b.stored_size, 0)
+                   FROM messages m
+                   LEFT JOIN bodies b ON b.hash = m.body_hash
+                  WHERE m.body_cached_at IS NOT NULL
+                  ORDER BY m.body_cached_at, m.id",
+            )?;
+            s.query_map([], |r| Ok((r.get(0)?, r.get(1)?)))?
+                .collect::<rusqlite::Result<_>>()?
+        };
+        let mut report = EvictReport {
+            before_bytes: rows.iter().map(|r| r.1).sum(),
+            ..Default::default()
+        };
+        let mut total = report.before_bytes;
+        for (id, size) in rows {
+            if total <= limit {
+                break;
+            }
+            self.tx.execute(
+                "UPDATE messages SET body_hash = NULL, body_is_html = 0, body_cached_at = NULL
+                  WHERE id = ?1",
+                [id],
+            )?;
+            total -= size;
+            report.evicted += 1;
+            report.evicted_bytes += size;
+        }
+        Ok(report)
+    }
+
+    /// Deletes `account`'s unpinned headers received before `before`, for
+    /// `sync.headers` set to a period. Returns how many.
+    pub fn prune_headers(&self, account: AccountId, before: i64) -> Result<usize> {
+        Ok(self.tx.execute(
+            "DELETE FROM messages
+              WHERE account_id = ?1 AND received_at < ?2 AND body_pinned = 0",
+            params![account, before],
+        )?)
     }
 
     // Messages --------------------------------------------------------------

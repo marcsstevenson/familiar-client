@@ -21,11 +21,18 @@ pub struct Migration {
 }
 
 /// Every migration, in order.
-pub const MIGRATIONS: &[Migration] = &[Migration {
-    version: 1,
-    name: "initial",
-    sql: include_str!("../migrations/0001_initial.sql"),
-}];
+pub const MIGRATIONS: &[Migration] = &[
+    Migration {
+        version: 1,
+        name: "initial",
+        sql: include_str!("../migrations/0001_initial.sql"),
+    },
+    Migration {
+        version: 2,
+        name: "body cache",
+        sql: include_str!("../migrations/0002_body_cache.sql"),
+    },
+];
 
 /// The schema version this build reads and writes.
 pub const SCHEMA_VERSION: u32 = MIGRATIONS.len() as u32;
@@ -88,7 +95,7 @@ mod tests {
     #[test]
     fn fresh_store_gets_every_table() {
         let mut c = mem();
-        assert_eq!(migrate(&mut c, MIGRATIONS).unwrap(), vec![1]);
+        assert_eq!(migrate(&mut c, MIGRATIONS).unwrap(), vec![1, 2]);
         assert_eq!(version(&c).unwrap(), SCHEMA_VERSION);
         assert_eq!(
             tables(&c),
@@ -155,7 +162,7 @@ mod tests {
             sql: "CREATE TABLE half (x); SELECT no_such_function();",
         };
         let mut c = mem();
-        migrate(&mut c, MIGRATIONS).unwrap();
+        migrate(&mut c, &MIGRATIONS[..1]).unwrap();
         assert!(migrate(&mut c, &[MIGRATIONS[0], BAD]).is_err());
         assert_eq!(version(&c).unwrap(), 1);
         assert!(!tables(&c).contains(&"half".to_string()));

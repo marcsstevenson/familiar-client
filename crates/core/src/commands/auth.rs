@@ -34,7 +34,7 @@ fn open() -> Result<Auth, CommandError> {
 }
 
 /// The config, if there is a config file. A file that exists but doesn't load is an error.
-fn config() -> Result<Option<familiar_config::Config>, CommandError> {
+pub(crate) fn config() -> Result<Option<familiar_config::Config>, CommandError> {
     let Some((path, _)) = familiar_config::paths::resolve(None) else {
         return Ok(None);
     };
@@ -51,7 +51,7 @@ fn config() -> Result<Option<familiar_config::Config>, CommandError> {
 }
 
 /// An RFC 3339 UTC time from Unix seconds.
-fn rfc3339(secs: u64) -> String {
+pub(crate) fn rfc3339(secs: u64) -> String {
     let days = (secs / 86_400) as i64;
     let rem = secs % 86_400;
     // Howard Hinnant's civil_from_days.

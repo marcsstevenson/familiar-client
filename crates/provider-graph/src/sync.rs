@@ -37,7 +37,7 @@ use std::collections::{HashMap, HashSet, VecDeque};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use familiar_store::{
-    AccountId, BodyRef, Folder, FolderId, MessageId, NewFolder, Reader, WriteTx, Writer,
+    AccountId, BodyRef, Folder, FolderId, MessageId, NewFolder, Reader, StoreWriter, WriteTx,
 };
 
 use crate::error::{Error, Result};
@@ -151,9 +151,9 @@ impl MailSync {
     // Folder tree -----------------------------------------------------------
 
     /// Brings the local folder tree up to date by folder delta.
-    pub async fn sync_folder_tree(
+    pub async fn sync_folder_tree<W: StoreWriter>(
         &mut self,
-        w: &mut Writer,
+        w: &mut W,
         priority: Priority,
     ) -> Result<FolderTreeReport> {
         let acc = self.account;
@@ -241,9 +241,9 @@ impl MailSync {
     // Messages --------------------------------------------------------------
 
     /// Syncs one folder's messages by delta. See [`MailSync::sync_folders`].
-    pub async fn sync_folder(
+    pub async fn sync_folder<W: StoreWriter>(
         &mut self,
-        w: &mut Writer,
+        w: &mut W,
         folder_remote_id: &str,
         priority: Priority,
     ) -> Result<MessageSyncReport> {
@@ -253,9 +253,9 @@ impl MailSync {
     /// Syncs several folders' messages by delta, then settles removals: a
     /// message that left one folder for another in the same call is simply
     /// moved, and any other removal is checked by immutable ID first.
-    pub async fn sync_folders(
+    pub async fn sync_folders<W: StoreWriter>(
         &mut self,
-        w: &mut Writer,
+        w: &mut W,
         folder_remote_ids: &[&str],
         priority: Priority,
     ) -> Result<MessageSyncReport> {
@@ -270,7 +270,7 @@ impl MailSync {
         Ok(report)
     }
 
-    fn local_folder(&self, w: &mut Writer, remote: &str) -> Result<Folder> {
+    fn local_folder<W: StoreWriter>(&self, w: &mut W, remote: &str) -> Result<Folder> {
         let acc = self.account;
         w.write(|tx| tx.folder_by_remote(acc, remote))?
             .ok_or_else(|| {
@@ -280,9 +280,9 @@ impl MailSync {
             })
     }
 
-    async fn delta_round(
+    async fn delta_round<W: StoreWriter>(
         &mut self,
-        w: &mut Writer,
+        w: &mut W,
         remote: &str,
         priority: Priority,
         removals: &mut Vec<(FolderId, String)>,
@@ -364,9 +364,9 @@ impl MailSync {
         Ok(report)
     }
 
-    async fn settle_removals(
+    async fn settle_removals<W: StoreWriter>(
         &mut self,
-        w: &mut Writer,
+        w: &mut W,
         removals: Vec<(FolderId, String)>,
         priority: Priority,
     ) -> Result<MessageSyncReport> {
@@ -433,9 +433,9 @@ impl MailSync {
     /// Returns the link to the next page. The delta round lists every
     /// message too; this is for showing the newest mail of a folder before
     /// its first delta round has finished.
-    pub async fn store_headers_page(
+    pub async fn store_headers_page<W: StoreWriter>(
         &mut self,
-        w: &mut Writer,
+        w: &mut W,
         folder_remote_id: &str,
         page_size: usize,
         link: Option<&str>,
@@ -460,9 +460,9 @@ impl MailSync {
     // Bodies ----------------------------------------------------------------
 
     /// Downloads and stores one message's body.
-    pub async fn fetch_body(
+    pub async fn fetch_body<W: StoreWriter>(
         &self,
-        w: &mut Writer,
+        w: &mut W,
         message: MessageId,
         priority: Priority,
     ) -> Result<BodyRef> {
@@ -477,9 +477,9 @@ impl MailSync {
     /// Downloads several bodies at once, as many in flight as the scheduler
     /// allows, and stores each as it arrives. Returns one result per message,
     /// in completion order.
-    pub async fn fetch_bodies(
+    pub async fn fetch_bodies<W: StoreWriter>(
         &self,
-        w: &mut Writer,
+        w: &mut W,
         messages: &[MessageId],
         priority: Priority,
     ) -> Result<Vec<(MessageId, Result<BodyRef>)>> {
@@ -504,8 +504,8 @@ impl MailSync {
     }
 }
 
-fn store_body(
-    w: &mut Writer,
+fn store_body<W: StoreWriter>(
+    w: &mut W,
     message: MessageId,
     body: &crate::model::GraphBody,
 ) -> Result<BodyRef> {

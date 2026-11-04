@@ -160,6 +160,29 @@ impl Reader {
         query::sync_states(&self.conn, account)
     }
 
+    /// Messages of `account` received at or after `since` (Unix seconds)
+    /// that have no local body, newest first.
+    pub fn bodies_wanted(
+        &self,
+        account: AccountId,
+        since: i64,
+        before: Option<Cursor>,
+        limit: usize,
+    ) -> Result<Vec<MessageId>> {
+        query::bodies_wanted(&self.conn, account, since, before, limit)
+    }
+
+    /// Body counts for `account`; `window_missing` counts messages received
+    /// at or after `since` with no body.
+    pub fn body_stats(&self, account: AccountId, since: i64) -> Result<BodyStats> {
+        query::body_stats(&self.conn, account, since)
+    }
+
+    /// Stored (compressed) bytes of every body in the store.
+    pub fn stored_body_bytes(&self) -> Result<i64> {
+        query::stored_body_bytes(&self.conn)
+    }
+
     /// Queued ops that are not done, in queue order.
     pub fn open_ops(&self) -> Result<Vec<Op>> {
         query::open_ops(&self.conn)

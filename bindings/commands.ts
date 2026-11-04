@@ -68,6 +68,41 @@ export type AccountSignIn = {
   username?: string | null;
 };
 
+export type AccountSyncStatus = {
+  /** The account name. */
+  account: string;
+  /** Messages whose body is on this device. */
+  bodies: number;
+  /** Messages inside the sync window still waiting for a body. */
+  bodies_missing: number;
+  /** Bodies in the on-demand cache (older than the window). */
+  cached: number;
+  /** Compressed bytes in the on-demand cache. */
+  cached_bytes: number;
+  /** The daemon's last error for the account, while it lasts. */
+  detail?: string | null;
+  /** The mailbox address. */
+  email: string;
+  /** Folders whose last sync failed. */
+  errors: Array<SyncError>;
+  /** Whether the first sync of headers for all history has finished. */
+  first_sync_done: boolean;
+  /** Folders. */
+  folders: number;
+  /** When a folder last synced (RFC 3339, UTC). */
+  last_synced_at?: string | null;
+  /** Messages (headers) on this device. */
+  messages: number;
+  /** When the next poll is due (RFC 3339, UTC), from the daemon. */
+  next_poll_at?: string | null;
+  /** What the daemon is doing; `stopped` without a daemon. */
+  phase: SyncPhase;
+  /** Pinned bodies. */
+  pinned: number;
+  /** Unread messages. */
+  unread: number;
+};
+
 export type AuthLoginInput = {
   /** The account name, for example `hotmail` (lowercase letters, digits, - and _). */
   account: string;
@@ -179,6 +214,17 @@ export type ConfigWarning = {
   message: string;
 };
 
+export type DaemonInfo = {
+  /** Its process ID. */
+  pid?: number | null;
+  /** Whether `famd` answered. */
+  running: boolean;
+  /** When it started (RFC 3339, UTC). */
+  started_at?: string | null;
+  /** Its version. */
+  version?: string | null;
+};
+
 export type ExitCodeDoc = {
   /** The process exit code. */
   code: number;
@@ -186,6 +232,13 @@ export type ExitCodeDoc = {
   description: string;
   /** The error kind, or none for success. */
   kind?: ErrorKind | null;
+};
+
+export type MailPinInput = {
+  /** The message's local ID. */
+  message: number;
+  /** Unpin instead: the body becomes an ordinary cached body again. */
+  unpin?: boolean;
 };
 
 export type McpAnnotations = {
@@ -213,6 +266,17 @@ export type McpTool = {
 export type McpToolList = {
   /** One tool per command. */
   tools: Array<McpTool>;
+};
+
+export type PinResult = {
+  /** Whether the body was downloaded to pin it. */
+  fetched: boolean;
+  /** Whether the body is on this device now. */
+  has_body: boolean;
+  /** Local message ID. */
+  message: number;
+  /** Whether the body is now pinned. */
+  pinned: boolean;
 };
 
 export type SchemaDocument = {
@@ -247,6 +311,33 @@ export type SignatureState = {
   reply: boolean;
 };
 
+export type SyncError = {
+  /** The error. */
+  message: string;
+  /** The resource: `folders`, or `messages:<folder>`. */
+  resource: string;
+};
+
+export type SyncPhase = "starting" | "folder_tree" | "headers" | "bodies" | "idle" | "backoff" | "auth_required" | "stopped";
+
+export type SyncStatusInput = {
+  /** Only this account (its name in config.toml). */
+  account?: string | null;
+};
+
+export type SyncStatusOutput = {
+  /** One entry per account in the store. */
+  accounts: Array<AccountSyncStatus>;
+  /** Compressed bytes of every body on this device. */
+  body_bytes: number;
+  /** The daemon. */
+  daemon: DaemonInfo;
+  /** The store directory. */
+  store: string;
+  /** The body window from config.toml (`sync.window`). */
+  window: string;
+};
+
 export type VersionInput = {
   /** Also report the operating system and CPU architecture. */
   verbose?: boolean;
@@ -275,8 +366,12 @@ export interface Commands {
   "config.path": { input: ConfigPathInput; output: ConfigPathOutput };
   /** Check config.toml for errors */
   "config.validate": { input: ConfigPathInput; output: ConfigValidateOutput };
+  /** Keep a message's body on this device */
+  "mail.pin": { input: MailPinInput; output: PinResult };
   /** Describe every command, its input, output and errors */
   "schema": { input: SchemaInput; output: SchemaOutput };
+  /** Show how far each account's sync has got */
+  "sync.status": { input: SyncStatusInput; output: SyncStatusOutput };
   /** Show the Familiar version */
   "version": { input: VersionInput; output: VersionOutput };
 }
@@ -291,6 +386,8 @@ export const COMMAND_NAMES = [
   "auth.status",
   "config.path",
   "config.validate",
+  "mail.pin",
   "schema",
+  "sync.status",
   "version",
 ] as const satisfies readonly CommandName[];
