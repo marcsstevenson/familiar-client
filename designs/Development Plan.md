@@ -88,19 +88,18 @@ Tokens are printed as "ok/failed" only and never written to disk.
 - Note the developer-experience side too: how easily Claude can drive and screenshot each one in CI.
 - **Done when:** a results table and a recommendation are added here, and Marc chooses.
 
-**Status (3 Nov 2026):** prototypes, harnesses and the Linux run are done in `spikes/ui-bakeoff/`; full write-up in [RESULTS.md](../spikes/ui-bakeoff/RESULTS.md). **Recommendation: Tauri 2 + SolidJS**, subject to the Windows run. GPUI's native HTML view can't lay out a real newsletter, so GPUI needs an embedded webview, and with one it used more memory than Tauri and lost all keyboard input to the webview. On Linux with no GPU, GPUI started and responded to keys faster, so Windows must confirm Tauri meets the targets.
+**Status (4 Nov 2026):** done, apart from Marc's choice. Prototypes, harnesses and results are in `spikes/ui-bakeoff/`; full write-up in [RESULTS.md](../spikes/ui-bakeoff/RESULTS.md). **Recommendation: Tauri 2 + SolidJS.** On Windows it met every speed target. Every option that can show HTML mail misses the 150 MB memory target, so the recommendation is to raise that target to about 400 MB for the GUI. GPUI's native HTML view can't lay out a real newsletter. With an embedded webview, GPUI used nearly as much memory as Tauri and was slower to start and to open messages.
 
-| Linux, no GPU, 500k rows | Target | GPUI, native HTML | GPUI + webview | Tauri 2 |
+| Windows (RTX 4080, 165 Hz), 500k rows | Target | GPUI, native HTML | GPUI + webview | Tauri 2 |
 | --- | --- | --- | --- | --- |
-| Cold start, median | < 500 ms | 205 ms | 340 ms | 1,027 ms |
-| Idle memory, process tree PSS | < 150 MB | 204 MB | 408 MB | 386 MB |
-| Scroll frame p50 / p95 | 16.7 ms | 48 / 48 ms | 48 / 48 ms | 19 / 25 ms |
-| Real keypress to frame p95 | < 16 ms | 19 ms | keys lost to webview | 71 ms |
-| Open message p95 | < 50 ms | 15 ms (simplified render) | 68 ms | 61 ms |
+| Cold start, median | < 500 ms | 514 ms | 663 ms | 442 ms |
+| Idle memory, private bytes | < 150 MB | 142 MB | 351 MB | 399 MB |
+| Scroll frame p95 | 16.7 ms | 6.4 ms | 6.3 ms | 6.2 ms |
+| Real keypress to frame p95 | < 16 ms | 9.2 ms | 6.7 ms | 11.0 ms |
+| Open message p95 | < 50 ms | 6.1 ms (simplified render) | 68 ms | 30 ms |
 | HTML newsletter | faithful | broken layout | faithful | faithful |
-| Crates / stripped binary | | 566 / 40 MB | 566 / 40 MB | 252 / 8 MB |
 
-**Remaining:** Marc runs `spikes\ui-bakeoff\bench\run_windows.ps1` on his PC (build steps in the spike README, about 10 minutes) and chooses.
+Linux numbers (cloud, no GPU) are in RESULTS.md. There, GPUI started and responded faster, and the GPUI + webview build lost keyboard input to the webview.
 
 ### WP 0.5 Store and search at 500k messages
 
@@ -234,7 +233,7 @@ Phase 0 results are recorded here as they come in.
 | 0.2 | 2026-11-03 | Step A: app registered in Marc's own Azure directory (not Parklands). iM3 Dental user, `organizations` endpoint: full scopes → "Need admin approval"; read-only scopes (`User.Read offline_access Mail.Read Calendars.Read`) → "Need admin approval". User consent is blocked in iM3 for this app. Device code skipped: consent policy is per tenant, not per flow, so it gives the same answer. Decision (Marc, 2026-11-03): omit iM3 for now. The admin request is not sent; it's kept in `docs/im3-admin-consent-request.md` for later. Familiar targets Hotmail and Parklands; iM3 stays on Outlook web and its current connector. |
 | 0.2 | 2026-11-04 | Step B: auth spike run on Marc's PC, full scopes, iM3 omitted. Hotmail passes on both flows. Parklands passes on PKCE; device code signed in and read fine, but its refresh against `organizations` failed (AADSTS65001). Refreshing against the tenant ID worked on PKCE. Results table below. |
 | 0.3 | 2026-11-04 | Partial: `GET /me/mailboxSettings` on Hotmail and Parklands returns `archiveFolder, automaticRepliesSetting, dateFormat, delegateMeetingMessageDeliveryOptions, language, timeFormat, timeZone, userPurpose, workingHours`. No signature field on either. Graph docs and beta endpoint still to check. |
-| 0.4 | 2026-11-03 | Linux (cloud, software rendering) measured; see the WP 0.4 table and `spikes/ui-bakeoff/RESULTS.md`. Recommendation: Tauri 2 + SolidJS, pending the Windows run. |
+| 0.4 | 2026-11-04 | Windows and Linux measured; see the WP 0.4 table and `spikes/ui-bakeoff/RESULTS.md`. Recommendation: Tauri 2 + SolidJS (meets start, keypress, open and scroll targets on Windows). No webview design meets the 150 MB GUI memory target, so raise it to about 400 MB. Awaiting Marc's choice. |
 | 0.5 | | |
 
 ### WP 0.2 step B results (2026-11-04)
