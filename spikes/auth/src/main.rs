@@ -107,7 +107,7 @@ fn main() -> ExitCode {
     };
     let tokens = match sign_in {
         Ok(tokens) => {
-            println!("sign-in          ok");
+            println!("sign-in          ok      granted: {}", tokens.scope);
             tokens
         }
         Err(e) => {
@@ -133,9 +133,16 @@ fn main() -> ExitCode {
                 ("refresh_token", refresh),
                 ("scope", args.scopes),
             ];
-            match token_request(args.authority, &form) {
+            // Refresh against the account's own tenant when the token names one, rather than
+            // the `organizations` alias the sign-in used.
+            let authority = match (args.authority, tenant_id(&tokens.access)) {
+                ("organizations", Some(tid)) => tid,
+                _ => args.authority.to_string(),
+            };
+            println!("refresh authority: {authority}");
+            match token_request(&authority, &form) {
                 Ok(Ok(new)) => {
-                    println!("refresh          ok");
+                    println!("refresh          ok      granted: {}", new.scope);
                     all_ok &= graph_call("me (refreshed)", "/me?$select=id", &new.access);
                 }
                 Ok(Err(e)) => {
@@ -160,6 +167,15 @@ fn main() -> ExitCode {
 struct Tokens {
     access: String,
     refresh: Option<String>,
+    scope: String,
+}
+
+/// The `tid` claim of a JWT access token. Work account Graph tokens are JWTs;
+/// consumer ones may not be, which gives None.
+fn tenant_id(access: &str) -> Option<String> {
+    let payload = URL_SAFE_NO_PAD.decode(access.split('.').nth(1)?).ok()?;
+    let claims: Value = serde_json::from_slice(&payload).ok()?;
+    claims["tid"].as_str().map(str::to_string)
 }
 
 /// Outer error: transport or unexpected response. Inner error: the token
@@ -170,7 +186,8 @@ fn token_request(authority: &str, form: &[(&str, &str)]) -> Result<Result<Tokens
     if status == 200 {
         let access = body["access_token"].as_str().ok_or("200 without access_token")?.to_string();
         let refresh = body["refresh_token"].as_str().map(str::to_string);
-        Ok(Ok(Tokens { access, refresh }))
+        let scope = body["scope"].as_str().unwrap_or("-").to_string();
+        Ok(Ok(Tokens { access, refresh, scope }))
     } else {
         Ok(Err(OAuthError::from_body(status, &body)))
     }
