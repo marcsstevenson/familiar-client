@@ -40,6 +40,7 @@ Phase 0 answers the questions that could change the design. The iM3 Dental sign-
   - Grant admin consent for the Parklands tenant.
 - **Done when:** the client ID is recorded (it's public, so it can go in the repo's example config).
 - **Outcome (2026-11-03):** the app is registered in Marc's own Azure directory instead of the Parklands tenant. Parklands admin consent link is in the guide (Part 1 step 7), not yet done. The sign-in steps are in `docs/sign-in-test-guide.md`.
+- **Done (2026-11-04):** Application (client) ID `c6057b6a-a692-47dd-b34e-12629372e32a` (public, not a secret). It goes in the example config when that exists (WP 1.3).
 
 ### WP 0.2 iM3 Dental sign-in test (the first real test)
 
