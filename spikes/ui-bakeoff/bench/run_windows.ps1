@@ -65,10 +65,10 @@ foreach ($app in $Apps) {
         $t0 = EpochNs
         $proc = Start-Process -FilePath $exe[$app] -PassThru
         try {
-            if (-not (WaitFor $log "first_frame" 60)) { throw "$app: no first frame" }
+            if (-not (WaitFor $log "first_frame" 60)) { throw "${app}: no first frame" }
             $ev = Events $log
             $cold = ([long]($ev | Where-Object event -eq "first_frame" | Select-Object -First 1).t_ns - $t0) / 1e6
-            if (-not (WaitFor $log "bench_done" 180)) { throw "$app: bench did not finish" }
+            if (-not (WaitFor $log "bench_done" 180)) { throw "${app}: bench did not finish" }
             $null = $wsh.AppActivate($title[$app]); Start-Sleep -Milliseconds 400
             $sent = @()
             for ($k = 0; $k -lt 30; $k++) {
