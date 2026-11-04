@@ -88,7 +88,7 @@ Tokens are printed as "ok/failed" only and never written to disk.
 - Note the developer-experience side too: how easily Claude can drive and screenshot each one in CI.
 - **Done when:** a results table and a recommendation are added here, and Marc chooses.
 
-**Status (4 Nov 2026):** done, apart from Marc's choice. Prototypes, harnesses and results are in `spikes/ui-bakeoff/`; full write-up in [RESULTS.md](../spikes/ui-bakeoff/RESULTS.md). **Recommendation: Tauri 2 + SolidJS.** On Windows it met every speed target. Every option that can show HTML mail misses the 150 MB memory target, so the recommendation is to raise that target to about 400 MB for the GUI. GPUI's native HTML view can't lay out a real newsletter. With an embedded webview, GPUI used nearly as much memory as Tauri and was slower to start and to open messages.
+**Status (4 Nov 2026):** done. **Marc chose Tauri 2 + SolidJS on 4 Nov 2026.** Prototypes, harnesses and results are in `spikes/ui-bakeoff/`; full write-up in [RESULTS.md](../spikes/ui-bakeoff/RESULTS.md). **Recommendation: Tauri 2 + SolidJS.** On Windows it met every speed target. Every option that can show HTML mail misses the 150 MB memory target, so the recommendation is to raise that target to about 400 MB for the GUI. GPUI's native HTML view can't lay out a real newsletter. With an embedded webview, GPUI used nearly as much memory as Tauri and was slower to start and to open messages.
 
 | Windows (RTX 4080, 165 Hz), 500k rows | Target | GPUI, native HTML | GPUI + webview | Tauri 2 |
 | --- | --- | --- | --- | --- |
@@ -155,7 +155,7 @@ The goal is a CLI that can replace Composio and the Microsoft 365 connector for 
 
 ## Phase 3: Desktop mail
 
-Assumes Tauri 2 + SolidJS wins Phase 0; if GPUI wins, the UI packages are rewritten but the core and command list are unchanged.
+Tauri 2 + SolidJS was chosen in Phase 0 (WP 0.4).
 
 | WP | Work | Depends on | Done when |
 | --- | --- | --- | --- |
@@ -233,7 +233,7 @@ Phase 0 results are recorded here as they come in.
 | 0.2 | 2026-11-03 | Step A: app registered in Marc's own Azure directory (not Parklands). iM3 Dental user, `organizations` endpoint: full scopes → "Need admin approval"; read-only scopes (`User.Read offline_access Mail.Read Calendars.Read`) → "Need admin approval". User consent is blocked in iM3 for this app. Device code skipped: consent policy is per tenant, not per flow, so it gives the same answer. Decision (Marc, 2026-11-03): omit iM3 for now. The admin request is not sent; it's kept in `docs/im3-admin-consent-request.md` for later. Familiar targets Hotmail and Parklands; iM3 stays on Outlook web and its current connector. |
 | 0.2 | 2026-11-04 | Step B: auth spike run on Marc's PC, full scopes, iM3 omitted. Hotmail passes on both flows. Parklands passes on PKCE; device code signed in and read fine, but its refresh against `organizations` failed (AADSTS65001). Refreshing against the tenant ID worked on PKCE. Results table below. |
 | 0.3 | 2026-11-04 | Partial: `GET /me/mailboxSettings` on Hotmail and Parklands returns `archiveFolder, automaticRepliesSetting, dateFormat, delegateMeetingMessageDeliveryOptions, language, timeFormat, timeZone, userPurpose, workingHours`. No signature field on either. Graph docs and beta endpoint still to check. |
-| 0.4 | 2026-11-04 | Windows and Linux measured; see the WP 0.4 table and `spikes/ui-bakeoff/RESULTS.md`. Recommendation: Tauri 2 + SolidJS (meets start, keypress, open and scroll targets on Windows). No webview design meets the 150 MB GUI memory target, so raise it to about 400 MB. Awaiting Marc's choice. |
+| 0.4 | 2026-11-04 | Windows and Linux measured; see the WP 0.4 table and `spikes/ui-bakeoff/RESULTS.md`. Recommendation: Tauri 2 + SolidJS (meets start, keypress, open and scroll targets on Windows). No webview design meets the 150 MB GUI memory target, so raise it to about 400 MB. Marc chose Tauri 2 + SolidJS (2026-11-04). |
 | 0.5 | | |
 
 ### WP 0.2 step B results (2026-11-04)

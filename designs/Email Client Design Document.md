@@ -14,7 +14,7 @@ The key decisions are:
 - **Headless by design:** only the desktop build needs a webview, so the engine runs on its own in a container.
 - **Speed:** the UI reads only from local storage, with targets enforced in CI.
 
-Tauri is the recommended UI because HTML email needs a web engine anyway, but it needs to prove itself against GPUI in a Phase 0 test.
+Tauri is the recommended UI because HTML email needs a web engine anyway, but it needs to prove itself against GPUI in a Phase 0 test. Phase 0 confirmed Tauri (Windows: 442 ms start, 11 ms keypress p95, 30 ms open p95).
 
 ## Goals and principles
 
@@ -329,7 +329,7 @@ Flutter and Qt were not researched for this document. Published comparisons repo
 - **Type safety:** commands are defined in Rust and TypeScript types are generated from them, so a mismatch fails the build.
 - **An exit if webviews disappoint:** Tauri 3 is in alpha with a [selectable Chromium (CEF) runtime](https://github.com/tauri-apps/tauri/releases/tag/@tauri-apps%2Fcli-v3.0.0-alpha.0), which would address differences between webviews at the cost of a bigger download. The UI is also a thin client, so GPUI could replace it later without changing the core.
 
-Rust is confirmed, so Avalonia and Electron drop out. GPUI remains the main challenger, and Phase 0 tests it against Tauri. Because Claude is building this, Tauri also has a practical edge: its web interface is easier for Claude to run, screenshot and test automatically.
+Rust is confirmed, so Avalonia and Electron drop out. GPUI remains the main challenger, and Phase 0 tests it against Tauri. Phase 0 confirmed Tauri (Windows: 442 ms start, 11 ms keypress p95, 30 ms open p95). Because Claude is building this, Tauri also has a practical edge: its web interface is easier for Claude to run, screenshot and test automatically.
 
 ### Proposed stack
 
@@ -359,8 +359,10 @@ Rust is confirmed, so Avalonia and Electron drop out. GPUI remains the main chal
 | Scrolling a list of 500,000 messages | 60 fps, with no dropped frames |
 | `fam mail list --json` with the daemon running | Under 50 ms |
 | Archive, move or flag, as seen in the UI | Immediate; the server call follows in the background |
-| Idle memory: GUI / headless daemon | Under 150 MB / under 50 MB |
+| Idle memory: GUI / headless daemon | Under 400 MB private, including the webview / under 50 MB |
 | Open an older message, online | Under 1 second |
+
+The GUI memory target was raised from 150 MB after the Phase 0 bake-off: every design that can render HTML mail needs a web engine, and WebView2 alone uses most of that (see spikes/ui-bakeoff/RESULTS.md).
 
 ### How the speed is achieved
 
