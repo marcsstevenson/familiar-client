@@ -1,0 +1,2 @@
+# Tests compare the example config byte for byte, so keep its line endings fixed.
+config.example.toml text eol=lf

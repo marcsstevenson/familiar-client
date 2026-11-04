@@ -1,0 +1,17 @@
+[package]
+name = "familiar-config"
+description = "config.toml parsing, validation and comment-preserving write-back for Familiar."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[dependencies]
+serde.workspace = true
+toml = { version = "1.2", default-features = false, features = ["parse", "serde", "std"] }
+toml_edit = { version = "0.25", default-features = false, features = ["parse", "display"] }
+
+[lints]
+workspace = true

@@ -1,0 +1,83 @@
+# Familiar config example.
+#
+# Copy this to your config path (`fam config path` shows where) and change the
+# addresses, tenant and signatures. Check it with `fam config validate`.
+#
+# This file never holds passwords, tokens or mail: tokens live in the OS
+# keychain. Your own copy has your signatures in it, so keep it in a private
+# repo, not in the public Familiar repo.
+
+version = 1
+
+[app]
+# Familiar's own Microsoft app ID. It is public, not a secret. Replace it only
+# if you registered your own app.
+client_id = "c6057b6a-a692-47dd-b34e-12629372e32a"
+theme = "system"           # system, light or dark
+send_delay_seconds = 10    # undo-send window, 0 to 120
+
+# One table per account. The name after `accounts.` is what you pass to
+# `--account` and use in searches (`account:hotmail`).
+
+# A personal Microsoft account (Outlook.com, Hotmail, Live).
+[accounts.hotmail]
+email = "you@hotmail.example"
+tenant = "consumers"
+
+[accounts.hotmail.signature]
+new = '''
+<p>Your Name<br>Your details</p>
+'''
+reply = '''
+<p>Your Name</p>
+'''
+
+# A work or club account. Use the organisation's own tenant ID (or its domain)
+# rather than `organizations`: token refresh has to go to the account's tenant.
+[accounts.parklands]
+email = "you@club.example"
+tenant = "00000000-0000-0000-0000-000000000000"
+display_name = "Your Name"
+
+[accounts.parklands.signature]
+new = '''
+<p>Your Name<br>Your club role</p>
+'''
+reply = '''
+<p>Your Name<br>Your club role</p>
+'''
+
+# Named calendars for `fam cal add --purpose family`.
+[calendar.purposes]
+family = { account = "hotmail", calendar = "Family Room" }
+
+[sync]
+window = "1y"              # full bodies kept for this long: 90d, 6m, 1y ...
+headers = "all"            # headers for all history, or a period
+older_bodies = "on-demand" # on-demand or none
+cache_limit = "2GB"        # body cache size limit
+attachments = "on-demand"  # on-demand or window
+
+# Saved searches, shown as smart folders.
+[[views]]
+name = "Club, unread"
+query = "account:parklands is:unread"
+
+# Mail rules, in the order they run. `run = "server"` rules keep working while
+# Familiar is closed; `run = "local"` rules only run while it is open.
+[[rules]]
+name = "Delete firebaseapp spam"
+account = "hotmail"
+run = "server"
+when = { sender_contains = ["firebaseapp"] }
+then = { delete = true, stop = true }
+
+# Single-key shortcuts.
+[keys]
+archive = "e"
+reply = "r"
+
+# What agent sessions (fam from a script, or MCP) may do on every account:
+# read, draft, write, send, delete, rules. Read and draft is the safe baseline.
+[agent]
+allow = ["read", "draft"]

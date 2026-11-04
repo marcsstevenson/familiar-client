@@ -171,6 +171,8 @@ impl Registry {
         let mut r = Self::empty();
         r.register(crate::commands::version::Version);
         r.register(crate::commands::schema::SchemaCmd);
+        r.register(crate::commands::config::ConfigValidate);
+        r.register(crate::commands::config::ConfigPath);
         r
     }
 

@@ -62,6 +62,57 @@ export type CommandDoc = {
   summary: string;
 };
 
+export type ConfigAccount = {
+  /** The mailbox address. */
+  email: string;
+  /** The account name used with `--account`. */
+  name: string;
+  /** Whether new and reply signatures are set. */
+  signatures: SignatureState;
+  /** The sign-in tenant. */
+  tenant: string;
+};
+
+export type ConfigPathInput = {
+  /** The config file. Defaults to FAMILIAR_CONFIG, then the platform default (see `fam config path`). */
+  path?: string | null;
+};
+
+export type ConfigPathOutput = {
+  /** Whether the file exists. */
+  exists: boolean;
+  /** The config file Familiar uses. */
+  path: string;
+  /** Where the path came from. */
+  source: ConfigPathSource;
+};
+
+export type ConfigPathSource = "explicit" | "env" | "default";
+
+export type ConfigValidateOutput = {
+  /** Accounts, by name. */
+  accounts: Array<ConfigAccount>;
+  /** The Microsoft app (client) ID in use. */
+  client_id: string;
+  /** The file that was checked. */
+  path: string;
+  /** The config file format version. */
+  version: number;
+  /** Problems that don't stop the config being used. */
+  warnings: Array<ConfigWarning>;
+};
+
+export type ConfigWarning = {
+  /** 1-based column, when known. */
+  column?: number | null;
+  /** Dotted key path, for example `accounts.parklands.tenant`. */
+  key: string;
+  /** 1-based line, when known. */
+  line?: number | null;
+  /** What looks wrong. */
+  message: string;
+};
+
 export type ExitCodeDoc = {
   /** The process exit code. */
   code: number;
@@ -121,6 +172,13 @@ export type SchemaOutput = SchemaDocument | McpToolList | {
   typescript: string;
 };
 
+export type SignatureState = {
+  /** A signature for new messages is set. */
+  new: boolean;
+  /** A signature for replies is set. */
+  reply: boolean;
+};
+
 export type VersionInput = {
   /** Also report the operating system and CPU architecture. */
   verbose?: boolean;
@@ -139,6 +197,10 @@ export type VersionOutput = {
 
 /** Every command, by dotted name, with its input and output types. */
 export interface Commands {
+  /** Show which config file is used */
+  "config.path": { input: ConfigPathInput; output: ConfigPathOutput };
+  /** Check config.toml for errors */
+  "config.validate": { input: ConfigPathInput; output: ConfigValidateOutput };
   /** Describe every command, its input, output and errors */
   "schema": { input: SchemaInput; output: SchemaOutput };
   /** Show the Familiar version */
@@ -150,6 +212,8 @@ export type CommandName = keyof Commands;
 
 /** Every command name, in order. */
 export const COMMAND_NAMES = [
+  "config.path",
+  "config.validate",
   "schema",
   "version",
 ] as const satisfies readonly CommandName[];
