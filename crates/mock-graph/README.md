@@ -75,7 +75,7 @@ Faults can be narrowed with `.on_path("/delta")`, `.on_method("GET")` and `.time
 
 ```sh
 cargo run -p familiar-mock-graph -- --port 8787 --synthetic 10000
-curl -H 'Authorization: Bearer dev-token' 'http://127.0.0.1:8787/v1.0/me/mailFolders'
+curl --oauth2-bearer dev-token 'http://127.0.0.1:8787/v1.0/me/mailFolders'
 ```
 
 Options: `--fixture FILE`, `--synthetic N --seed N`, `--recording FILE`, `--token TOKEN`,
