@@ -1,0 +1,55 @@
+{
+  "exchanges": [
+    {
+      "method": "GET",
+      "path": "/v1.0/me/people",
+      "status": 200,
+      "body": {
+        "@odata.context": "{{baseUrl}}/$metadata#users('me')/people",
+        "value": [
+          {
+            "id": "4d1f0000-0000-4000-8000-000000000101",
+            "displayName": "Sam Walker",
+            "scoredEmailAddresses": [{ "address": "sam.walker@club.example", "relevanceScore": 8.0 }]
+          },
+          {
+            "id": "4d1f0000-0000-4000-8000-000000000102",
+            "displayName": "Casey Chen",
+            "scoredEmailAddresses": [{ "address": "casey.chen@club.example", "relevanceScore": 6.0 }]
+          }
+        ],
+        "@odata.nextLink": "{{baseUrl}}/me/people?$skip=2"
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/v1.0/me/people",
+      "query": { "$skip": "2" },
+      "status": 200,
+      "body": {
+        "@odata.context": "{{baseUrl}}/$metadata#users('me')/people",
+        "value": [
+          {
+            "id": "4d1f0000-0000-4000-8000-000000000103",
+            "displayName": "Jordan Ngata",
+            "scoredEmailAddresses": [{ "address": "jordan.ngata@example.org", "relevanceScore": 3.0 }]
+          }
+        ]
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/v1.0/me/mailboxSettings/automaticRepliesSetting",
+      "status": 200,
+      "body": {
+        "@odata.context": "{{baseUrl}}/$metadata#users('me')/mailboxSettings/automaticRepliesSetting",
+        "status": "disabled",
+        "externalAudience": "all",
+        "internalReplyMessage": "",
+        "externalReplyMessage": "",
+        "scheduledStartDateTime": { "dateTime": "2026-11-04T00:00:00.0000000", "timeZone": "UTC" },
+        "scheduledEndDateTime": { "dateTime": "2026-11-05T00:00:00.0000000", "timeZone": "UTC" }
+      }
+    }
+  ]
+}

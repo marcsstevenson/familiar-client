@@ -19,6 +19,7 @@ familiar-provider-graph = { path = "crates/provider-graph" }
 familiar-store = { path = "crates/store" }
 familiar-search = { path = "crates/search" }
 familiar-rules = { path = "crates/rules" }
+familiar-mock-graph = { path = "crates/mock-graph" }
 
 [workspace.lints.rust]
 unsafe_code = "deny"

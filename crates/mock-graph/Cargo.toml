@@ -1,0 +1,27 @@
+[package]
+name = "familiar-mock-graph"
+description = "Local mock of Microsoft Graph for offline provider tests (WP 1.1)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+publish.workspace = true
+
+[[bin]]
+name = "mock-graph"
+path = "src/bin/mock-graph.rs"
+
+[dependencies]
+axum = { version = "0.8", default-features = false, features = ["http1", "tokio", "json"] }
+chrono = { version = "0.4", default-features = false, features = ["std", "clock", "serde"] }
+form_urlencoded = "1"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tokio = { version = "1", features = ["rt-multi-thread", "net", "macros", "sync", "time", "signal"] }
+
+[dev-dependencies]
+reqwest = { version = "0.12", default-features = false, features = ["json"] }
+
+[lints]
+workspace = true

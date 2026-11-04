@@ -1,0 +1,108 @@
+{
+  "user": {
+    "id": "6f1c2a8e-0000-4000-8000-000000000001",
+    "displayName": "Pat Example",
+    "userPrincipalName": "pat@example.com",
+    "mail": "pat@example.com",
+    "timeZone": "New Zealand Standard Time"
+  },
+  "folders": [
+    { "id": "fld-club", "displayName": "Cricket Club" },
+    { "id": "fld-club-juniors", "displayName": "Juniors", "parentFolderId": "fld-club" },
+    { "id": "fld-receipts", "displayName": "Receipts", "parentFolderId": "inbox" },
+    { "id": "fld-hidden", "displayName": "Conversation History", "isHidden": true }
+  ],
+  "messages": [
+    {
+      "id": "imm-small-01", "folderId": "inbox",
+      "subject": "Practice moved to Thursday",
+      "from": { "name": "Sam Walker", "address": "sam.walker@club.example" },
+      "to": [{ "name": "Pat Example", "address": "pat@example.com" }],
+      "receivedDateTime": "2026-11-03T19:02:00Z",
+      "conversationId": "conv-practice",
+      "bodyHtml": "<html><body><p>Hi all, practice is on Thursday this week at 5pm.</p></body></html>"
+    },
+    {
+      "id": "imm-small-02", "folderId": "sentitems",
+      "subject": "RE: Practice moved to Thursday",
+      "from": { "name": "Pat Example", "address": "pat@example.com" },
+      "to": [{ "name": "Sam Walker", "address": "sam.walker@club.example" }],
+      "receivedDateTime": "2026-11-03T20:15:00Z", "isRead": true,
+      "conversationId": "conv-practice",
+      "bodyHtml": "<html><body><p>Thanks Sam, we will be there.</p></body></html>"
+    },
+    {
+      "id": "imm-small-03", "folderId": "fld-club-juniors",
+      "subject": "RE: Practice moved to Thursday",
+      "from": { "name": "Jordan Ngata", "address": "jordan.ngata@example.org" },
+      "to": [{ "name": "Sam Walker", "address": "sam.walker@club.example" }],
+      "cc": [{ "name": "Pat Example", "address": "pat@example.com" }],
+      "receivedDateTime": "2026-11-04T07:40:00Z",
+      "conversationId": "conv-practice"
+    },
+    {
+      "id": "imm-small-04", "folderId": "fld-receipts",
+      "subject": "Your order has shipped",
+      "from": { "name": "Example Store", "address": "orders@shop.example" },
+      "to": [{ "name": "Pat Example", "address": "pat@example.com" }],
+      "receivedDateTime": "2026-10-28T02:11:00Z", "isRead": true, "hasAttachments": true,
+      "bodyHtml": "<html><body><p>Order 1042 is on its way. Invoice attached.</p></body></html>"
+    },
+    {
+      "id": "imm-small-05", "folderId": "inbox",
+      "subject": "Committee meeting agenda",
+      "from": { "name": "Casey Chen", "address": "casey.chen@club.example" },
+      "to": [{ "name": "Pat Example", "address": "pat@example.com" }],
+      "receivedDateTime": "2026-11-02T08:30:00Z", "flagged": true, "importance": "high",
+      "categories": ["Club"],
+      "bodyHtml": "<html><body><p>Agenda: budget, fixtures, volunteer roster.</p></body></html>"
+    },
+    {
+      "id": "imm-small-06", "folderId": "archive",
+      "subject": "Membership renewal 2015",
+      "from": { "name": "Riley Smith", "address": "riley.smith@example.net" },
+      "to": [{ "name": "Pat Example", "address": "pat@example.com" }],
+      "receivedDateTime": "2015-03-14T10:00:00Z", "isRead": true,
+      "bodyHtml": "<html><body><p>Your membership for the 2015 season is confirmed.</p></body></html>"
+    },
+    {
+      "id": "imm-small-07", "folderId": "drafts",
+      "subject": "Draft: volunteer roster",
+      "from": { "name": "Pat Example", "address": "pat@example.com" },
+      "receivedDateTime": "2026-11-04T08:00:00Z", "isRead": true, "isDraft": true,
+      "bodyHtml": "<html><body><p>Saturday: canteen, scoring, umpiring.</p></body></html>"
+    }
+  ],
+  "calendars": [
+    { "id": "cal-default", "name": "Calendar", "isDefault": true },
+    { "id": "cal-family", "name": "Family Room", "color": "lightGreen" }
+  ],
+  "events": [
+    {
+      "id": "evt-small-01", "calendarId": "cal-default",
+      "subject": "Committee meeting",
+      "start": "2026-11-10T06:00:00Z", "end": "2026-11-10T07:30:00Z",
+      "location": "Clubrooms",
+      "organizer": { "name": "Casey Chen", "address": "casey.chen@club.example" },
+      "attendees": [{ "name": "Pat Example", "address": "pat@example.com" }]
+    },
+    {
+      "id": "evt-small-02", "calendarId": "cal-family",
+      "subject": "Junior practice",
+      "start": "2026-11-05T04:00:00Z", "end": "2026-11-05T05:00:00Z",
+      "location": "Club grounds", "type": "occurrence", "seriesMasterId": "evt-small-series"
+    },
+    {
+      "id": "evt-small-03", "calendarId": "cal-family",
+      "subject": "Junior practice",
+      "start": "2026-11-12T04:00:00Z", "end": "2026-11-12T05:00:00Z",
+      "location": "Club grounds", "type": "occurrence", "seriesMasterId": "evt-small-series"
+    },
+    {
+      "id": "evt-small-04", "calendarId": "cal-family",
+      "subject": "School holidays",
+      "start": "2026-12-18T00:00:00Z", "end": "2026-12-19T00:00:00Z",
+      "isAllDay": true, "showAs": "free"
+    }
+  ]
+}
