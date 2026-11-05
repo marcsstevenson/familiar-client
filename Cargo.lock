@@ -967,6 +967,7 @@ dependencies = [
  "familiar-rules",
  "familiar-search",
  "familiar-store",
+ "rusqlite",
  "serde",
  "serde_json",
  "tempfile",

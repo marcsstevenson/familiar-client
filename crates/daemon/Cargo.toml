@@ -30,6 +30,7 @@ tokio = { version = "1", features = ["rt-multi-thread", "net", "io-util", "macro
 [dev-dependencies]
 chrono = { version = "0.4", default-features = false, features = ["std"] }
 familiar-mock-graph.workspace = true
+rusqlite = { version = "0.41", features = ["bundled"] }
 tempfile = "3"
 
 [lints]

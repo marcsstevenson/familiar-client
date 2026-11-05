@@ -10,9 +10,9 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use familiar_core::daemon::{
-    AccountFailure, DaemonStatus, FetchBodyParams, FetchBodyResult, METHOD_FETCH_BODY, METHOD_PIN,
-    METHOD_SEARCH_ONLINE, METHOD_STATUS, METHOD_STOP, METHOD_SYNC_NOW, PinParams, PinResult,
-    SearchOnlineParams, SearchOnlineResult, SyncNowParams,
+    AccountFailure, CheckParams, CheckReport, DaemonStatus, FetchBodyParams, FetchBodyResult,
+    METHOD_CHECK, METHOD_FETCH_BODY, METHOD_PIN, METHOD_SEARCH_ONLINE, METHOD_STATUS, METHOD_STOP,
+    METHOD_SYNC_NOW, PinParams, PinResult, SearchOnlineParams, SearchOnlineResult, SyncNowParams,
 };
 use familiar_core::{CommandError, ErrorKind};
 use familiar_provider_graph::{Error as GraphError, MailApi, Priority};
@@ -102,6 +102,7 @@ impl Service {
                 }
                 Ok(json!({}))
             }
+            METHOD_CHECK => to_value(&self.check(params(p)?).await?),
             METHOD_STOP => {
                 let _ = self.shutdown.send(true);
                 Ok(json!({}))
@@ -124,6 +125,44 @@ impl Service {
             started_at: self.started_at,
             accounts,
         }
+    }
+
+    /// `sync.check`: compares the store with the server for each account
+    /// (or one) and reports drift. Reads only.
+    pub async fn check(&self, p: CheckParams) -> Result<CheckReport, CommandError> {
+        let mut targets: Vec<(&AccountId, &AccountHandle)> = self
+            .accounts
+            .iter()
+            .filter(|(_, a)| p.account.as_deref().is_none_or(|k| k == a.key))
+            .collect();
+        if targets.is_empty() {
+            return Err(CommandError::new(
+                ErrorKind::NotFound,
+                format!("famd is not syncing an account {:?}", p.account),
+            ));
+        }
+        targets.sort_by(|a, b| a.1.key.cmp(&b.1.key));
+        let rules = crate::check::Rules::new(&self.policy, (self.clock)());
+        let mut accounts = Vec::new();
+        for (id, a) in targets {
+            accounts.push(
+                crate::check::check_account(crate::check::CheckRun {
+                    key: &a.key,
+                    account: *id,
+                    api: &a.api,
+                    shared: &a.shared,
+                    root: &self.w.paths().root,
+                    rules,
+                    settle: !p.no_settle,
+                    limit: p.limit.unwrap_or(crate::check::DEFAULT_LIMIT),
+                })
+                .await?,
+            );
+        }
+        Ok(CheckReport {
+            clean: accounts.iter().all(|a| a.drift_total == 0),
+            accounts,
+        })
     }
 
     fn message(&self, id: i64) -> Result<(Message, &AccountHandle), CommandError> {

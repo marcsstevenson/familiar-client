@@ -75,6 +75,13 @@ impl Reader {
         out
     }
 
+    /// How many derived rows (folder counters, thread summaries) disagree
+    /// with a recount from the messages. Reads only; the writer's
+    /// `repair_derived` fixes them.
+    pub fn derived_drift(&self) -> Result<usize> {
+        crate::writer::derived_drift(&self.conn)
+    }
+
     /// All accounts.
     pub fn accounts(&self) -> Result<Vec<Account>> {
         query::accounts(&self.conn)

@@ -9,6 +9,7 @@ famd                 # foreground; Ctrl-C stops it
 fam sync status      # what it is doing, per account
 fam mail pin 1234    # keep message 1234's body on this device
 fam mail search 'from:club has:attachment'   # see docs/search.md
+fam sync check       # compare the store with the server, report drift
 ```
 
 `famd` reads `config.toml` (`FAMILIAR_CONFIG` or the default path from `fam config path`) and takes tokens from the sign-in store (`fam auth login`). An account that isn't signed in shows `auth_required` in `fam sync status` and is retried every few minutes. A second `famd` on the same data directory refuses to start.
@@ -51,15 +52,37 @@ JSON-RPC 2.0, one JSON object per line. The protocol types and a blocking client
 | `mail.pin` | `{"message": id, "pinned": bool}` | `{"message", "pinned", "has_body", "fetched"}` |
 | `mail.fetch_body` | `{"message": id}` | `{"message", "fetched", "cached"}` |
 | `sync.now` | `{"account": key}` (optional) | `{}` |
+| `sync.check` | `{"account", "limit", "no_settle"}` (all optional) | the check report, below |
 | `daemon.stop` | none | `{}`, then the daemon exits |
 
 Errors carry the command error kind in `error.data.kind`, so a failure inside `famd` exits `fam` with the same code it would have locally (see [exit-codes.md](exit-codes.md)).
 
 On Unix the socket is `<data dir>/famd.sock`, mode 0600. On Windows the pipe is `\\.\pipe\familiar-famd-<hash of the data dir>`, refuses remote clients and keeps the default pipe security (write access for its creator, SYSTEM and administrators only).
 
+## The consistency check
+
+`fam sync check` asks `famd` to compare the store with the server and report every difference. It never fixes anything: drift means a sync bug, and the report is what to send. It exits 0 either way; `clean` in `--json` output says whether drift was found.
+
+1. It asks for a sync round (as `sync.now` does) and waits until the account is idle again, bodies included.
+2. It lists the server's folder tree and every message in every folder, 1,000 at a time with only the fields it compares, and compares them with the store one folder at a time.
+3. If anything differed, it asks for another round, then fetches each differing message again (up to 2,000) and re-reads it from the store. Only what still differs is reported; the rest shows as `settled_on_recheck`. `--no-settle` skips both rounds.
+
+| Kind | Meaning |
+| --- | --- |
+| `folder_missing`, `folder_extra`, `folder_changed` | A folder only on one side, or with a different name or parent |
+| `message_missing`, `message_extra` | A message only on the server, or only in the store |
+| `wrong_folder` | The store has the message in another folder |
+| `read_state`, `flag`, `received_at` | The field differs |
+| `body_missing` | Inside the sync window without a body |
+| `body_outside_window` | A body more than a day (or two ageing runs) past the window that is neither pinned nor cached |
+| `counter` | A folder or thread counter in the store disagrees with its messages |
+
+Headers older than `sync.headers` are pruned on purpose and not compared. Before an account's first sync has finished the check runs without waiting for a round and says that differences are expected. `--limit` caps the list (default 50); the counts by kind are always complete.
+
 ## Tests
 
 `crates/daemon/tests/` runs the daemon against the mock Graph with poll intervals in milliseconds and a clock the test moves:
 
 - `sync.rs`: first sync then a burst of new mail, moves, deletes and read changes; window ageing, pinning and the cache; the socket and `fam sync status`; restart without a full round.
-- `large.rs`: 20,000 messages in CI; 500,000 with `cargo test --release -p familiar-daemon --test large -- --ignored --nocapture`.
+- `check.rs`: `sync.check` clean after a full sync and with changes in flight, and finding drift injected into the store (each kind, nothing fixed), including counter drift.
+- `large.rs` (also runs `sync.check` after the first sync and after the burst): 20,000 messages in CI; 500,000 with `cargo test --release -p familiar-daemon --test large -- --ignored --nocapture`.

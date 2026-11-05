@@ -14,6 +14,9 @@ use crate::model::{
 };
 use crate::scheduler::Priority;
 
+/// The fields [`MailApi::message_states_page`] asks for.
+pub const STATE_FIELDS: &str = "id,parentFolderId,receivedDateTime,isRead,flag";
+
 /// Messages per delta page (`Prefer: odata.maxpagesize`).
 pub const DELTA_PAGE_SIZE: usize = 200;
 
@@ -137,6 +140,24 @@ impl MailApi {
             None => self.path(&format!(
                 "/mailFolders/{folder}/messages?$top={}&$orderby=receivedDateTime%20desc&$select={HEADER_FIELDS}",
                 page_size.clamp(1, 1000)
+            )),
+        };
+        decode_page(self.client.get(&url, priority, &[]).await?)
+    }
+
+    /// One page of a folder's messages with only what the consistency check
+    /// compares (ID, folder, received time, read state, flag), 1,000 at a
+    /// time. Start with `link = None` and follow `next_link`.
+    pub async fn message_states_page(
+        &self,
+        folder: &str,
+        link: Option<&str>,
+        priority: Priority,
+    ) -> Result<Page<GraphMessage>> {
+        let url = match link {
+            Some(l) => l.to_string(),
+            None => self.path(&format!(
+                "/mailFolders/{folder}/messages?$top=1000&$select={STATE_FIELDS}"
             )),
         };
         decode_page(self.client.get(&url, priority, &[]).await?)

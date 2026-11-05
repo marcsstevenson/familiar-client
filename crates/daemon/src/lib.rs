@@ -5,14 +5,16 @@
 //! - [`engine`]: one task per account: first sync, polling, body backfill
 //!   for the window, ageing and the body cache.
 //! - [`service`]: requests from `fam` and the GUI (status, pin, on-demand
-//!   body fetch, server search, sync now, stop).
+//!   body fetch, server search, sync now, the consistency check, stop).
 //! - [`indexer`]: keeps the search index beside the store up to date.
+//! - [`check`]: the store-versus-server consistency check (WP 1.12).
 //! - [`ipc`]: the per-user socket or named pipe those requests arrive on.
 //!
 //! [`Daemon::start`] runs all of it on the current Tokio runtime; the
 //! `famd` binary builds a [`DaemonOptions`] from `config.toml` and the
 //! sign-in store, and tests build one against the mock Graph.
 
+pub mod check;
 pub mod engine;
 pub mod indexer;
 pub mod ipc;

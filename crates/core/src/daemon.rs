@@ -20,6 +20,7 @@
 //! | [`METHOD_FETCH_BODY`] | [`FetchBodyParams`] | [`FetchBodyResult`] |
 //! | [`METHOD_SYNC_NOW`] | [`SyncNowParams`] | `{}` |
 //! | [`METHOD_SEARCH_ONLINE`] | [`SearchOnlineParams`] | [`SearchOnlineResult`] |
+//! | [`METHOD_CHECK`] | [`CheckParams`] | [`CheckReport`] |
 //! | [`METHOD_STOP`] | none | `{}`, then the daemon exits |
 //!
 //! # Where
@@ -51,6 +52,8 @@ pub const METHOD_SYNC_NOW: &str = "sync.now";
 pub const METHOD_SEARCH_ONLINE: &str = "mail.search_online";
 /// `daemon.stop`: shut down cleanly.
 pub const METHOD_STOP: &str = "daemon.stop";
+/// `sync.check`: compare the store with the server and report drift (WP 1.12).
+pub const METHOD_CHECK: &str = "sync.check";
 
 /// The `sync_state` resource the engine sets once an account's first sync of
 /// headers has finished.
@@ -58,6 +61,9 @@ pub const FIRST_SYNC_RESOURCE: &str = "engine:first-sync";
 
 /// How long a client waits for an answer. A pin can download a body.
 pub const CALL_TIMEOUT: Duration = Duration::from_secs(120);
+
+/// How long `fam sync check` waits: it lists every message on the server.
+pub const CHECK_TIMEOUT: Duration = Duration::from_secs(3 * 3600);
 
 // ---------------------------------------------------------------------------
 // Paths
@@ -377,6 +383,137 @@ pub struct SearchOnlineResult {
     pub failures: Vec<AccountFailure>,
 }
 
+/// `sync.check` params.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct CheckParams {
+    /// Account key; all accounts when absent.
+    #[serde(default)]
+    pub account: Option<String>,
+    /// Most drift entries listed per account (counts are always complete).
+    #[serde(default)]
+    pub limit: Option<usize>,
+    /// Skip the sync round before and between the passes. Recent changes then
+    /// show as drift.
+    #[serde(default)]
+    pub no_settle: bool,
+}
+
+/// What kind of difference the check found.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash, Serialize, Deserialize, JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum DriftKind {
+    /// A folder on the server is not in the store.
+    FolderMissing,
+    /// A folder in the store is not on the server.
+    FolderExtra,
+    /// A folder's name or parent differs.
+    FolderChanged,
+    /// A message on the server is not in the store.
+    MessageMissing,
+    /// A message in the store is not on the server.
+    MessageExtra,
+    /// A message is in a different folder in the store.
+    WrongFolder,
+    /// Read state differs.
+    ReadState,
+    /// Follow-up flag differs.
+    Flag,
+    /// Received time differs.
+    ReceivedAt,
+    /// A message inside the sync window has no body on this device.
+    BodyMissing,
+    /// A body outside the sync window is kept although it is neither pinned nor cached.
+    BodyOutsideWindow,
+    /// A folder or thread counter in the store disagrees with its messages.
+    Counter,
+}
+
+impl DriftKind {
+    /// The snake_case name.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            DriftKind::FolderMissing => "folder_missing",
+            DriftKind::FolderExtra => "folder_extra",
+            DriftKind::FolderChanged => "folder_changed",
+            DriftKind::MessageMissing => "message_missing",
+            DriftKind::MessageExtra => "message_extra",
+            DriftKind::WrongFolder => "wrong_folder",
+            DriftKind::ReadState => "read_state",
+            DriftKind::Flag => "flag",
+            DriftKind::ReceivedAt => "received_at",
+            DriftKind::BodyMissing => "body_missing",
+            DriftKind::BodyOutsideWindow => "body_outside_window",
+            DriftKind::Counter => "counter",
+        }
+    }
+}
+
+/// One difference between the store and the server.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct Drift {
+    /// What differs.
+    pub kind: DriftKind,
+    /// The folder (its name in the store, or on the server when missing locally).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub folder: Option<String>,
+    /// The message's server ID.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub remote_id: Option<String>,
+    /// The message's local ID.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub message: Option<i64>,
+    /// What the store has against what the server has.
+    pub detail: String,
+}
+
+/// One drift kind and how often it was found.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct DriftCount {
+    /// The kind.
+    pub kind: DriftKind,
+    /// How many.
+    pub count: usize,
+}
+
+/// One account's check.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct AccountCheck {
+    /// The account's key in `config.toml`.
+    pub account: String,
+    /// Whether the first sync had finished. Before it, drift is expected.
+    pub first_sync_done: bool,
+    /// Whether a sync round ran before the comparison and before re-checking.
+    pub settled: bool,
+    /// Folders compared.
+    pub folders: usize,
+    /// Messages listed on the server (inside the kept header range).
+    pub server_messages: usize,
+    /// Messages in the store (inside the kept header range).
+    pub local_messages: usize,
+    /// Differences that the first pass found but were gone when re-checked:
+    /// changes that were still syncing.
+    pub settled_on_recheck: usize,
+    /// Total differences that remain.
+    pub drift_total: usize,
+    /// Remaining differences by kind.
+    pub by_kind: Vec<DriftCount>,
+    /// The first differences (up to the limit).
+    pub drift: Vec<Drift>,
+    /// Seconds the check took.
+    pub seconds: f64,
+}
+
+/// `sync.check` result.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, JsonSchema)]
+pub struct CheckReport {
+    /// True when no account has drift.
+    pub clean: bool,
+    /// One entry per account checked.
+    pub accounts: Vec<AccountCheck>,
+}
+
 // ---------------------------------------------------------------------------
 // Client
 
@@ -409,7 +546,13 @@ impl Client {
     /// Connects to the daemon listening on `socket`. Fails with
     /// [`ErrorKind::DaemonUnavailable`] when none is.
     pub fn connect(socket: &Path) -> Result<Self, CommandError> {
-        let stream = open(socket).map_err(|e| unavailable(socket, e))?;
+        Self::connect_with_timeout(socket, CALL_TIMEOUT)
+    }
+
+    /// Like [`Client::connect`], waiting up to `timeout` for each answer
+    /// (Unix; Windows pipes wait without limit).
+    pub fn connect_with_timeout(socket: &Path, timeout: Duration) -> Result<Self, CommandError> {
+        let stream = open(socket, timeout).map_err(|e| unavailable(socket, e))?;
         Ok(Self {
             stream: BufReader::new(stream),
             next_id: 1,
@@ -469,15 +612,15 @@ impl Client {
 }
 
 #[cfg(unix)]
-fn open(socket: &Path) -> std::io::Result<Box<dyn Duplex>> {
+fn open(socket: &Path, timeout: Duration) -> std::io::Result<Box<dyn Duplex>> {
     let s = std::os::unix::net::UnixStream::connect(socket)?;
-    s.set_read_timeout(Some(CALL_TIMEOUT))?;
-    s.set_write_timeout(Some(CALL_TIMEOUT))?;
+    s.set_read_timeout(Some(timeout))?;
+    s.set_write_timeout(Some(timeout))?;
     Ok(Box::new(s))
 }
 
 #[cfg(windows)]
-fn open(socket: &Path) -> std::io::Result<Box<dyn Duplex>> {
+fn open(socket: &Path, _timeout: Duration) -> std::io::Result<Box<dyn Duplex>> {
     // All pipe instances busy (ERROR_PIPE_BUSY): the daemon makes a new one
     // as soon as it accepts, so retry briefly.
     const ERROR_PIPE_BUSY: i32 = 231;

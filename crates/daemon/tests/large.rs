@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //! The WP 1.7 done criterion: a large synthetic mailbox syncs from the mock
-//! and stays consistent through a burst of changes.
+//! and stays consistent through a burst of changes. The WP 1.12 check
+//! (`sync.check`) runs clean after the first sync and after the burst.
 //!
 //! CI runs 20,000 messages. The full 500,000 is ignored by default because
 //! it takes minutes; run it in release:
@@ -17,6 +18,8 @@ use std::time::{Duration, Instant};
 
 use chrono::Duration as Span;
 use common::{Env, KEY, fast_policy};
+use familiar_core::commands::sync::render_check;
+use familiar_core::daemon::CheckParams;
 use familiar_mock_graph::{EmailAddress, Message};
 
 fn env_or(var: &str, default: usize) -> usize {
@@ -43,6 +46,17 @@ async fn large(messages: usize, window_days: u32, limit: Duration) {
     let check = t.elapsed();
     assert!(diff.is_empty(), "{diff:#?}");
     assert_eq!(stats.messages as usize, messages);
+    // WP 1.12: the check famd runs agrees, comparing over Graph.
+    let t = Instant::now();
+    let report = env
+        .daemon()
+        .service()
+        .check(CheckParams::default())
+        .await
+        .unwrap();
+    let sync_check = t.elapsed();
+    assert!(report.clean, "{}", render_check(&report));
+    assert_eq!(report.accounts[0].server_messages, messages);
 
     // A burst of changes across the mailbox: 1% of messages touched.
     let mbx = env.mock.mailbox(KEY);
@@ -77,17 +91,25 @@ async fn large(messages: usize, window_days: u32, limit: Duration) {
     })
     .await;
     let burst = t.elapsed();
+    let report = env
+        .daemon()
+        .service()
+        .check(CheckParams::default())
+        .await
+        .unwrap();
+    assert!(report.clean, "{}", render_check(&report));
     assert_eq!(env.daemon().writer().lock().repair_derived().unwrap(), 0);
     let live = env.daemon().service().status().accounts[0].clone();
     assert_eq!(live.failures, 0, "{live:?}");
     let disk = r.stored_body_bytes().unwrap();
     eprintln!(
         "large sync: {messages} messages, {} window bodies ({window_days} days), first sync {:.1}s, \
-         consistency check {:.1}s, {n} changes applied in {:.1}s, bodies {:.1} MB stored, \
+         consistency check {:.1}s, sync.check {:.1}s, {n} changes applied in {:.1}s, bodies {:.1} MB stored, \
          {} requests",
         stats.with_body,
         first.as_secs_f64(),
         check.as_secs_f64(),
+        sync_check.as_secs_f64(),
         burst.as_secs_f64(),
         disk as f64 / 1_048_576.0,
         env.mock.requests().len()

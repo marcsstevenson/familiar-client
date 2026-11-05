@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-//! `fam sync status` (WP 1.7): how far each account's sync has got.
+//! `fam sync status` (WP 1.7): how far each account's sync has got, and
+//! `fam sync check` (WP 1.12): the store compared with the server.
 //!
 //! Counts come from the store, which the CLI reads directly, so they are
 //! shown even when `famd` is not running. What the daemon is doing right
@@ -8,7 +9,8 @@
 
 use crate::commands::auth::{config, rfc3339};
 use crate::daemon::{
-    AccountLive, Client, DaemonPaths, DaemonStatus, FIRST_SYNC_RESOURCE, METHOD_STATUS, SyncPhase,
+    AccountLive, CHECK_TIMEOUT, CheckParams, CheckReport, Client, DaemonPaths, DaemonStatus,
+    FIRST_SYNC_RESOURCE, METHOD_CHECK, METHOD_STATUS, SyncPhase,
 };
 use crate::error::{CommandError, ErrorKind};
 use crate::registry::{Access, Command, CommandSpec, Context};
@@ -328,4 +330,121 @@ impl Command for SyncStatus {
         ));
         s
     }
+}
+
+/// `fam sync check` (WP 1.12).
+pub struct SyncCheck;
+
+/// Input for `fam sync check`.
+#[derive(Debug, Default, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct SyncCheckInput {
+    /// Only this account (its name in config.toml).
+    #[serde(default)]
+    pub account: Option<String>,
+    /// Most differences listed per account (default 50); counts are always complete.
+    #[serde(default)]
+    pub limit: Option<usize>,
+    /// Compare at once, without first waiting for a sync round. Changes still
+    /// syncing then show as drift.
+    #[serde(default)]
+    pub no_settle: bool,
+}
+
+impl Command for SyncCheck {
+    type Input = SyncCheckInput;
+    type Output = CheckReport;
+    const SPEC: CommandSpec = CommandSpec {
+        path: &["sync", "check"],
+        summary: "Compare the store with the server and report drift",
+        description: "Lists every folder and message on the server and compares them with this device's store: folders, which folder each message is in, read state, flags, received times, bodies against the sync window, and the store's own counters. Differences are re-checked after a sync round so changes still arriving are not reported. Nothing is fixed. Lists every message, so it takes a while on a large mailbox. Needs famd. Exit code 0 either way; `clean` says whether drift was found.",
+        access: Access::Read,
+        errors: &[
+            ErrorKind::NotFound,
+            ErrorKind::DaemonUnavailable,
+            ErrorKind::Offline,
+            ErrorKind::AuthRequired,
+            ErrorKind::Throttled,
+            ErrorKind::Server,
+        ],
+    };
+
+    fn run(&self, _ctx: &Context<'_>, input: SyncCheckInput) -> Result<CheckReport, CommandError> {
+        Client::connect_with_timeout(&DaemonPaths::resolve()?.socket, CHECK_TIMEOUT)?.call(
+            METHOD_CHECK,
+            &CheckParams {
+                account: input.account,
+                limit: input.limit,
+                no_settle: input.no_settle,
+            },
+        )
+    }
+
+    fn render_text(&self, o: &CheckReport) -> String {
+        render_check(o)
+    }
+}
+
+/// The text form of a check report.
+pub fn render_check(o: &CheckReport) -> String {
+    let mut s = String::new();
+    for a in &o.accounts {
+        s.push_str(&format!(
+            "{}: {} folders, {} messages on the server, {} in the store, checked in {:.1}s\n",
+            a.account, a.folders, a.server_messages, a.local_messages, a.seconds
+        ));
+        if !a.first_sync_done {
+            s.push_str("  first sync not finished, so differences are expected\n");
+        }
+        if a.drift_total == 0 {
+            s.push_str("  no drift");
+            if a.settled_on_recheck > 0 {
+                s.push_str(&format!(
+                    " ({} differences settled while checking)",
+                    a.settled_on_recheck
+                ));
+            }
+            s.push('\n');
+            continue;
+        }
+        let kinds: Vec<String> = a
+            .by_kind
+            .iter()
+            .map(|k| format!("{} {}", k.count, k.kind.as_str().replace('_', " ")))
+            .collect();
+        s.push_str(&format!(
+            "  DRIFT: {} differences ({})\n",
+            a.drift_total,
+            kinds.join(", ")
+        ));
+        for d in &a.drift {
+            let what = match (d.message, &d.remote_id) {
+                (Some(id), _) => format!("message {id}"),
+                (None, Some(r)) if d.folder.is_none() => r.clone(),
+                _ => "folder".to_string(),
+            };
+            s.push_str(&format!(
+                "  {} {}{}: {}\n",
+                d.kind.as_str(),
+                what,
+                d.folder
+                    .as_ref()
+                    .map(|f| format!(" in {f:?}"))
+                    .unwrap_or_default(),
+                d.detail
+            ));
+        }
+        if a.drift.len() < a.drift_total {
+            s.push_str(&format!(
+                "  ... and {} more (--limit to list more)\n",
+                a.drift_total - a.drift.len()
+            ));
+        }
+    }
+    s.push_str(if o.clean {
+        "Store matches the server."
+    } else {
+        "Store differs from the server. Nothing was changed; please report this."
+    });
+    s
 }

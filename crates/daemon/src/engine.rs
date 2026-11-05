@@ -27,7 +27,7 @@
 //! scheduler waits out `Retry-After` itself.
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -48,6 +48,10 @@ pub struct AccountShared {
     pub wake: Notify,
     /// Set by `sync.now`: everything is due.
     pub force: AtomicBool,
+    /// `sync.now` requests so far; each one's number is its ticket.
+    requested: AtomicU64,
+    /// The highest ticket whose round has finished and gone idle.
+    served: AtomicU64,
 }
 
 impl AccountShared {
@@ -66,6 +70,8 @@ impl AccountShared {
             }),
             wake: Notify::new(),
             force: AtomicBool::new(false),
+            requested: AtomicU64::new(0),
+            served: AtomicU64::new(0),
         }
     }
 
@@ -79,10 +85,20 @@ impl AccountShared {
         self.live.lock().unwrap_or_else(|p| p.into_inner()).clone()
     }
 
-    /// Makes every folder due and wakes the engine.
-    pub fn sync_now(&self) {
+    /// Makes every folder due and wakes the engine. Returns a ticket for
+    /// [`AccountShared::served`].
+    pub fn sync_now(&self) -> u64 {
+        let ticket = self.requested.fetch_add(1, Ordering::SeqCst) + 1;
         self.force.store(true, Ordering::SeqCst);
         self.wake.notify_one();
+        ticket
+    }
+
+    /// Whether the engine has gone idle after a round that started after
+    /// `sync_now` returned `ticket` (everything on the server up to that
+    /// request is in the store, bodies included), or that round failed.
+    pub fn served(&self, ticket: u64) -> bool {
+        self.served.load(Ordering::SeqCst) >= ticket
     }
 }
 
@@ -134,6 +150,8 @@ pub struct Engine {
     body_cursor: Option<Cursor>,
     ageing_due: Instant,
     failures: u32,
+    /// The `sync.now` ticket the current work answers.
+    serving: u64,
 }
 
 impl Engine {
@@ -165,6 +183,7 @@ impl Engine {
             body_cursor: None,
             ageing_due: Instant::now(),
             failures: 0,
+            serving: 0,
         }
     }
 
@@ -198,7 +217,9 @@ impl Engine {
             if *self.shutdown.borrow() {
                 break;
             }
+            let seen = self.shared.requested.load(Ordering::SeqCst);
             if self.shared.force.swap(false, Ordering::SeqCst) {
+                self.serving = seen;
                 let now = Instant::now();
                 self.tree_due = Some(now);
                 for f in self.folders.values_mut() {
@@ -239,6 +260,9 @@ impl Engine {
                         l.failures += 1;
                         l.next_poll_at = Some(at);
                     });
+                    // The round was tried: a check waiting on it goes ahead
+                    // rather than waiting out the backoff.
+                    self.shared.served.store(self.serving, Ordering::SeqCst);
                     Instant::now() + wait
                 }
             };
@@ -319,6 +343,7 @@ impl Engine {
             l.detail = None;
             l.next_poll_at = Some(at);
         });
+        self.shared.served.store(self.serving, Ordering::SeqCst);
         Ok(Next::At(next))
     }
 

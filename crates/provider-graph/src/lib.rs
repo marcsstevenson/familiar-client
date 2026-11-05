@@ -23,7 +23,7 @@ mod sync;
 
 pub use client::{AuthTokens, ClientOptions, GRAPH_V1, GraphClient, StaticToken, TokenSource};
 pub use error::{Error, Result};
-pub use mail::{DELTA_PAGE_SIZE, MailApi};
+pub use mail::{DELTA_PAGE_SIZE, MailApi, STATE_FIELDS};
 pub use model::{
     DeltaItem, FOLDER_FIELDS, GraphBody, GraphFolder, GraphMessage, GraphRecipient, HEADER_FIELDS,
     Page, WELL_KNOWN_FOLDERS, importance, parse_time,

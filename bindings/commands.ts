@@ -41,6 +41,31 @@ export type CommandError = {
 
 export type Access = "read" | "draft" | "write" | "send" | "delete" | "rules";
 
+export type AccountCheck = {
+  /** The account's key in `config.toml`. */
+  account: string;
+  /** Remaining differences by kind. */
+  by_kind: Array<DriftCount>;
+  /** The first differences (up to the limit). */
+  drift: Array<Drift>;
+  /** Total differences that remain. */
+  drift_total: number;
+  /** Whether the first sync had finished. Before it, drift is expected. */
+  first_sync_done: boolean;
+  /** Folders compared. */
+  folders: number;
+  /** Messages in the store (inside the kept header range). */
+  local_messages: number;
+  /** Seconds the check took. */
+  seconds: number;
+  /** Messages listed on the server (inside the kept header range). */
+  server_messages: number;
+  /** Whether a sync round ran before the comparison and before re-checking. */
+  settled: boolean;
+  /** Differences that the first pass found but were gone when re-checked: changes that were still syncing. */
+  settled_on_recheck: number;
+};
+
 export type AccountSignIn = {
   /** When the current access token expires (RFC 3339, UTC). */
   access_expires_at?: string | null;
@@ -142,6 +167,13 @@ export type AuthStatusOutput = {
   store: string;
 };
 
+export type CheckReport = {
+  /** One entry per account checked. */
+  accounts: Array<AccountCheck>;
+  /** True when no account has drift. */
+  clean: boolean;
+};
+
 export type CommandDoc = {
   /** What the command may do. */
   access: Access;
@@ -224,6 +256,28 @@ export type DaemonInfo = {
   /** Its version. */
   version?: string | null;
 };
+
+export type Drift = {
+  /** What the store has against what the server has. */
+  detail: string;
+  /** The folder (its name in the store, or on the server when missing locally). */
+  folder?: string | null;
+  /** What differs. */
+  kind: DriftKind;
+  /** The message's local ID. */
+  message?: number | null;
+  /** The message's server ID. */
+  remote_id?: string | null;
+};
+
+export type DriftCount = {
+  /** How many. */
+  count: number;
+  /** The kind. */
+  kind: DriftKind;
+};
+
+export type DriftKind = "folder_missing" | "folder_extra" | "folder_changed" | "message_missing" | "message_extra" | "wrong_folder" | "read_state" | "flag" | "received_at" | "body_missing" | "body_outside_window" | "counter";
 
 export type ExitCodeDoc = {
   /** The process exit code. */
@@ -374,6 +428,15 @@ export type SignatureState = {
   reply: boolean;
 };
 
+export type SyncCheckInput = {
+  /** Only this account (its name in config.toml). */
+  account?: string | null;
+  /** Most differences listed per account (default 50); counts are always complete. */
+  limit?: number | null;
+  /** Compare at once, without first waiting for a sync round. Changes still syncing then show as drift. */
+  no_settle?: boolean;
+};
+
 export type SyncError = {
   /** The error. */
   message: string;
@@ -435,6 +498,8 @@ export interface Commands {
   "mail.search": { input: MailSearchInput; output: MailSearchOutput };
   /** Describe every command, its input, output and errors */
   "schema": { input: SchemaInput; output: SchemaOutput };
+  /** Compare the store with the server and report drift */
+  "sync.check": { input: SyncCheckInput; output: CheckReport };
   /** Show how far each account's sync has got */
   "sync.status": { input: SyncStatusInput; output: SyncStatusOutput };
   /** Show the Familiar version */
@@ -454,6 +519,7 @@ export const COMMAND_NAMES = [
   "mail.pin",
   "mail.search",
   "schema",
+  "sync.check",
   "sync.status",
   "version",
 ] as const satisfies readonly CommandName[];
