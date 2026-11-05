@@ -934,7 +934,8 @@ pub struct Suggestion {
     pub date: Option<NaiveDate>,
     /// A time found next to it.
     pub time: Option<chrono::NaiveTime>,
-    /// A `Where:`/`Location:`/`Venue:` line.
+    /// A `Where:`/`Location:`/`Venue:` line, or the place after the time
+    /// on a ticket-style `•`-separated line.
     pub location: Option<String>,
 }
 
@@ -970,7 +971,15 @@ pub fn suggest(subject: &str, text: &str, today: NaiveDate) -> Suggestion {
     };
     // `Where: ...` up to the end of its line or sentence.
     let lower = text.to_ascii_lowercase();
-    for key in ["where:", "location:", "venue:", "place:"] {
+    for key in [
+        "where:",
+        "location:",
+        "venue:",
+        "place:",
+        "held at ",
+        "take place at ",
+        "takes place at ",
+    ] {
         let Some(i) = lower
             .match_indices(key)
             .map(|(i, _)| i)
@@ -993,6 +1002,9 @@ pub fn suggest(subject: &str, text: &str, today: NaiveDate) -> Suggestion {
     // The new part of the message first; quoted history (reply headers
     // carry their own dates) only when it has nothing.
     let (own, quoted) = split_quoted(text);
+    if out.location.is_none() {
+        out.location = listed_location(&own);
+    }
     if let Some((date, time)) =
         find_when(&format!("{subject}\n{own}"), today).or_else(|| find_when(&quoted, today))
     {
@@ -1000,6 +1012,52 @@ pub fn suggest(subject: &str, text: &str, today: NaiveDate) -> Suggestion {
         out.time = time;
     }
     out
+}
+
+/// A place from a ticket-style line that lists the details between
+/// separators, with the place after the time:
+/// `Fri 6 Nov • 20:00 Wolfbrook Arena • Christchurch` gives
+/// `Wolfbrook Arena, Christchurch`.
+fn listed_location(text: &str) -> Option<String> {
+    const SEPS: [char; 3] = ['•', '|', '·'];
+    for line in text.lines() {
+        let parts: Vec<&str> = line
+            .split(|c| SEPS.contains(&c))
+            .map(str::trim)
+            .filter(|p| !p.is_empty())
+            .collect();
+        if parts.len() < 2 {
+            continue;
+        }
+        for (i, part) in parts.iter().enumerate() {
+            let words: Vec<&str> = part.split_whitespace().collect();
+            // The longest leading run of words that reads as a time.
+            let Some(n) = (1..=words.len().min(2))
+                .rev()
+                .find(|&n| parse_time(&words[..n].join(" ")).is_some())
+            else {
+                continue;
+            };
+            let mut place: Vec<String> = Vec::new();
+            let here = words[n..].join(" ");
+            let here = here.trim_start_matches("at ").trim();
+            if !here.is_empty() {
+                place.push(here.to_string());
+            }
+            // A short follow-on part without digits is the town.
+            for next in &parts[i + 1..] {
+                let short = next.split_whitespace().count() <= 4;
+                if !short || next.chars().any(|c| c.is_ascii_digit()) || place.len() >= 2 {
+                    break;
+                }
+                place.push((*next).to_string());
+            }
+            if !place.is_empty() {
+                return Some(place.join(", "));
+            }
+        }
+    }
+    None
 }
 
 /// Splits an email's text into what the sender wrote and the quoted
@@ -1201,6 +1259,45 @@ mod tests {
         assert_eq!(s.date, Some(d(2026, 11, 21)));
         assert_eq!(s.time, chrono::NaiveTime::from_hms_opt(18, 30, 0));
         assert_eq!(s.location.as_deref(), Some("Parklands hall"));
+        // Ticket-style lines put the place after the time.
+        let s = suggest(
+            "Event Reminder: Flight of the Conchords",
+            "Your event is coming up\nFri 6 Nov • 20:00 Wolfbrook Arena • Christchurch\nDoors open 7pm",
+            today,
+        );
+        assert_eq!(s.location.as_deref(), Some("Wolfbrook Arena, Christchurch"));
+        assert_eq!(s.date, Some(d(2026, 11, 6)));
+        assert_eq!(
+            suggest("Hi", "Sat 7 Nov | 7:30 pm | Town Hall", today)
+                .location
+                .as_deref(),
+            Some("Town Hall")
+        );
+        assert_eq!(
+            suggest(
+                "Masterclass",
+                "Hi all\nThe session will be held at the St Andrew's covered nets. Bring your kit.",
+                today
+            )
+            .location
+            .as_deref(),
+            Some("the St Andrew's covered nets")
+        );
+        assert_eq!(
+            suggest(
+                "Concert",
+                "Thu 12 Nov\n20:00 Wolfbrook Arena • Christchurch",
+                today
+            )
+            .location
+            .as_deref(),
+            Some("Wolfbrook Arena, Christchurch")
+        );
+        // A separator line with no time gives nothing.
+        assert_eq!(
+            suggest("Hi", "Home • About • Contact", today).location,
+            None
+        );
         let s = suggest("Swimming", "Lessons start 12/1/2027, see you then", today);
         assert_eq!(s.date, Some(d(2027, 1, 12)));
         assert_eq!(s.time, None);
