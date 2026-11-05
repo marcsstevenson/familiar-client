@@ -61,7 +61,6 @@ export function registerBuiltinActions(openPalette: (prefill?: string, values?: 
     enabled: hasMessage,
     cli: () => `fam mail read ${selectedMessage()}${(selectedRow()?.is_read ?? true) ? " --unread" : ""}`,
     run: () => {
-      // No row: it left the list (the Unread filter) because opening it marked it read.
       const unread = selectedRow()?.is_read ?? true;
       return onSelected(unread ? "Marked unread" : "Marked read", (id) =>
         run("mail.read", { messages: [id], unread }),

@@ -228,6 +228,14 @@ function CommandForm(props: { doc: CommandDoc; values?: Values; onBack: () => vo
                   />
                 }
               >
+                <Match when={f.name === "body"}>
+                  <textarea
+                    rows={6}
+                    required={f.required}
+                    value={(values()[f.name] as string | undefined) ?? ""}
+                    onInput={(e) => set(f.name, e.currentTarget.value)}
+                  />
+                </Match>
                 <Match when={f.kind === "boolean"}>
                   <input
                     type="checkbox"

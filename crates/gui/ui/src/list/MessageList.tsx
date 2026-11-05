@@ -128,11 +128,20 @@ export function MessageList() {
 
   createEffect(on([selectedFolder, sort, unreadOnly], () => void reopen(false)));
 
-  // The selected row's flags, for actions such as "mark unread".
+  // The selected row's flags, for actions such as "mark unread". A selected
+  // message whose row has left the view (the Unread filter, once opening it
+  // marked it read) keeps its last flags, now read.
   createEffect(() => {
     const i = selIndex();
     const r = i === null ? undefined : rowAt(i);
-    setSelectedRow(r && r.id === selectedMessage() ? { id: r.id, is_read: r.is_read, is_flagged: r.is_flagged } : null);
+    const id = selectedMessage();
+    setSelectedRow((prev) =>
+      r && r.id === id
+        ? { id: r.id, is_read: r.is_read, is_flagged: r.is_flagged }
+        : prev && prev.id === id
+          ? { ...prev, is_read: true }
+          : null,
+    );
   });
 
   // `fam ui open` and other code can select a message by ID.

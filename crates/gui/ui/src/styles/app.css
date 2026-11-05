@@ -414,7 +414,8 @@ kbd {
   grid-column: 2;
 }
 .command-field input:not([type="checkbox"]),
-.command-field select {
+.command-field select,
+.command-field textarea {
   font: inherit;
   color: inherit;
   background: var(--bg);
