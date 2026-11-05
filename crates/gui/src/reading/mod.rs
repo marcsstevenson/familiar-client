@@ -80,8 +80,10 @@ impl Reading {
 
 /// Downloads a message's inline images as `data:` URIs by Content-ID.
 /// A failure leaves the images out and is logged; the body still shows.
-fn load_cid(paths: &DaemonPaths, message: i64) -> CidMap {
+/// The flag is false when something failed, so the set isn't cached.
+fn load_cid(paths: &DaemonPaths, message: i64) -> (CidMap, bool) {
     let mut map = HashMap::new();
+    let mut complete = true;
     let list = match attachments::list_at(paths, message) {
         Ok(l) => l,
         Err(e) => {
@@ -89,7 +91,7 @@ fn load_cid(paths: &DaemonPaths, message: i64) -> CidMap {
                 "familiar: inline images of message {message}: {}",
                 e.message
             );
-            return Arc::new(map);
+            return (Arc::new(map), false);
         }
     };
     for a in list
@@ -105,13 +107,16 @@ fn load_cid(paths: &DaemonPaths, message: i64) -> CidMap {
                     );
                 }
             }
-            Err(e) => eprintln!(
-                "familiar: inline image {} of message {message}: {}",
-                a.name, e.message
-            ),
+            Err(e) => {
+                complete = false;
+                eprintln!(
+                    "familiar: inline image {} of message {message}: {}",
+                    a.name, e.message
+                );
+            }
         }
     }
-    Arc::new(map)
+    (Arc::new(map), complete)
 }
 
 fn data_uri(content_type: &str, bytes: &[u8]) -> String {
@@ -193,8 +198,10 @@ pub async fn reading_open(
                             CidMap::default()
                         }
                         None => {
-                            let c = load_cid(&paths, message);
-                            state.keep_cid(message, Arc::clone(&c));
+                            let (c, complete) = load_cid(&paths, message);
+                            if complete {
+                                state.keep_cid(message, Arc::clone(&c));
+                            }
                             c
                         }
                     }
@@ -264,8 +271,9 @@ fn prefetch_after(state: &Arc<Reading>, paths: &DaemonPaths, message: i64) {
             };
             if body.as_deref().is_some_and(sanitize::mentions_cid) && state.cached_cid(id).is_none()
             {
-                let c = load_cid(&paths, id);
-                state.keep_cid(id, c);
+                if let (c, true) = load_cid(&paths, id) {
+                    state.keep_cid(id, c);
+                }
             }
         }
         state.prefetching.store(false, Ordering::Release);

@@ -13,7 +13,7 @@ use std::time::Duration;
 
 use tauri::http::{Request, Response, StatusCode, header};
 
-use super::sanitize::percent_decode;
+use super::sanitize::{percent_decode, proxy_token};
 
 /// Largest remote image the proxy loads.
 const MAX_IMAGE_BYTES: usize = 15 * 1024 * 1024;
@@ -39,9 +39,14 @@ fn reply(status: StatusCode, content_type: &str, body: Vec<u8>) -> Response<Vec<
         .unwrap_or_else(|_| Response::new(Vec::new()))
 }
 
-/// The remote URL a proxy request names: `famimg://localhost/<encoded URL>`.
+/// The remote URL a proxy request names: `famimg://localhost/<token>/<encoded URL>`.
+/// Without this run's token (see [`proxy_token`]) there is none.
 pub fn target(path: &str) -> Option<String> {
-    let url = percent_decode(path.trim_start_matches('/'));
+    let rest = path
+        .strip_prefix('/')?
+        .strip_prefix(proxy_token())?
+        .strip_prefix('/')?;
+    let url = percent_decode(rest);
     let lower = url.to_ascii_lowercase();
     (lower.starts_with("https://") || lower.starts_with("http://")).then_some(url)
 }
@@ -63,7 +68,15 @@ pub async fn proxy(request: Request<Vec<u8>>) -> Response<Vec<u8>> {
             .and_then(|v| v.to_str().ok())
             .unwrap_or("")
             .to_ascii_lowercase();
-        let body = resp.bytes().await?;
+        // Stop reading once past the limit, whatever Content-Length said.
+        let mut resp = resp;
+        let mut body = Vec::new();
+        while let Some(chunk) = resp.chunk().await? {
+            body.extend_from_slice(&chunk);
+            if body.len() > MAX_IMAGE_BYTES {
+                break;
+            }
+        }
         Ok::<_, reqwest::Error>((ct, body))
     }
     .await;
@@ -82,7 +95,7 @@ pub async fn proxy(request: Request<Vec<u8>>) -> Response<Vec<u8>> {
             } else {
                 "application/octet-stream".into()
             };
-            reply(StatusCode::OK, &ct, body.to_vec())
+            reply(StatusCode::OK, &ct, body)
         }
         Err(e) => reply(
             StatusCode::BAD_GATEWAY,
@@ -170,11 +183,15 @@ mod tests {
     #[test]
     fn proxy_targets_only_web_urls() {
         let u = "https://cdn.example.com/a b.png?x=1&y=2";
+        let t = proxy_token();
         assert_eq!(
-            target(&format!("/{}", percent_encode(u))).as_deref(),
+            target(&format!("/{t}/{}", percent_encode(u))).as_deref(),
             Some(u)
         );
-        assert_eq!(target("/file%3A%2F%2F%2Fetc%2Fpasswd"), None);
+        assert_eq!(target(&format!("/{t}/file%3A%2F%2F%2Fetc%2Fpasswd")), None);
+        // A URL a message wrote itself has no token.
+        assert_eq!(target(&format!("/{}", percent_encode(u))), None);
+        assert_eq!(target(&format!("/wrong/{}", percent_encode(u))), None);
         assert_eq!(target("/"), None);
     }
 

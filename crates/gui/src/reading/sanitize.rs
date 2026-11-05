@@ -24,6 +24,27 @@ pub const IMAGE_PROXY: &str = "http://famimg.localhost/";
 #[cfg(not(windows))]
 pub const IMAGE_PROXY: &str = "famimg://localhost/";
 
+/// A random path segment, new each run, that every proxied image URL must
+/// carry. A message can't know it, so a URL the message wrote itself (in CSS,
+/// say) can't reach the proxy and bypass the image block.
+pub fn proxy_token() -> &'static str {
+    use std::hash::{BuildHasher, Hasher};
+    static TOKEN: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    TOKEN.get_or_init(|| {
+        let a = std::collections::hash_map::RandomState::new()
+            .build_hasher()
+            .finish();
+        let mut h = std::collections::hash_map::RandomState::new().build_hasher();
+        h.write_u128(
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map(|d| d.as_nanos())
+                .unwrap_or(0),
+        );
+        format!("{a:016x}{:016x}", h.finish())
+    })
+}
+
 /// The policy inside every message document. Nothing loads from the network:
 /// only inline styles, `data:` images and fonts, and the image proxy.
 pub const MESSAGE_CSP: &str = "default-src 'none'; style-src 'unsafe-inline'; img-src data: famimg: http://famimg.localhost; font-src data:";
@@ -155,7 +176,11 @@ fn image_src(val: &str, remote: bool, cid: &HashMap<String, String>) -> Option<S
     }
     if lower.starts_with("http:") || lower.starts_with("https:") {
         if remote {
-            return Some(format!("{IMAGE_PROXY}{}", percent_encode(v)));
+            return Some(format!(
+                "{IMAGE_PROXY}{}/{}",
+                proxy_token(),
+                percent_encode(v)
+            ));
         }
         return Some(BLOCKED_MARK.to_string());
     }
@@ -466,7 +491,8 @@ mod tests {
         let shown = clean(&body, true);
         assert_eq!(shown.blocked_images, 0);
         assert!(shown.html.contains(&format!(
-            "{IMAGE_PROXY}{}",
+            "{IMAGE_PROXY}{}/{}",
+            proxy_token(),
             percent_encode("https://cdn.example.com/hero.jpg")
         )));
     }
