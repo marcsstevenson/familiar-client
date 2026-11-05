@@ -978,7 +978,8 @@ pub fn suggest(subject: &str, text: &str, today: NaiveDate) -> Suggestion {
     out.location = keyed_location(&own)
         .or_else(|| listed_location(&own, today))
         // The whole text, so `> Location: ...` quotes count too.
-        .or_else(|| keyed_location(text));
+        .or_else(|| keyed_location(text))
+        .or_else(|| listed_location(&quoted, today));
     if let Some((date, time)) =
         find_when(&format!("{subject}\n{own}"), today).or_else(|| find_when(&quoted, today))
     {
@@ -1001,25 +1002,24 @@ fn keyed_location(text: &str) -> Option<String> {
         "take place at ",
         "takes place at ",
     ] {
-        let Some(i) = lower
+        let starts = lower
             .match_indices(key)
             .map(|(i, _)| i)
-            .find(|&i| i == 0 || lower[..i].ends_with(|c: char| c.is_whitespace() || c == '>'))
-        else {
-            continue;
-        };
-        let rest = &text[i + key.len()..];
-        let line = rest.lines().next().unwrap_or("");
-        let end = line
-            .find(". ")
-            .or_else(|| line.find("  "))
-            .unwrap_or(line.len());
-        let v = line[..end].trim().trim_end_matches('.').trim();
-        // "held at 6pm" is a time, not a place; a labelled field such as
-        // `Location: 1200 Main Street` is taken as written.
-        let prose = key.ends_with(' ');
-        if !v.is_empty() && !(prose && starts_with_time(v)) {
-            return Some(v.to_string());
+            .filter(|&i| i == 0 || lower[..i].ends_with(|c: char| c.is_whitespace() || c == '>'));
+        for i in starts {
+            let rest = &text[i + key.len()..];
+            let line = rest.lines().next().unwrap_or("");
+            let end = line
+                .find(". ")
+                .or_else(|| line.find("  "))
+                .unwrap_or(line.len());
+            let v = line[..end].trim().trim_end_matches('.').trim();
+            // "held at 6pm" is a time, not a place; a labelled field such as
+            // `Location: 1200 Main Street` is taken as written.
+            let prose = key.ends_with(' ');
+            if !v.is_empty() && !(prose && starts_with_time(v)) {
+                return Some(v.to_string());
+            }
         }
     }
     None
@@ -1400,6 +1400,24 @@ mod tests {
                 .location
                 .as_deref(),
             Some("3Arena")
+        );
+        // A later phrase is tried when an earlier one is a time.
+        assert_eq!(
+            suggest(
+                "Hi",
+                "The event will be held at 6pm on Friday.\nIt will be held at Town Hall.",
+                today
+            )
+            .location
+            .as_deref(),
+            Some("Town Hall")
+        );
+        // A forwarded ticket's venue counts when the new text has none.
+        assert_eq!(
+            suggest("Fwd: Tickets", "See you there\n\n---------- Forwarded message ---------\nFri 6 Nov • 20:00 Wolfbrook Arena • Christchurch", today)
+                .location
+                .as_deref(),
+            Some("Wolfbrook Arena, Christchurch")
         );
         // A labelled address keeps its street number.
         assert_eq!(
