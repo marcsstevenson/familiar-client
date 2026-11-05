@@ -1,0 +1,133 @@
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: var(--text-md) / 1.4 var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: -2px;
+}
+
+.app {
+  display: grid;
+  grid-template-rows: var(--titlebar-h) 1fr var(--statusbar-h);
+  height: 100%;
+}
+
+/* Title bar */
+.titlebar {
+  display: flex;
+  align-items: center;
+  background: var(--bg-chrome);
+  border-bottom: 1px solid var(--border);
+  padding-left: var(--space-4);
+}
+.titlebar.mac {
+  padding-left: 80px; /* room for the traffic lights */
+}
+.titlebar-name {
+  font-weight: 600;
+  font-size: var(--text-sm);
+}
+.titlebar-spacer {
+  flex: 1;
+  align-self: stretch;
+}
+.titlebar-tool,
+.window-buttons button {
+  height: var(--titlebar-h);
+  min-width: 40px;
+  border: 0;
+  background: transparent;
+  display: grid;
+  place-items: center;
+  cursor: default;
+}
+.titlebar-tool:hover,
+.window-buttons button:hover {
+  background: var(--bg-hover);
+}
+.window-buttons {
+  display: flex;
+}
+.window-buttons button {
+  width: 46px;
+}
+.window-buttons svg {
+  width: 10px;
+  height: 10px;
+  stroke: currentColor;
+  fill: none;
+  stroke-width: 1;
+}
+.window-buttons button.close:hover {
+  background: var(--danger);
+  color: var(--text-on-accent);
+}
+
+/* Panes */
+.panes {
+  display: grid;
+  grid-template-columns: var(--folders-w) var(--list-w) 1fr;
+  min-height: 0;
+}
+.pane {
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-right: 1px solid var(--border);
+  position: relative;
+}
+.pane:last-child {
+  border-right: 0;
+}
+.folders {
+  background: var(--bg-sidebar);
+}
+.pane-empty {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--text-muted);
+}
+
+/* Status bar */
+.statusbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-5);
+  padding: 0 var(--space-4);
+  background: var(--bg-chrome);
+  border-top: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: var(--text-xs);
+  white-space: nowrap;
+  overflow: hidden;
+}
+.statusbar-spacer {
+  flex: 1;
+}
+.warn {
+  color: var(--warn);
+}
