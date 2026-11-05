@@ -79,7 +79,13 @@ pub fn check(text: &str) -> Report {
     let config: Config = match toml::from_str(text) {
         Ok(c) => c,
         Err(e) => {
-            let mut p = Problem::error("", e.message().trim_end().to_string());
+            let mut msg = e.message().trim_end().to_string();
+            if msg.starts_with("unknown field `allow`") {
+                msg.push_str(
+                    "; agent access goes under [agent] (read, draft, write) or [agent.accounts.<name>] (send, delete, rules), not under [accounts.<name>]",
+                );
+            }
+            let mut p = Problem::error("", msg);
             locate(&mut p, text, e.span());
             return Report {
                 config: None,

@@ -730,7 +730,7 @@ pub fn fetch_at(
             let text = String::from_utf8_lossy(&raw).into_owned();
             match (b.is_html, input.format) {
                 (true, BodyFormat::Text) => (
-                    Some(familiar_search::text::html_to_text(&text)),
+                    Some(familiar_search::text::html_to_lines(&text)),
                     Some(BodyType::Text),
                 ),
                 (true, BodyFormat::Html) => (Some(text), Some(BodyType::Html)),

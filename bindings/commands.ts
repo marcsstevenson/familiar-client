@@ -142,6 +142,8 @@ export type AgentStatusOutput = {
   accounts: Array<AccountGrants>;
   /** True when this session's writes are checked against the grants. */
   agent: boolean;
+  /** Why config.toml couldn't be read, if it couldn't; agents then get the defaults (read and draft) until it's fixed. */
+  config_error?: string | null;
   /** The source its writes are logged under (`cli` for a person). */
   source: string;
 };

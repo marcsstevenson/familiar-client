@@ -50,6 +50,10 @@ pub struct AgentStatusOutput {
     pub source: String,
     /// Per account.
     pub accounts: Vec<AccountGrants>,
+    /// Why config.toml couldn't be read, if it couldn't; agents then get
+    /// the defaults (read and draft) until it's fixed.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub config_error: Option<String>,
 }
 
 /// Status for `source` with `grants` over `accounts`.
@@ -72,6 +76,7 @@ pub fn status(source: &str, grants: &Grants, accounts: &[String]) -> AgentStatus
                     .collect(),
             })
             .collect(),
+        config_error: None,
     }
 }
 
@@ -91,7 +96,11 @@ impl Command for AgentStatus {
         _ctx: &Context<'_>,
         _i: AgentStatusInput,
     ) -> Result<AgentStatusOutput, CommandError> {
-        let config = crate::commands::auth::config()?;
+        // A broken config shouldn't hide what agents may do: the defaults.
+        let (config, error) = match crate::commands::auth::config() {
+            Ok(c) => (c, None),
+            Err(e) => (None, Some(e.message)),
+        };
         let (grants, accounts) = match &config {
             Some(c) => (
                 Grants::from_config(&c.agent),
@@ -99,7 +108,9 @@ impl Command for AgentStatus {
             ),
             None => (Grants::default(), Vec::new()),
         };
-        Ok(status(&agent::session_source(), &grants, &accounts))
+        let mut out = status(&agent::session_source(), &grants, &accounts);
+        out.config_error = error;
+        Ok(out)
     }
 
     fn render_text(&self, o: &AgentStatusOutput) -> String {
@@ -108,7 +119,11 @@ impl Command for AgentStatus {
         } else {
             "This is not an agent session; writes are not limited.".to_string()
         };
-        if o.accounts.is_empty() {
+        if let Some(e) = &o.config_error {
+            s.push_str(&format!(
+                "\nconfig.toml has a problem, so agents get read and draft only: {e}"
+            ));
+        } else if o.accounts.is_empty() {
             s.push_str("\nNo accounts in config.toml.");
         }
         for a in &o.accounts {

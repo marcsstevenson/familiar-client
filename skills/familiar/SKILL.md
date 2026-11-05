@@ -36,7 +36,7 @@ A write that isn't granted fails with `permission_denied` (exit 5) and changes n
 
 1. Search: `fam mail search 'from:coach subject:"team list" after:30d' --json`. Operators: `from:` `to:` `subject:` `body:` `has:attachment` `before:` `after:` (a date, or an age like `30d`) `folder:` `account:` `is:unread` `is:flagged`, "phrases", and `-word` to exclude. Add `--scope all` to search the server too for mail older than the sync window.
 2. Pick a hit's `id` and show the conversation: `fam mail thread 4182 --json`. It includes replies from Sent Items and drafts.
-3. Read a message's text: `fam mail fetch 4182 --json` (downloaded if it isn't on this computer yet).
+3. Read a message's text: `fam mail fetch 4182 --json` (downloaded if it isn't on this computer yet). Add `--format html` for the original HTML.
 
 For recent mail instead: `fam mail list --unread --limit 20 --json`, or `--folder sentitems`.
 
@@ -49,6 +49,10 @@ For recent mail instead: `fam mail list --unread --limit 20 --json`, or `--folde
 A new message: `fam draft create --account hotmail --to someone@example.com --subject "..." --body "..." --json` (`--account` picks who it's from; it's needed when there's more than one account). Look up addresses with `fam contacts search jane --json`, which covers Outlook contacts and everyone the user has emailed.
 
 To change a draft: `fam draft update <id> --body "..." --json`.
+
+### Signatures
+
+Drafts get the account's signature from `config.toml` automatically: `[accounts.<name>.signature]` with `new` (new messages) and `reply` (replies and forwards), each as HTML. There is no command to change it; the user edits `config.toml` (`fam config path` shows where). Images in a signature are written as `<img src="data:image/png;base64,...">` or an absolute path to a local file, and are sent as inline attachments. Use `--no-signature` to leave it off.
 
 ### Add an event from an email
 
@@ -67,6 +71,8 @@ To change or answer events: `fam cal edit <id> --start "..."`, `fam cal rsvp <id
 
 `fam mail read <ids...>` (add `--unread` to undo), `fam mail flag <ids...>`, `fam mail move <ids...> --to "Inbox/Club"`, `fam mail archive <ids...>`. Deleting needs `delete`.
 
+Mail you've just sent shows in local search once famd has synced Sent Items (seconds to a minute); `--scope all` finds it at once.
+
 ## When something fails
 
 Errors with `--json` come on stderr as `{"error": {"kind", "message", "exit_code"}}`.
@@ -79,6 +85,8 @@ Errors with `--json` come on stderr as `{"error": {"kind", "message", "exit_code
 | `offline` | 7 | The server can't be reached; queued changes are sent later. |
 | `auth_required` | 4 | Ask the user to run `fam auth login <account>`. |
 | `confirmation_required` | 10 | Ask the user, then add `--yes`. |
+
+In Git Bash on Windows, set `MSYS_NO_PATHCONV=1` before `fam api "/me/..."`, or Bash rewrites the path.
 
 The full list is `docs/exit-codes.md` in the Familiar repo, or `fam schema --json`.
 

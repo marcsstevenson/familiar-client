@@ -333,3 +333,17 @@ fn crlf_edit_keeps_crlf() {
     assert!(out.contains("reply = \"r\"\r\ndelete = \"#\"\r\n"));
     assert!(check(&out).is_valid());
 }
+
+#[test]
+fn allow_under_an_account_points_to_agent_accounts() {
+    let r = check(
+        "version = 1\n[accounts.home]\nemail = \"me@example.com\"\ntenant = \"consumers\"\nallow = [\"send\"]\n",
+    );
+    assert_eq!(r.problems.len(), 1);
+    assert!(
+        r.problems[0].message.contains("[agent.accounts.<name>]"),
+        "{}",
+        r.problems[0].message
+    );
+    assert_eq!(r.problems[0].line, Some(5));
+}

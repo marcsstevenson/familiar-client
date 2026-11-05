@@ -164,7 +164,16 @@ impl Service {
     /// `ops.list`.
     pub fn ops_list(&self, p: OpsListParams) -> Result<Vec<OpView>, CommandError> {
         let r = Reader::open(&self.w.paths().root).map_err(store_error)?;
-        let since = (self.clock)() - p.done_within_secs.max(0);
+        // Ops are stamped with the system clock by the store, not the
+        // engine's (which tests pin), so compare with that; 0 lists none done.
+        let since = if p.done_within_secs <= 0 {
+            i64::MAX
+        } else {
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .map_or(0, |d| d.as_secs() as i64)
+                - p.done_within_secs
+        };
         let limit = if p.limit == 0 { 100 } else { p.limit };
         Ok(r.recent_ops(since, limit)
             .map_err(store_error)?
