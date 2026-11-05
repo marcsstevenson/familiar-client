@@ -560,9 +560,14 @@ pub fn data_dir() -> Result<PathBuf> {
     if let Some(d) = std::env::var_os("FAMILIAR_DATA_DIR").filter(|d| !d.is_empty()) {
         return Ok(PathBuf::from(d));
     }
-    dirs::data_local_dir()
-        .map(|d| d.join("Familiar"))
-        .ok_or_else(|| AuthError::config("no data directory; set FAMILIAR_DATA_DIR"))
+    // On Windows, not under AppData: packaged apps (the Claude desktop app)
+    // and everything they start get AppData redirected to a private copy.
+    let dir = if cfg!(windows) {
+        dirs::home_dir().map(|h| h.join(".familiar").join("data"))
+    } else {
+        dirs::data_local_dir().map(|d| d.join("Familiar"))
+    };
+    dir.ok_or_else(|| AuthError::config("no data directory; set FAMILIAR_DATA_DIR"))
 }
 
 fn passphrase() -> Result<Option<String>> {

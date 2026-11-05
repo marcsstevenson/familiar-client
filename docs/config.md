@@ -10,7 +10,7 @@ Your own config has your signatures in it, so keep it in a private repo, not in 
 
 | OS | Default |
 | --- | --- |
-| Windows | `%APPDATA%\Familiar\config.toml` |
+| Windows | `%USERPROFILE%\.familiar\config.toml` (not AppData: Windows redirects AppData for packaged apps such as the Claude desktop app, and for everything they start) |
 | macOS | `~/Library/Application Support/Familiar/config.toml` |
 | Linux | `$XDG_CONFIG_HOME/familiar/config.toml`, else `~/.config/familiar/config.toml` |
 

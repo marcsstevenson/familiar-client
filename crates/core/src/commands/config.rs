@@ -217,7 +217,7 @@ impl Command for ConfigPath {
     const SPEC: CommandSpec = CommandSpec {
         path: &["config", "path"],
         summary: "Show which config file is used",
-        description: "Shows the config file path: the argument if given, else FAMILIAR_CONFIG, else the platform default (Windows %APPDATA%\\Familiar\\config.toml, macOS ~/Library/Application Support/Familiar/config.toml, Linux $XDG_CONFIG_HOME/familiar/config.toml).",
+        description: "Shows the config file path: the argument if given, else FAMILIAR_CONFIG, else the platform default (Windows %USERPROFILE%\\.familiar\\config.toml, macOS ~/Library/Application Support/Familiar/config.toml, Linux $XDG_CONFIG_HOME/familiar/config.toml).",
         access: Access::Read,
         errors: &[ErrorKind::Config],
     };

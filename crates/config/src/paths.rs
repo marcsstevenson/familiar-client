@@ -6,7 +6,7 @@
 //!
 //! | OS | Default |
 //! | --- | --- |
-//! | Windows | `%APPDATA%\Familiar\config.toml` |
+//! | Windows | `%USERPROFILE%\.familiar\config.toml` |
 //! | macOS | `~/Library/Application Support/Familiar/config.toml` |
 //! | Linux and others | `$XDG_CONFIG_HOME/familiar/config.toml`, else `~/.config/familiar/config.toml` |
 
@@ -56,7 +56,10 @@ pub fn default_path() -> Option<PathBuf> {
             .map(PathBuf::from)
     };
     if cfg!(windows) {
-        env("APPDATA").map(|d| d.join("Familiar").join("config.toml"))
+        // Not under AppData: Windows redirects AppData for packaged apps
+        // (the Claude desktop app) and everything they start, so fam run
+        // from there and from a terminal would see different files.
+        env("USERPROFILE").map(|d| d.join(".familiar").join("config.toml"))
     } else if cfg!(target_os = "macos") {
         env("HOME").map(|h| {
             h.join("Library")

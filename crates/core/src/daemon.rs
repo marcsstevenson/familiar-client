@@ -27,7 +27,8 @@
 //! # Where
 //!
 //! Everything is under the data directory (`FAMILIAR_DATA_DIR`, or the
-//! platform's local data directory plus `Familiar`): the store in `store/`,
+//! platform's local data directory plus `Familiar`; `%USERPROFILE%\.familiar\data` on
+//! Windows, outside AppData): the store in `store/`,
 //! the search index in `search/` and, on Unix, the socket `famd.sock` (mode 0600). On Windows the pipe is
 //! `\\.\pipe\familiar-famd-<hash of the data directory>`, so each data
 //! directory (and each test) gets its own daemon.

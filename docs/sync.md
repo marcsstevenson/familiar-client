@@ -16,7 +16,7 @@ fam sync check       # compare the store with the server, report drift
 
 | Variable | Meaning |
 | --- | --- |
-| `FAMILIAR_DATA_DIR` | Store (`store/`), search index (`search/`), socket (`famd.sock`) and token file. Default: the platform's local data directory plus `Familiar`. |
+| `FAMILIAR_DATA_DIR` | Store (`store/`), search index (`search/`), socket (`famd.sock`) and token file. Default: `%USERPROFILE%\.familiar\data` on Windows (outside AppData, which Windows redirects for packaged apps such as the Claude desktop app), otherwise the platform's local data directory plus `Familiar`. |
 | `FAMILIAR_CONFIG` | The config file. |
 | `FAMILIAR_GRAPH_URL` | Another Graph, such as the mock (`cargo run -p familiar-mock-graph`). |
 
