@@ -59,3 +59,9 @@ fam audit list --outcome denied --json
 ## Limits
 
 These stop mistakes and instructions injected through mail content. They aren't a security boundary: an agent with a shell under your account can edit `config.toml` or unset `CLAUDECODE`. For real isolation, run the agent as another user or in a container that only has read and draft.
+
+## The agent skill
+
+`skills/familiar/` is the shipped skill (WP 2.8): `SKILL.md` has the rules and the common workflows (find a thread, save a reply draft, add an event from an email, check the calendar), and `commands.md` is every command and flag, generated from the registry. The parity test regenerates `commands.md` with `FAMILIAR_BLESS=1` and checks that every `fam ...` example in `SKILL.md` is a real command with real flags.
+
+To use it with Claude Code, copy the folder to `~/.claude/skills/familiar/` (or a project's `.claude/skills/familiar/`).

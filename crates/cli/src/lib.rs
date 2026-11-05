@@ -271,6 +271,84 @@ fn to_clap(a: &ArgDef) -> Arg {
     arg
 }
 
+/// The command reference shipped with the agent skill
+/// (`skills/familiar/commands.md`), generated from the registry.
+pub fn skill_reference(registry: &Registry) -> Result<String, String> {
+    let mut s = String::from(
+        "<!-- Generated from the command registry; regenerate with FAMILIAR_BLESS=1 cargo test -p familiar-cli --test parity -->\n\
+         # fam command reference\n\n\
+         Every command takes `--json`. Access is what `[agent]` must allow (see SKILL.md). \
+         `fam schema --json` has the full input and output schemas.\n",
+    );
+    let mut cmds: Vec<_> = registry.commands().collect();
+    cmds.sort_by_key(|c| c.spec().name());
+    for c in cmds {
+        let spec = c.spec();
+        let args =
+            args_for(&c.input_schema().to_value()).map_err(|e| format!("{}: {e}", spec.name()))?;
+        let mut usage = format!("fam {}", spec.path.join(" "));
+        let mut positional: Vec<&ArgDef> = args.iter().filter(|a| a.position.is_some()).collect();
+        positional.sort_by_key(|a| a.position);
+        for a in &positional {
+            let n = a.field.to_uppercase();
+            usage.push(' ');
+            usage.push_str(&match (a.required, a.list) {
+                (true, false) => format!("<{n}>"),
+                (true, true) => format!("<{n}>..."),
+                (false, false) => format!("[{n}]"),
+                (false, true) => format!("[{n}]..."),
+            });
+        }
+        s.push_str(&format!(
+            "\n## {}\n\n{}. Access: `{}`.\n\n```\n{usage}\n```\n",
+            spec.name(),
+            one_line(spec.summary),
+            serde_json::to_value(spec.access)
+                .ok()
+                .and_then(|v| v.as_str().map(str::to_string))
+                .unwrap_or_default()
+        ));
+        if !spec.description.is_empty() {
+            s.push_str(&format!("\n{}\n", one_line(spec.description)));
+        }
+        let mut lines = Vec::new();
+        for a in &args {
+            let name = match a.position {
+                Some(_) => format!("`{}`", a.field.to_uppercase()),
+                None => match &a.kind {
+                    ArgKind::Bool => format!("`--{}`", a.long),
+                    ArgKind::Enum(v) => format!("`--{} <{}>`", a.long, v.join("|")),
+                    _ => format!("`--{} <{}>`", a.long, a.field.replace('_', "-")),
+                },
+            };
+            let mut notes = Vec::new();
+            if a.required {
+                notes.push("required");
+            }
+            if a.list {
+                notes.push("repeatable");
+            }
+            let notes = if notes.is_empty() {
+                String::new()
+            } else {
+                format!(" ({})", notes.join(", "))
+            };
+            let help = a.help.as_deref().map(one_line).unwrap_or_default();
+            lines.push(format!("- {name}{notes}: {help}"));
+        }
+        if !lines.is_empty() {
+            s.push('\n');
+            s.push_str(&lines.join("\n"));
+            s.push('\n');
+        }
+    }
+    Ok(s)
+}
+
+fn one_line(s: &str) -> String {
+    s.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
 /// The dotted names of every runnable command in a `fam` tree.
 pub fn cli_command_names(cmd: &clap::Command) -> BTreeSet<String> {
     fn walk(cmd: &clap::Command, prefix: &mut Vec<String>, out: &mut BTreeSet<String>) {

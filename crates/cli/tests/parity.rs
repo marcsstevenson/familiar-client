@@ -132,6 +132,10 @@ fn generated_files_are_current() {
             "docs/exit-codes.md",
             familiar_core::error::exit_codes_markdown(),
         ),
+        (
+            "skills/familiar/commands.md",
+            familiar_cli::skill_reference(&registry).unwrap(),
+        ),
     ];
     let bless = std::env::var_os("FAMILIAR_BLESS").is_some();
     for (rel, want) in files {
@@ -326,4 +330,64 @@ fn exit_codes_from_the_binary() {
     let err: Value = serde_json::from_str(&stderr).unwrap();
     assert_eq!(err["error"]["kind"], "usage");
     assert_eq!(err["error"]["exit_code"], 2);
+}
+
+/// Splits a command line the way a shell would, for quoted arguments.
+fn words(line: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut cur = String::new();
+    let mut quote: Option<char> = None;
+    let mut any = false;
+    for ch in line.chars() {
+        match (quote, ch) {
+            (Some(q), c) if c == q => quote = None,
+            (Some(_), c) => cur.push(c),
+            (None, '\'' | '"') => {
+                quote = Some(ch);
+                any = true;
+            }
+            (None, c) if c.is_whitespace() => {
+                if any || !cur.is_empty() {
+                    out.push(std::mem::take(&mut cur));
+                }
+                any = false;
+            }
+            (None, c) => cur.push(c),
+        }
+    }
+    if any || !cur.is_empty() {
+        out.push(cur);
+    }
+    out
+}
+
+/// Every `fam ...` example in the agent skill names a real command and only
+/// its flags, so the skill can't drift from the registry.
+#[test]
+fn skill_examples_are_real_commands() {
+    let registry = Registry::builtin();
+    let skill = read(&repo_file("skills/familiar/SKILL.md"));
+    let mut checked = 0;
+    for span in skill.split('`').skip(1).step_by(2) {
+        let Some(rest) = span.strip_prefix("fam ") else {
+            continue;
+        };
+        let w = words(rest);
+        let cmd = (1..=w.len().min(3))
+            .rev()
+            .find_map(|n| registry.get(&w[..n].join(".")).map(|c| (n, c)));
+        let Some((n, cmd)) = cmd else {
+            panic!("SKILL.md: `fam {rest}` isn't a command");
+        };
+        let args = familiar_cli::args_for(&cmd.input_schema().to_value()).unwrap();
+        for flag in w[n..].iter().filter_map(|t| t.strip_prefix("--")) {
+            assert!(
+                flag == "json" || args.iter().any(|a| a.position.is_none() && a.long == flag),
+                "SKILL.md: `fam {rest}`: no --{flag} on {}",
+                cmd.spec().name()
+            );
+        }
+        checked += 1;
+    }
+    assert!(checked > 20, "only {checked} examples found");
 }
