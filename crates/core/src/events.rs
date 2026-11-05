@@ -971,7 +971,25 @@ pub fn suggest(subject: &str, text: &str, today: NaiveDate) -> Suggestion {
         subject: bare_subject(subject),
         ..Suggestion::default()
     };
-    // `Where: ...` up to the end of its line or sentence.
+    // The new part of the message first; quoted history (reply headers
+    // carry their own dates, old mail its own venues) only when it has
+    // nothing.
+    let (own, quoted) = split_quoted(text);
+    out.location = keyed_location(&own)
+        .or_else(|| listed_location(&own))
+        .or_else(|| keyed_location(&quoted));
+    if let Some((date, time)) =
+        find_when(&format!("{subject}\n{own}"), today).or_else(|| find_when(&quoted, today))
+    {
+        out.date = Some(date);
+        out.time = time;
+    }
+    out
+}
+
+/// A place given by a label (`Where: ...`, `Venue: ...`) or a phrase
+/// (`held at ...`), up to the end of its line or sentence.
+fn keyed_location(text: &str) -> Option<String> {
     let lower = text.to_ascii_lowercase();
     for key in [
         "where:",
@@ -1000,23 +1018,10 @@ pub fn suggest(subject: &str, text: &str, today: NaiveDate) -> Suggestion {
         // `Location: 1200 Main Street` is taken as written.
         let prose = key.ends_with(' ');
         if !v.is_empty() && !(prose && starts_with_time(v)) {
-            out.location = Some(v.to_string());
-            break;
+            return Some(v.to_string());
         }
     }
-    // The new part of the message first; quoted history (reply headers
-    // carry their own dates) only when it has nothing.
-    let (own, quoted) = split_quoted(text);
-    if out.location.is_none() {
-        out.location = listed_location(&own);
-    }
-    if let Some((date, time)) =
-        find_when(&format!("{subject}\n{own}"), today).or_else(|| find_when(&quoted, today))
-    {
-        out.date = Some(date);
-        out.time = time;
-    }
-    out
+    None
 }
 
 /// True when `s` opens with a time of day (`6pm on Friday`, `18:00`).
@@ -1321,6 +1326,17 @@ mod tests {
             .location
             .as_deref(),
             Some("Wolfbrook Arena, Christchurch")
+        );
+        // The current message's venue wins over quoted history.
+        assert_eq!(
+            suggest(
+                "RE: Event",
+                "The event takes place at New Venue. See you.\n\nFrom: Club\nSent: Monday, 2 November 2026 9:00 am\nSubject: Event\n\nThe event was held at Old Venue. Thanks",
+                today
+            )
+            .location
+            .as_deref(),
+            Some("New Venue")
         );
         // A labelled address keeps its street number.
         assert_eq!(
