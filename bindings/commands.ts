@@ -678,13 +678,13 @@ export type DraftSendInput = {
 export type DraftUpdateInput = {
   /** Attach a file; repeat for more. */
   attach?: Array<string>;
-  /** Replace Bcc. */
+  /** Replace Bcc (`""` empties it). */
   bcc?: Array<string>;
   /** Replace the whole body (plain text unless --html; no signature is added). */
   body?: string | null;
   /** Replace the whole body from a file. */
   body_file?: string | null;
-  /** Replace Cc. */
+  /** Replace Cc (`""` empties it). */
   cc?: Array<string>;
   /** Local ID of the draft. */
   draft: number;
@@ -694,9 +694,11 @@ export type DraftUpdateInput = {
   html?: boolean;
   /** Add an inline image. */
   inline?: Array<string>;
+  /** Take an attachment off, by file name (or Graph attachment ID); repeat for more. */
+  remove_attachment?: Array<string>;
   /** New subject. */
   subject?: string | null;
-  /** Replace To. */
+  /** Replace To (`""` empties it). */
   to?: Array<string>;
   /** Wait until the server has the change (needs famd). */
   wait?: boolean;

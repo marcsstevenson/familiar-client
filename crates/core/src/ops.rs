@@ -307,6 +307,8 @@ pub enum WriteRequest {
         bcc: Option<Vec<Recipient>>,
         /// Files to add.
         attachments: Vec<AttachmentData>,
+        /// Attachments to take off, by name or Graph attachment ID.
+        remove_attachments: Vec<String>,
     },
     /// Send a draft after `delay_secs`.
     Send {
@@ -1008,6 +1010,7 @@ pub fn plan(tx: &WriteTx<'_>, req: &WriteRequest) -> Result<Vec<Planned>, Comman
             cc,
             bcc,
             attachments,
+            remove_attachments,
         } => {
             let m = need_draft(tx, *message)?;
             let prev = compose::snapshot(tx, &m).map_err(store_err)?;
@@ -1030,6 +1033,8 @@ pub fn plan(tx: &WriteTx<'_>, req: &WriteRequest) -> Result<Vec<Planned>, Comman
                     bcc: bcc.clone(),
                     attachments: attachments.clone(),
                     attachments_done: 0,
+                    remove_attachments: remove_attachments.clone(),
+                    pruned: false,
                     prev,
                 }),
             });

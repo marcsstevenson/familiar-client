@@ -354,19 +354,20 @@ Change a draft. Access: `draft`.
 fam draft update <DRAFT>
 ```
 
-Changes a draft's recipients, subject or body, or adds attachments. Recipient flags replace that line; --body replaces the whole body.
+Changes a draft's recipients, subject or body, or adds and removes attachments. Recipient flags replace that line; --body replaces the whole body, and inline images it no longer shows are taken off.
 
 - `--attach <attach>` (repeatable): Attach a file; repeat for more.
-- `--bcc <bcc>` (repeatable): Replace Bcc.
+- `--bcc <bcc>` (repeatable): Replace Bcc (`""` empties it).
 - `--body <body>`: Replace the whole body (plain text unless --html; no signature is added).
 - `--body-file <body-file>`: Replace the whole body from a file.
-- `--cc <cc>` (repeatable): Replace Cc.
+- `--cc <cc>` (repeatable): Replace Cc (`""` empties it).
 - `DRAFT` (required): Local ID of the draft.
 - `--dry-run`: Only show what would happen.
 - `--html`: The body is HTML.
 - `--inline <inline>` (repeatable): Add an inline image.
+- `--remove-attachment <remove-attachment>` (repeatable): Take an attachment off, by file name (or Graph attachment ID); repeat for more.
 - `--subject <subject>`: New subject.
-- `--to <to>` (repeatable): Replace To.
+- `--to <to>` (repeatable): Replace To (`""` empties it).
 - `--wait`: Wait until the server has the change (needs famd).
 - `--wait-secs <wait-secs>`: Seconds --wait waits at most (default 60).
 

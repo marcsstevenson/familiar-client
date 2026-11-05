@@ -16,7 +16,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use familiar_core::compose::{AttachmentData, DraftOp, Recipient, ResponseKind};
+use familiar_core::compose::{AttachmentData, DraftOp, DraftUpdateOp, Recipient, ResponseKind};
 use familiar_core::events::{self, EventOp};
 use familiar_core::ops::{OpPayload, OpResult, finish_local, undo_local};
 use familiar_provider_graph::{CalendarApi, Error as GraphError, GraphEvent, MailApi, Priority};
@@ -346,6 +346,21 @@ impl OpRunner {
             }
             OpPayload::UpdateDraft(d) => {
                 let remote = self.message_remote(d.message)?;
+                if !d.pruned && (d.html.is_some() || !d.remove_attachments.is_empty()) {
+                    let existing = api.list_attachments(&remote, pr).await?;
+                    for a in prune_attachments(d, &existing) {
+                        match api.delete_attachment(&remote, &a, pr).await {
+                            Ok(()) | Err(GraphError::NotFound(_)) => {}
+                            Err(e) => return Err(e),
+                        }
+                    }
+                    d.pruned = true;
+                    let snapshot = p.clone();
+                    self.save(op, &snapshot)?;
+                }
+                let OpPayload::UpdateDraft(d) = &*p else {
+                    unreachable!()
+                };
                 let mut fields = serde_json::Map::new();
                 if let Some(s) = &d.subject {
                     fields.insert("subject".into(), json!(s));
@@ -690,6 +705,41 @@ fn draft_json(d: &DraftOp) -> Value {
         v["importance"] = json!(i);
     }
     v
+}
+
+/// Works out what an update does to the draft's attachments (Graph JSON in
+/// `existing`): returns the IDs to delete (asked for by name or ID, or inline
+/// images with a content ID the new body no longer shows), and drops from
+/// `d.attachments` the inline images the draft already has.
+fn prune_attachments(d: &mut DraftUpdateOp, existing: &[Value]) -> Vec<String> {
+    let mut delete = Vec::new();
+    let mut kept_cids = Vec::new();
+    for a in existing {
+        let id = a["id"].as_str().unwrap_or_default();
+        let name = a["name"].as_str().unwrap_or_default();
+        let cid = a["contentId"].as_str().filter(|c| !c.is_empty());
+        let asked = d
+            .remove_attachments
+            .iter()
+            .any(|r| r == id || r.eq_ignore_ascii_case(name));
+        let unshown = match (&d.html, cid) {
+            (Some(h), Some(c)) if a["isInline"].as_bool() == Some(true) => {
+                !h.contains(&format!("cid:{c}"))
+            }
+            _ => false,
+        };
+        if id.is_empty() {
+            continue;
+        }
+        if asked || unshown {
+            delete.push(id.to_string());
+        } else if let Some(c) = cid {
+            kept_cids.push(c.to_string());
+        }
+    }
+    d.attachments
+        .retain(|a| !(a.inline && a.content_id.as_ref().is_some_and(|c| kept_cids.contains(c))));
+    delete
 }
 
 fn attachment_json(a: &AttachmentData) -> Value {

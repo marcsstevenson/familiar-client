@@ -221,6 +221,34 @@ impl MailApi {
             .await
     }
 
+    /// A message's attachments (Graph `attachment` JSON objects, with their bytes).
+    pub async fn list_attachments(&self, id: &str, priority: Priority) -> Result<Vec<Value>> {
+        let v = self
+            .client()
+            .get(
+                &self.path(&format!("/messages/{id}/attachments")),
+                priority,
+                &[],
+            )
+            .await?;
+        Ok(v["value"].as_array().cloned().unwrap_or_default())
+    }
+
+    /// Removes an attachment from a draft.
+    pub async fn delete_attachment(
+        &self,
+        id: &str,
+        attachment: &str,
+        priority: Priority,
+    ) -> Result<()> {
+        self.client()
+            .delete(
+                &self.path(&format!("/messages/{id}/attachments/{attachment}")),
+                priority,
+            )
+            .await
+    }
+
     /// Sends a draft. Graph moves it to Sent Items.
     pub async fn send_draft(&self, id: &str, priority: Priority) -> Result<()> {
         self.client()

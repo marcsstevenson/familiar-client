@@ -91,6 +91,7 @@ pub(super) fn route(
             create_draft(st, body, prefer)
         }
         ("POST", ["messages", _, "attachments"]) => add_attachment(st, segs[1], body),
+        ("DELETE", ["messages", _, "attachments", _]) => delete_attachment(st, segs[1], segs[3]),
         ("POST", ["messages", _, "createreply"]) => {
             create_response(st, segs[1], Response::Reply, body, prefer)
         }
@@ -484,6 +485,27 @@ fn add_attachment(st: &mut MailboxState, id: &str, body: &Value) -> R {
     })
     .map_err(|_| GraphError::not_found())?;
     Ok(created(reply))
+}
+
+fn delete_attachment(st: &mut MailboxState, id: &str, att: &str) -> R {
+    let imm = st
+        .lookup_message(id)
+        .ok_or_else(GraphError::not_found)?
+        .to_string();
+    if !st.messages[&imm]
+        .msg
+        .attachments
+        .iter()
+        .any(|a| a.id == att)
+    {
+        return Err(GraphError::not_found());
+    }
+    st.update_message(&imm, |m| {
+        m.attachments.retain(|a| a.id != att);
+        m.has_attachments = m.attachments.iter().any(|a| !a.is_inline);
+    })
+    .map_err(|_| GraphError::not_found())?;
+    Ok(no_content())
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]

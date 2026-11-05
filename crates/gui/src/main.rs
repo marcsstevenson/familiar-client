@@ -7,6 +7,7 @@
 //! running. This is the only crate allowed to depend on a GUI or webview library.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod compose;
 mod daemon;
 
 use familiar_core::registry::Registry;
@@ -90,7 +91,16 @@ fn main() {
     tauri::Builder::default()
         .manage(std::sync::Arc::new(Registry::builtin()))
         .manage(daemon::Shared::default())
-        .invoke_handler(tauri::generate_handler![ui_info, run, daemon_state])
+        .plugin(tauri_plugin_dialog::init())
+        .invoke_handler(tauri::generate_handler![
+            ui_info,
+            run,
+            daemon_state,
+            compose::compose_info,
+            compose::open_compose,
+            compose::file_info,
+            compose::pick_files
+        ])
         .setup(|app| {
             let builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
                 .title("Familiar")

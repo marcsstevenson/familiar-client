@@ -189,12 +189,15 @@ pub fn inline_images(html: &str) -> Result<(String, Vec<AttachmentData>), Comman
             }
         };
         let src = &html[vstart..vend];
-        let n = found.len() + 1;
         let made = if let Some(data) = src.strip_prefix("data:") {
-            data_uri(data, n)
+            data_uri(data)
         } else if let Some(path) = local_path(src) {
             let mut a = AttachmentData::read(&path, true)?;
-            a.content_id = Some(format!("img{n}.{}@familiar", a.name));
+            a.content_id = Some(format!(
+                "{}.{}@familiar",
+                content_hash(&a.content_b64),
+                a.name
+            ));
             Some(a)
         } else {
             None
@@ -202,9 +205,16 @@ pub fn inline_images(html: &str) -> Result<(String, Vec<AttachmentData>), Comman
         out.push_str(&html[at..vstart]);
         match made {
             Some(a) => {
+                let cid = a.content_id.clone().unwrap_or_default();
                 out.push_str("cid:");
-                out.push_str(a.content_id.as_deref().unwrap_or_default());
-                found.push(a);
+                out.push_str(&cid);
+                // The same image twice is one attachment.
+                if !found
+                    .iter()
+                    .any(|f: &AttachmentData| f.content_id.as_deref() == Some(&cid))
+                {
+                    found.push(a);
+                }
             }
             None => out.push_str(src),
         }
@@ -214,7 +224,19 @@ pub fn inline_images(html: &str) -> Result<(String, Vec<AttachmentData>), Comman
     Ok((out, found))
 }
 
-fn data_uri(data: &str, n: usize) -> Option<AttachmentData> {
+/// A short name for an image's bytes (FNV-1a over the base64), so the same
+/// image gets the same content ID every time a body is saved. `draft update`
+/// relies on that to leave images the draft already has alone.
+fn content_hash(b64: &str) -> String {
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    for b in b64.bytes() {
+        h ^= u64::from(b);
+        h = h.wrapping_mul(0x0100_0000_01b3);
+    }
+    format!("{:012x}", h >> 16)
+}
+
+fn data_uri(data: &str) -> Option<AttachmentData> {
     let (meta, payload) = data.split_once(',')?;
     let mime = meta.strip_suffix(";base64")?;
     if !mime.starts_with("image/") {
@@ -226,7 +248,7 @@ fn data_uri(data: &str, n: usize) -> Option<AttachmentData> {
         "image/svg+xml" => "svg",
         m => m.trim_start_matches("image/"),
     };
-    let name = format!("image{n}.{ext}");
+    let name = format!("image-{}.{ext}", content_hash(&b64));
     let size = (b64.trim_end_matches('=').len() * 3 / 4) as u64;
     Some(AttachmentData {
         content_type: mime.to_string(),
@@ -426,6 +448,14 @@ pub struct DraftUpdateOp {
     /// Attachments already added (progress).
     #[serde(default)]
     pub attachments_done: usize,
+    /// Attachments to take off, by name or Graph attachment ID.
+    #[serde(default)]
+    pub remove_attachments: Vec<String>,
+    /// Whether the draft's existing attachments have been checked: removals
+    /// done, inline images the new body no longer shows taken off, and images
+    /// it already has dropped from `attachments` (progress).
+    #[serde(default)]
+    pub pruned: bool,
     /// Before the update.
     pub prev: DraftSnapshot,
 }
@@ -819,8 +849,17 @@ mod tests {
         assert!(f.inline);
         assert_eq!(f.content_type, "image/png");
         assert_eq!(f.content_b64, "iVBORw0K");
-        assert_eq!(f.content_id.as_deref(), Some("image1.png@familiar"));
-        assert!(out.contains("src=\"cid:image1.png@familiar\""), "{out}");
+        let cid = f.content_id.clone().unwrap();
+        assert!(
+            cid.starts_with("image-") && cid.ends_with(".png@familiar"),
+            "{cid}"
+        );
+        assert!(out.contains(&format!("src=\"cid:{cid}\"")), "{out}");
+        // The same bytes give the same content ID, and repeats are one file.
+        let (again, files2) = super::inline_images(&format!("{html}{html}")).unwrap();
+        assert_eq!(files2.len(), 1);
+        assert_eq!(files2[0].content_id.as_deref(), Some(cid.as_str()));
+        assert_eq!(again.matches(&cid).count(), 2);
         assert!(out.contains("src='https://example.com/a.png'"));
         assert!(out.contains("src=\"cid:x\""));
         // A local file is read; one that doesn't exist is left as it was.
@@ -836,7 +875,7 @@ mod tests {
         assert_eq!(files.len(), 1);
         assert_eq!(files[0].content_type, "image/gif");
         assert!(
-            out.contains("cid:img1.logo.gif@familiar") && out.contains("/no/such.png"),
+            out.contains(".logo.gif@familiar") && out.contains("/no/such.png"),
             "{out}"
         );
     }

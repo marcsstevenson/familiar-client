@@ -624,13 +624,13 @@ pub struct DraftUpdateInput {
     /// Local ID of the draft.
     #[schemars(extend("x-positional" = 0))]
     pub draft: i64,
-    /// Replace To.
+    /// Replace To (`""` empties it).
     #[serde(default)]
     pub to: Vec<String>,
-    /// Replace Cc.
+    /// Replace Cc (`""` empties it).
     #[serde(default)]
     pub cc: Vec<String>,
-    /// Replace Bcc.
+    /// Replace Bcc (`""` empties it).
     #[serde(default)]
     pub bcc: Vec<String>,
     /// New subject.
@@ -651,6 +651,9 @@ pub struct DraftUpdateInput {
     /// Add an inline image.
     #[serde(default)]
     pub inline: Vec<String>,
+    /// Take an attachment off, by file name (or Graph attachment ID); repeat for more.
+    #[serde(default)]
+    pub remove_attachment: Vec<String>,
     /// Only show what would happen.
     #[serde(default)]
     pub dry_run: bool,
@@ -668,24 +671,33 @@ impl Command for DraftUpdate {
     const SPEC: CommandSpec = CommandSpec {
         path: &["draft", "update"],
         summary: "Change a draft",
-        description: "Changes a draft's recipients, subject or body, or adds attachments. Recipient flags replace that line; --body replaces the whole body.",
+        description: "Changes a draft's recipients, subject or body, or adds and removes attachments. Recipient flags replace that line; --body replaces the whole body, and inline images it no longer shows are taken off.",
         access: Access::Draft,
         errors: ERRORS,
     };
 
     fn run(&self, _ctx: &Context<'_>, i: DraftUpdateInput) -> Result<WriteOutput, CommandError> {
+        let mut files = attachments(&i.attach, &i.inline)?;
+        // Images the body embeds become inline attachments, as for a new
+        // draft. Their content IDs follow their bytes, so images the draft
+        // already has are not added again.
         let html = if i.body.is_some() || i.body_file.is_some() {
-            Some(body_html(
+            let (html, images) = crate::compose::inline_images(&body_html(
                 i.body.as_deref(),
                 i.body_file.as_deref(),
                 i.html,
-            )?)
+            )?)?;
+            files.extend(images);
+            Some(html)
         } else {
             None
         };
+        // No flag leaves a line alone; `--cc ""` empties it.
         let list = |v: &[String]| -> Result<Option<Vec<Recipient>>, CommandError> {
             if v.is_empty() {
                 Ok(None)
+            } else if v.iter().all(|s| s.trim().is_empty()) {
+                Ok(Some(Vec::new()))
             } else {
                 Recipient::parse_all(v).map(Some)
             }
@@ -699,7 +711,8 @@ impl Command for DraftUpdate {
                 to: list(&i.to)?,
                 cc: list(&i.cc)?,
                 bcc: list(&i.bcc)?,
-                attachments: attachments(&i.attach, &i.inline)?,
+                attachments: files,
+                remove_attachments: i.remove_attachment,
             },
             &flags(i.dry_run, i.wait, i.wait_secs),
         )
