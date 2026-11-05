@@ -1025,10 +1025,23 @@ fn keyed_location(text: &str) -> Option<String> {
     None
 }
 
+/// How many of `words` at the start make a time of day: `18:00` or
+/// `6pm` is one, `6:30 pm` two. A second word counts only when it is
+/// am or pm, so `20:00 10 Downing Street` keeps its street number.
+fn time_words(words: &[&str]) -> Option<usize> {
+    let first = words.first()?;
+    if let Some(second) = words.get(1) {
+        let s = second.to_ascii_lowercase().replace('.', "");
+        if (s == "am" || s == "pm") && parse_time(&format!("{first} {second}")).is_some() {
+            return Some(2);
+        }
+    }
+    parse_time(first).map(|_| 1)
+}
+
 /// True when `s` opens with a time of day (`6pm on Friday`, `18:00`).
 fn starts_with_time(s: &str) -> bool {
-    let words: Vec<&str> = s.split_whitespace().collect();
-    (1..=words.len().min(2)).any(|n| parse_time(&words[..n].join(" ")).is_some())
+    time_words(&s.split_whitespace().collect::<Vec<_>>()).is_some()
 }
 
 /// A place from a ticket-style line that lists the details between
@@ -1049,10 +1062,7 @@ fn listed_location(text: &str) -> Option<String> {
         for (i, part) in parts.iter().enumerate() {
             let words: Vec<&str> = part.split_whitespace().collect();
             // The longest leading run of words that reads as a time.
-            let Some(n) = (1..=words.len().min(2))
-                .rev()
-                .find(|&n| parse_time(&words[..n].join(" ")).is_some())
-            else {
+            let Some(n) = time_words(&words) else {
                 continue;
             };
             let mut place: Vec<String> = Vec::new();
@@ -1062,12 +1072,7 @@ fn listed_location(text: &str) -> Option<String> {
                 if ["-", "–", "—", "to", "until"].contains(&sep.to_ascii_lowercase().as_str())
                     && starts_with_time(&words[n + 1..].join(" "))
                 {
-                    let rest = &words[n + 1..];
-                    n += 1
-                        + (1..=rest.len().min(2))
-                            .rev()
-                            .find(|&k| parse_time(&rest[..k].join(" ")).is_some())
-                            .unwrap_or(0);
+                    n += 1 + time_words(&words[n + 1..]).unwrap_or(0);
                 }
             }
             let here = words[n..].join(" ");
@@ -1349,6 +1354,19 @@ mod tests {
             .location
             .as_deref(),
             Some("Town Hall")
+        );
+        // A street number after the time stays with the place.
+        assert_eq!(
+            suggest("Hi", "Fri 6 Nov • 20:00 10 Downing Street • London", today)
+                .location
+                .as_deref(),
+            Some("10 Downing Street, London")
+        );
+        assert_eq!(
+            suggest("Hi", "Fri 6 Nov • 7 pm - 9 pm 10 Downing Street", today)
+                .location
+                .as_deref(),
+            Some("10 Downing Street")
         );
         // A labelled address keeps its street number.
         assert_eq!(
