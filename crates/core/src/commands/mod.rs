@@ -16,5 +16,6 @@ pub mod mcp;
 pub mod schema;
 pub mod search;
 pub mod sync;
+pub mod ui;
 pub mod version;
 pub mod write;

@@ -132,15 +132,26 @@ impl DaemonPaths {
     }
 }
 
-#[cfg(unix)]
 fn socket_for(data_dir: &Path) -> PathBuf {
-    data_dir.join("famd.sock")
+    local_socket(data_dir, "famd.sock", "familiar-famd")
+}
+
+/// The socket (Unix) or pipe (Windows) the desktop app listens on for
+/// `fam ui` commands: `familiar-ui.sock` in the data directory, or
+/// `\\.\pipe\familiar-ui-<hash>`.
+pub fn ui_socket_for(data_dir: &Path) -> PathBuf {
+    local_socket(data_dir, "familiar-ui.sock", "familiar-ui")
+}
+
+#[cfg(unix)]
+fn local_socket(data_dir: &Path, file: &str, _pipe: &str) -> PathBuf {
+    data_dir.join(file)
 }
 
 #[cfg(windows)]
-fn socket_for(data_dir: &Path) -> PathBuf {
+fn local_socket(data_dir: &Path, _file: &str, pipe: &str) -> PathBuf {
     PathBuf::from(format!(
-        r"\\.\pipe\familiar-famd-{:016x}",
+        r"\\.\pipe\{pipe}-{:016x}",
         fnv1a(data_dir.to_string_lossy().to_lowercase().as_bytes())
     ))
 }

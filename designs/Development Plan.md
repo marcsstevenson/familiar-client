@@ -177,6 +177,8 @@ Tauri 2 + SolidJS was chosen in Phase 0 (WP 0.4).
 
 **WP 3.2 status (5 Nov 2026):** done in the cloud, Windows numbers to come. Folder pane with all inboxes and each account's tree; a virtualised list whose sorted IDs live in Rust (newest, oldest, from, subject; unread filter), refreshed when the store changes. On a synthetic 500k store (300k in the inboxes), Linux under Xvfb with software rendering: opening the unified view 44 ms median, scroll frame p95 19 ms (median 17 ms, the display's frame rate), no frames showing unloaded rows, jump anywhere in the list to rows in 34 ms.
 
+**WP 3.5 status (5 Nov 2026):** done. Ctrl+K palette with every action and every registered command (forms generated from the input schemas, prefilled from the selection, showing the `fam` line). Single-key actions with defaults, rebindable in `[keys]`. `fam ui open` and `fam ui folder` drive the running app over its own socket. `ui/src/actions/surface.ts` must place every registered command, so CI's `tsc` fails on a new command until it is in the palette (or marked terminal-only).
+
 ## Phase 4: Calendar, rules, contacts and migration
 
 | WP | Work | Depends on | Done when |

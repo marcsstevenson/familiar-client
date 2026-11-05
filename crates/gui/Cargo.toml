@@ -28,6 +28,7 @@ serde_json.workspace = true
 tauri = { version = "2.12", features = [] }
 tauri-plugin-dialog = "2"
 webbrowser = "1"
+tokio = { version = "1", features = ["net", "io-util"] }
 
 [dev-dependencies]
 tempfile = "3"

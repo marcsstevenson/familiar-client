@@ -11,6 +11,7 @@ mod compose;
 mod daemon;
 mod list;
 mod reading;
+mod ui_socket;
 
 use familiar_core::registry::Registry;
 use familiar_core::{CommandError, agent};
@@ -34,6 +35,8 @@ struct UiInfo {
     theme: &'static str,
     /// Why config.toml could not be read, if it couldn't.
     config_error: Option<String>,
+    /// `[keys]` from config.toml: action name to key, overriding the defaults.
+    keys: std::collections::BTreeMap<String, String>,
     /// True when `FAMILIAR_BENCH_OUT` names a file: the front end then runs
     /// its timing script and reports with `bench_report`.
     bench: bool,
@@ -41,18 +44,23 @@ struct UiInfo {
 
 #[tauri::command]
 fn ui_info() -> UiInfo {
-    let (theme, config_error) = match familiar_config::paths::resolve(None) {
-        None => ("system", None),
-        Some((path, _)) if !path.exists() => ("system", None),
+    let (theme, keys, config_error) = match familiar_config::paths::resolve(None) {
+        None => ("system", Default::default(), None),
+        Some((path, _)) if !path.exists() => ("system", Default::default(), None),
         Some((path, _)) => match familiar_config::load(&path) {
-            Ok(c) => (theme_name(c.app.theme), None),
-            Err(e) => ("system", Some(format!("{}: {e}", path.display()))),
+            Ok(c) => (theme_name(c.app.theme), c.keys, None),
+            Err(e) => (
+                "system",
+                Default::default(),
+                Some(format!("{}: {e}", path.display())),
+            ),
         },
     };
     UiInfo {
         version: env!("CARGO_PKG_VERSION"),
         platform: std::env::consts::OS,
         theme,
+        keys,
         config_error,
         bench: std::env::var_os(BENCH_ENV).is_some(),
     }
@@ -187,6 +195,8 @@ fn main() {
             std::thread::spawn(move || daemon::keep_running(&handle, &shared));
             let handle = app.handle().clone();
             std::thread::spawn(move || list::watch_store(&handle));
+            let registry = std::sync::Arc::clone(&app.state::<std::sync::Arc<Registry>>());
+            ui_socket::start(app.handle().clone(), registry);
             Ok(())
         })
         .run(tauri::generate_context!())

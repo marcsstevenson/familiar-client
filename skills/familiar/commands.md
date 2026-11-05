@@ -735,6 +735,31 @@ Shows, per account, what famd is doing (first sync, bodies, idle), how many head
 
 - `--account <account>`: Only this account (its name in config.toml).
 
+## ui.folder
+
+Show a folder in the app. Access: `read`.
+
+```
+fam ui folder [FOLDER]
+```
+
+Shows a folder's messages in the running desktop app and brings the window to the front. With no folder, shows every account's Inbox together.
+
+- `--account <account>`: The account the folder is in (its name in config.toml). Needed when a folder is given and there is more than one account.
+- `FOLDER`: Folder path (Inbox/Club) or well-known name (inbox, sentitems, drafts, archive). Default: every account's Inbox together.
+
+## ui.open
+
+Open a message in the app. Access: `read`.
+
+```
+fam ui open <MESSAGE>
+```
+
+Shows the message in the running desktop app: its folder in the list and the message in the reading pane, and brings the window to the front.
+
+- `MESSAGE` (required): Local ID of the message to open.
+
 ## version
 
 Show the Familiar version. Access: `read`.

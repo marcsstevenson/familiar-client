@@ -1,8 +1,13 @@
 // The three-pane window: folders, message list, reading pane, and a status bar.
 // Each pane is its own component folder; they share selection through state.ts.
+import { listen } from "@tauri-apps/api/event";
 import { Show, createSignal, onCleanup, onMount } from "solid-js";
+import { registerBuiltinActions } from "./actions/builtin";
+import { onGlobalKey, setKeyOverrides } from "./actions/registry";
 import { type DaemonState, type UiInfo, watchDaemon } from "./api";
 import { ReadingPane } from "./reading/ReadingPane";
+import { Palette } from "./palette/Palette";
+import { notice, setSelectedFolder, setSelectedMessage } from "./state";
 import { FolderTree } from "./folders/FolderTree";
 import { MessageList } from "./list/MessageList";
 import { TitleBar } from "./TitleBar";
@@ -18,11 +23,31 @@ function daemonText(s: DaemonState): string {
   }
 }
 
+/** What `fam ui` asks the window to show (crates/gui/src/ui_socket.rs). */
+type UiCommand =
+  | { kind: "open"; folder: number; message: number }
+  | { kind: "folder"; folder: number | null };
+
 export function App(props: { info: UiInfo }) {
   const [daemon, setDaemon] = createSignal<DaemonState>({ state: "starting" });
+  // The palette: closed, open on the list, or open on one command's form.
+  const [palette, setPalette] = createSignal<{ initial?: string; values?: Record<string, string | boolean> } | null>(null);
+  setKeyOverrides(props.info.keys);
+  registerBuiltinActions((initial, values) => setPalette({ initial, values }));
   onMount(async () => {
-    const stop = await watchDaemon(setDaemon);
-    onCleanup(stop);
+    window.addEventListener("keydown", onGlobalKey);
+    const stopDaemon = await watchDaemon(setDaemon);
+    const stopUi = await listen<UiCommand>("ui_command", (e) => {
+      const c = e.payload;
+      setPalette(null);
+      setSelectedFolder(c.folder);
+      setSelectedMessage(c.kind === "open" ? c.message : null);
+    });
+    onCleanup(() => {
+      window.removeEventListener("keydown", onGlobalKey);
+      stopDaemon();
+      stopUi();
+    });
   });
   return (
     <div class="app">
@@ -41,9 +66,13 @@ export function App(props: { info: UiInfo }) {
         <Show when={props.info.config_error}>
           {(e) => <span class="warn">Config: {e()}</span>}
         </Show>
+        <Show when={notice()}>{(n) => <span classList={{ warn: n().error }}>{n().text}</span>}</Show>
         <span class="statusbar-spacer" />
         <span>Familiar {props.info.version}</span>
       </footer>
+      <Show when={palette()}>
+        {(p) => <Palette initial={p().initial} values={p().values} onClose={() => setPalette(null)} />}
+      </Show>
     </div>
   );
 }
