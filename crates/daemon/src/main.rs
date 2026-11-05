@@ -63,7 +63,9 @@ fn run() -> Result<(), (u8, String)> {
             path.display()
         )));
     }
-    let policy = SyncPolicy::from_config(&config.sync).map_err(config_err)?;
+    let policy = SyncPolicy::from_config(&config.sync)
+        .and_then(|p| p.with_calendar(&config.calendar))
+        .map_err(config_err)?;
     let paths = DaemonPaths::resolve().map_err(|e| (e.exit_code(), e.message))?;
     let auth = Arc::new(Auth::from_env().map_err(|e| (3, e.to_string()))?);
     let graph = auth.endpoints().graph.clone();

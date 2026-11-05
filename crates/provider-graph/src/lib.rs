@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-//! Microsoft Graph provider: mail read (WP 1.6).
+//! Microsoft Graph provider: mail read (WP 1.6) and calendar read (WP 1.11).
 //!
 //! - [`GraphClient`]: HTTP to Graph with tokens from a [`TokenSource`], always
 //!   asking for immutable IDs. Every request goes through the mailbox's
@@ -14,6 +14,7 @@
 //! The sync engine (WP 1.7) decides what to sync when; this crate does one
 //! step at a time and never keeps mail anywhere but the store.
 
+mod calendar;
 mod client;
 mod error;
 mod mail;
@@ -21,6 +22,11 @@ mod model;
 mod scheduler;
 mod sync;
 
+pub use calendar::{
+    CalendarApi, CalendarListReport, CalendarSync, EVENT_PAGE_SIZE, EventSyncReport, GraphAttendee,
+    GraphCalendar, GraphDateTime, GraphEvent, GraphLocation, GraphOwner, GraphResponse,
+    events_resource,
+};
 pub use client::{AuthTokens, ClientOptions, GRAPH_V1, GraphClient, StaticToken, TokenSource};
 pub use error::{Error, Result};
 pub use mail::{DELTA_PAGE_SIZE, MailApi, STATE_FIELDS};

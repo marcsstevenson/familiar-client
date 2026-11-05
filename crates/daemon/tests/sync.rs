@@ -299,3 +299,79 @@ async fn restart_resumes_incrementally() {
     sync_now(&env).await;
     env.stop().await;
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn calendars_sync_for_the_window_around_today() {
+    let mut env = Env::new(200).await;
+    let mut policy = fast_policy();
+    policy.calendar_interval = Duration::from_millis(300);
+    let now = env.now.load(std::sync::atomic::Ordering::SeqCst);
+    let window = policy.calendar_window(now);
+    let at = |days: i64| chrono::DateTime::from_timestamp(now + days * 86_400, 0).unwrap();
+    env.mock
+        .mailbox(KEY)
+        .add_event(familiar_mock_graph::Event::new(
+            "Tomorrow",
+            at(1),
+            at(1) + chrono::Duration::hours(1),
+        ))
+        .unwrap();
+    // Two years ahead: outside the default one-year future.
+    env.mock
+        .mailbox(KEY)
+        .add_event(familiar_mock_graph::Event::new(
+            "Far off",
+            at(730),
+            at(730) + chrono::Duration::hours(1),
+        ))
+        .unwrap();
+    env.start(policy);
+
+    let subjects = |e: &Env| -> Vec<String> {
+        let r = e.reader();
+        let Some(cal) = r.calendars(e.account()).unwrap().into_iter().next() else {
+            return Vec::new();
+        };
+        r.events_in(&[cal.id], familiar_store::EventRange::utc(0, i64::MAX / 2))
+            .unwrap()
+            .into_iter()
+            .map(|ev| ev.data.subject)
+            .collect()
+    };
+    env.until("calendar events", LIMIT, |e| {
+        subjects(e).contains(&"Tomorrow".to_string())
+    })
+    .await;
+    assert!(!subjects(&env).contains(&"Far off".to_string()));
+    let cal = env.reader().calendars(env.account()).unwrap().remove(0);
+    assert!(cal.is_default);
+    assert_eq!(
+        (cal.window_start, cal.window_end),
+        (Some(window.0), Some(window.1))
+    );
+
+    // A new event shows up by delta on the next calendar poll.
+    env.mock
+        .mailbox(KEY)
+        .add_event(familiar_mock_graph::Event::new(
+            "Next week",
+            at(7),
+            at(7) + chrono::Duration::hours(2),
+        ))
+        .unwrap();
+    sync_now(&env).await;
+    env.until("the new event", LIMIT, |e| {
+        subjects(e).contains(&"Next week".to_string())
+    })
+    .await;
+    // Everything stored overlaps the window.
+    let r = env.reader();
+    let cal = r.calendars(env.account()).unwrap().remove(0);
+    for ev in r
+        .events_in(&[cal.id], familiar_store::EventRange::utc(0, i64::MAX / 2))
+        .unwrap()
+    {
+        assert!(ev.data.start_at < window.1 && ev.data.end_at > window.0 - DAY);
+    }
+    env.stop().await;
+}

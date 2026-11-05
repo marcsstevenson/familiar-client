@@ -36,6 +36,10 @@ id_type!(
     MessageId,
     /// Local ID of a queued op.
     OpId,
+    /// Local ID of a calendar.
+    CalendarId,
+    /// Local ID of an event.
+    EventId,
 );
 
 /// An account to add or update, matched by `key`.

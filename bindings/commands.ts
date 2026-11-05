@@ -167,6 +167,100 @@ export type AuthStatusOutput = {
   store: string;
 };
 
+export type CalCalendar = {
+  /** Account name. */
+  account: string;
+  /** You can add and change events. */
+  can_edit: boolean;
+  /** The last sync error, if the last sync failed. */
+  error?: string | null;
+  /** Events on this device. */
+  events: number;
+  /** The account's default calendar. */
+  is_default: boolean;
+  /** When the events last synced (RFC 3339, UTC). */
+  last_synced_at?: string | null;
+  /** Calendar name. */
+  name: string;
+  /** Owner's address. */
+  owner?: string;
+  /** Purposes from `[calendar.purposes]` that point here. */
+  purposes?: Array<string>;
+  /** Start of the synced window (date), once a sync has run. */
+  synced_from?: string | null;
+  /** End of the synced window (date, exclusive). */
+  synced_to?: string | null;
+};
+
+export type CalCalendarsInput = {
+  /** Only this account (its name in config.toml). */
+  account?: string | null;
+};
+
+export type CalCalendarsOutput = {
+  /** Calendars, by account, the default first. */
+  calendars: Array<CalCalendar>;
+};
+
+export type CalEvent = {
+  /** Account name. */
+  account: string;
+  /** All-day event. */
+  all_day: boolean;
+  /** Calendar name. */
+  calendar: string;
+  /** Cancelled meeting. */
+  cancelled: boolean;
+  /** End: RFC 3339 in the output zone, or the day after the last day for all-day events. */
+  end: string;
+  /** Local event ID. */
+  id: number;
+  /** Location. */
+  location?: string;
+  /** Organiser's address. */
+  organizer?: string;
+  /** Part of a recurring series. */
+  recurring: boolean;
+  /** Your response, when Graph gives one. */
+  response?: string | null;
+  /** `free`, `tentative`, `busy`, `oof`, `workingElsewhere` or `unknown`. */
+  show_as: string;
+  /** Start: RFC 3339 in the output zone, or a date (YYYY-MM-DD) for all-day events. */
+  start: string;
+  /** Subject. */
+  subject: string;
+  /** The organiser's time zone (IANA), when known. */
+  time_zone?: string | null;
+};
+
+export type CalListInput = {
+  /** Only this account (its name in config.toml). */
+  account?: string | null;
+  /** A calendar's name (such as "Family Room") or a purpose from `[calendar.purposes]` (such as "family"). All calendars if left out. */
+  calendar?: string | null;
+  /** How many days to list, from 1 to 366. Default 7. */
+  days?: number | null;
+  /** First day: `today` (the default), `tomorrow`, `yesterday` or a date like 2026-11-05. */
+  from?: string | null;
+  /** Time zone to show times in, IANA (Pacific/Auckland) or Windows (New Zealand Standard Time). Default: this computer's. */
+  tz?: string | null;
+};
+
+export type CalListOutput = {
+  /** Calendars searched, as `account/calendar`. */
+  calendars: Array<string>;
+  /** Events, by start time. */
+  events: Array<CalEvent>;
+  /** Start of the range (RFC 3339). */
+  from: string;
+  /** The zone times are shown in (IANA). */
+  time_zone: string;
+  /** End of the range, exclusive (RFC 3339). */
+  to: string;
+  /** Problems worth knowing, such as a calendar that has not synced yet or a range outside the synced window. */
+  warnings?: Array<string>;
+};
+
 export type CheckReport = {
   /** One entry per account checked. */
   accounts: Array<AccountCheck>;
@@ -444,7 +538,7 @@ export type SyncError = {
   resource: string;
 };
 
-export type SyncPhase = "starting" | "folder_tree" | "headers" | "bodies" | "idle" | "backoff" | "auth_required" | "stopped";
+export type SyncPhase = "starting" | "folder_tree" | "headers" | "bodies" | "calendar" | "idle" | "backoff" | "auth_required" | "stopped";
 
 export type SyncStatusInput = {
   /** Only this account (its name in config.toml). */
@@ -488,6 +582,10 @@ export interface Commands {
   "auth.logout": { input: AuthLogoutInput; output: AuthLogoutOutput };
   /** Show which accounts are signed in */
   "auth.status": { input: AuthStatusInput; output: AuthStatusOutput };
+  /** List the calendars on this device */
+  "cal.calendars": { input: CalCalendarsInput; output: CalCalendarsOutput };
+  /** List events in a date range */
+  "cal.list": { input: CalListInput; output: CalListOutput };
   /** Show which config file is used */
   "config.path": { input: ConfigPathInput; output: ConfigPathOutput };
   /** Check config.toml for errors */
@@ -514,6 +612,8 @@ export const COMMAND_NAMES = [
   "auth.login",
   "auth.logout",
   "auth.status",
+  "cal.calendars",
+  "cal.list",
   "config.path",
   "config.validate",
   "mail.pin",

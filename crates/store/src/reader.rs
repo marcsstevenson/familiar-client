@@ -17,7 +17,7 @@ use std::time::Duration;
 /// Each call reads the latest committed state. To make several calls see
 /// the same state, wrap them in [`Reader::snapshot`].
 pub struct Reader {
-    conn: Connection,
+    pub(crate) conn: Connection,
     paths: StorePaths,
 }
 

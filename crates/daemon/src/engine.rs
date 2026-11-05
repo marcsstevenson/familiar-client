@@ -21,6 +21,13 @@
 //!    older than `sync.headers` are pruned, the on-demand cache is trimmed
 //!    to `sync.cache_limit` and unreferenced body files are deleted.
 //!
+//! **Calendars** run between steps 1 and 2, at start and every
+//! `calendar_interval` (5 min), so a long first mail sync doesn't hold them
+//! up: the calendar list, then each calendar's events by calendarView delta
+//! for the window around today (`[calendar] past` and `future`). A calendar
+//! that fails (a shared calendar that refuses delta, say) records the error
+//! on its `events:<id>` sync state and the others carry on.
+//!
 //! A failed step is recorded on the folder's sync state and in the live
 //! status, and the account waits `backoff_min` doubling to `backoff_max`
 //! before trying again. Throttling never gets this far: the provider's
@@ -32,7 +39,9 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use familiar_core::daemon::{AccountLive, FIRST_SYNC_RESOURCE, SyncPhase};
-use familiar_provider_graph::{Error as GraphError, MailSync, Priority, messages_resource};
+use familiar_provider_graph::{
+    CalendarSync, Error as GraphError, MailSync, Priority, events_resource, messages_resource,
+};
 use familiar_store::{AccountId, Cursor, Folder, Reader, SharedWriter};
 use tokio::sync::{Notify, watch};
 use tokio::time::Instant;
@@ -137,6 +146,7 @@ pub struct Engine {
     key: String,
     account: AccountId,
     sync: MailSync,
+    calendar: CalendarSync,
     w: SharedWriter,
     policy: Arc<SyncPolicy>,
     clock: Clock,
@@ -149,6 +159,7 @@ pub struct Engine {
     bodies_pending: bool,
     body_cursor: Option<Cursor>,
     ageing_due: Instant,
+    calendar_due: Instant,
     failures: u32,
     /// The `sync.now` ticket the current work answers.
     serving: u64,
@@ -161,6 +172,7 @@ impl Engine {
         key: String,
         account: AccountId,
         sync: MailSync,
+        calendar: CalendarSync,
         w: SharedWriter,
         policy: Arc<SyncPolicy>,
         clock: Clock,
@@ -171,6 +183,7 @@ impl Engine {
             key,
             account,
             sync,
+            calendar,
             w,
             policy,
             clock,
@@ -182,6 +195,7 @@ impl Engine {
             bodies_pending: true,
             body_cursor: None,
             ageing_due: Instant::now(),
+            calendar_due: Instant::now(),
             failures: 0,
             serving: 0,
         }
@@ -222,6 +236,7 @@ impl Engine {
                 self.serving = seen;
                 let now = Instant::now();
                 self.tree_due = Some(now);
+                self.calendar_due = now;
                 for f in self.folders.values_mut() {
                     f.due = now;
                 }
@@ -292,6 +307,13 @@ impl Engine {
             return Ok(Next::Now);
         }
 
+        // Calendars, between the tree and the folders.
+        if self.calendar_due <= now {
+            self.sync_calendars().await?;
+            self.calendar_due = Instant::now() + self.policy.calendar_interval;
+            return Ok(Next::Now);
+        }
+
         // 2. Due folders.
         let mut due: Vec<&FolderPlan> = self.folders.values().filter(|f| f.due <= now).collect();
         if !due.is_empty() {
@@ -330,7 +352,7 @@ impl Engine {
         }
 
         // Idle until the next thing is due.
-        let mut next = self.ageing_due;
+        let mut next = self.ageing_due.min(self.calendar_due);
         if let Some(t) = self.tree_due {
             next = next.min(t);
         }
@@ -490,6 +512,51 @@ impl Engine {
             return Err(e);
         }
         Ok(true)
+    }
+
+    /// The calendar list, then every calendar's events for the window.
+    async fn sync_calendars(&mut self) -> Result<(), GraphError> {
+        let prev = self.shared.snapshot().phase;
+        self.phase(SyncPhase::Calendar);
+        let acc = self.account;
+        self.calendar
+            .sync_calendars(&mut self.w, Priority::Background)
+            .await?;
+        let window = self.policy.calendar_window((self.clock)());
+        let calendars = self.w.write(|tx| tx.calendars(acc))?;
+        let (mut up, mut rm) = (0, 0);
+        for cal in calendars {
+            match self
+                .calendar
+                .sync_events(&mut self.w, &cal.remote_id, window, Priority::Background)
+                .await
+            {
+                Ok(r) => {
+                    up += r.upserted;
+                    rm += r.removed;
+                }
+                Err(
+                    e @ (GraphError::Auth(_)
+                    | GraphError::Network(_)
+                    | GraphError::Throttled { .. }),
+                ) => return Err(e),
+                Err(e) => {
+                    let msg = e.to_string();
+                    crate::log(&format!("{}: calendar {:?}: {msg}", self.key, cal.name));
+                    self.w.write(|tx| {
+                        tx.set_sync_error(acc, &events_resource(&cal.remote_id), &msg)
+                    })?;
+                }
+            }
+        }
+        if up + rm > 0 {
+            crate::log(&format!(
+                "{}: calendars: {up} events added or changed, {rm} removed",
+                self.key
+            ));
+        }
+        self.phase(prev);
+        Ok(())
     }
 
     fn age(&mut self) -> Result<(), GraphError> {

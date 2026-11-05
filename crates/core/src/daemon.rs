@@ -235,6 +235,8 @@ pub enum SyncPhase {
     Headers,
     /// Downloading bodies for the sync window, newest first.
     Bodies,
+    /// Syncing calendars and their events for the calendar window.
+    Calendar,
     /// Up to date; polling (Inbox every 30 s, other folders every 5 min).
     Idle,
     /// The last round failed; waiting before trying again.
@@ -253,6 +255,7 @@ impl SyncPhase {
             SyncPhase::FolderTree => "folder_tree",
             SyncPhase::Headers => "headers",
             SyncPhase::Bodies => "bodies",
+            SyncPhase::Calendar => "calendar",
             SyncPhase::Idle => "idle",
             SyncPhase::Backoff => "backoff",
             SyncPhase::AuthRequired => "auth_required",

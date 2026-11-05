@@ -71,7 +71,7 @@ pub struct GraphRecipient {
 }
 
 impl GraphRecipient {
-    fn to_address(&self) -> Address {
+    pub(crate) fn to_address(&self) -> Address {
         Address {
             name: self.email_address.name.clone().unwrap_or_default(),
             addr: self.email_address.address.clone().unwrap_or_default(),

@@ -4,7 +4,7 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use familiar_config::model::{OlderBodies, Sync as SyncConfig};
+use familiar_config::model::{Calendar as CalendarConfig, OlderBodies, Sync as SyncConfig};
 use familiar_config::validate::{parse_period, parse_size};
 
 /// Seconds in a day.
@@ -47,6 +47,12 @@ pub struct SyncPolicy {
     pub backoff_min: Duration,
     /// Longest wait after failures.
     pub backoff_max: Duration,
+    /// Events are kept from this many days before today.
+    pub calendar_past_days: u32,
+    /// Events are kept up to this many days after today.
+    pub calendar_future_days: u32,
+    /// How often calendars and their events are polled.
+    pub calendar_interval: Duration,
 }
 
 impl Default for SyncPolicy {
@@ -63,6 +69,9 @@ impl Default for SyncPolicy {
             body_batch: 64,
             backoff_min: Duration::from_secs(30),
             backoff_max: Duration::from_secs(600),
+            calendar_past_days: 90,
+            calendar_future_days: 365,
+            calendar_interval: Duration::from_secs(300),
         }
     }
 }
@@ -86,6 +95,26 @@ impl SyncPolicy {
             cache_limit,
             ..Self::default()
         })
+    }
+
+    /// Adds the calendar window from `[calendar]`.
+    pub fn with_calendar(mut self, c: &CalendarConfig) -> Result<Self, String> {
+        self.calendar_past_days =
+            parse_period(&c.past).ok_or_else(|| format!("bad calendar.past {:?}", c.past))?;
+        self.calendar_future_days =
+            parse_period(&c.future).ok_or_else(|| format!("bad calendar.future {:?}", c.future))?;
+        Ok(self)
+    }
+
+    /// The calendar window at `now`: from midnight UTC `calendar_past_days`
+    /// before today to midnight after `calendar_future_days` from today. It
+    /// moves once a day, which starts a new full round per calendar.
+    pub fn calendar_window(&self, now: i64) -> (i64, i64) {
+        let today = now.div_euclid(DAY) * DAY;
+        (
+            today - i64::from(self.calendar_past_days) * DAY,
+            today + (i64::from(self.calendar_future_days) + 1) * DAY,
+        )
     }
 
     /// The oldest `received_at` inside the body window at `now`.
@@ -128,6 +157,22 @@ mod tests {
         let p = SyncPolicy::from_config(&s).unwrap();
         assert_eq!((p.window_days, p.headers_days), (90, Some(90)));
         assert_eq!(p.window_start(100 * DAY), 10 * DAY);
+    }
+
+    #[test]
+    fn calendar_window_moves_daily() {
+        let c = CalendarConfig {
+            past: "1w".into(),
+            future: "30d".into(),
+            ..CalendarConfig::default()
+        };
+        let p = SyncPolicy::default().with_calendar(&c).unwrap();
+        let noon = 100 * DAY + DAY / 2;
+        assert_eq!(p.calendar_window(noon), (93 * DAY, 131 * DAY));
+        assert_eq!(p.calendar_window(noon + DAY / 4), p.calendar_window(noon));
+        assert_eq!(p.calendar_window(noon + DAY).0, 94 * DAY);
+        let d = SyncPolicy::default();
+        assert_eq!((d.calendar_past_days, d.calendar_future_days), (90, 365));
     }
 
     #[test]

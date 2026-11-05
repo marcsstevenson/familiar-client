@@ -145,6 +145,15 @@ pub fn check(c: &Config) -> Vec<Problem> {
         }
     }
 
+    for (key, value) in [("past", &c.calendar.past), ("future", &c.calendar.future)] {
+        if parse_period(value).is_none() {
+            p.push(Problem::error(
+                format!("calendar.{key}"),
+                "must be a period like `1y`, `6m`, `4w` or `90d`",
+            ));
+        }
+    }
+
     for (purpose, target) in &c.calendar.purposes {
         let path = format!("calendar.purposes.{purpose}");
         if !c.accounts.contains_key(&target.account) {

@@ -281,13 +281,13 @@ fn new_idempotency_key() -> String {
 
 /// An open write transaction. Every change goes through one of these.
 pub struct WriteTx<'a> {
-    tx: Transaction<'a>,
+    pub(crate) tx: Transaction<'a>,
     bodies: &'a Path,
 }
 
 impl WriteTx<'_> {
     /// The underlying connection, for reads inside the transaction.
-    fn c(&self) -> &Connection {
+    pub(crate) fn c(&self) -> &Connection {
         &self.tx
     }
 

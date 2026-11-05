@@ -183,6 +183,8 @@ impl Registry {
         r.register(crate::commands::sync::SyncCheck);
         r.register(crate::commands::mail::MailPin);
         r.register(crate::commands::search::MailSearch);
+        r.register(crate::commands::cal::CalList);
+        r.register(crate::commands::cal::CalCalendars);
         r
     }
 

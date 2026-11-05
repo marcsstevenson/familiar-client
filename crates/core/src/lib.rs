@@ -7,6 +7,8 @@ pub mod error;
 pub mod parity;
 pub mod registry;
 pub mod surfaces;
+pub mod tz;
+mod tz_table;
 
 pub use error::{CommandError, ErrorKind};
 pub use registry::{Access, Command, CommandSpec, Context, DynCommand, Output, Registry};

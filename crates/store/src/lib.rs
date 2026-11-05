@@ -30,6 +30,7 @@
 //! small file per body wasted three quarters of the disk in WP 0.5.
 
 mod bodies;
+mod calendar;
 mod error;
 mod migrate;
 mod model;
@@ -39,12 +40,13 @@ mod shared;
 mod writer;
 
 pub use bodies::{BodyHash, INLINE_BODY_MAX};
+pub use calendar::{Attendee, Calendar, Event, EventData, EventRange, NewCalendar};
 pub use error::{Error, Result};
 pub use migrate::{MIGRATIONS, Migration, SCHEMA_VERSION};
 pub use model::{
-    Account, AccountId, Address, BodyRef, BodyStats, Cursor, EvictReport, Folder, FolderId,
-    FolderThread, Message, MessageId, NewAccount, NewFolder, NewMessage, NewOp, Op, OpId, OpState,
-    SearchQueueBatch, SyncState, ThreadId,
+    Account, AccountId, Address, BodyRef, BodyStats, CalendarId, Cursor, EventId, EvictReport,
+    Folder, FolderId, FolderThread, Message, MessageId, NewAccount, NewFolder, NewMessage, NewOp,
+    Op, OpId, OpState, SearchQueueBatch, SyncState, ThreadId,
 };
 pub use reader::Reader;
 pub use shared::{SharedWriter, StoreWriter};

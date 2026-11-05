@@ -2,6 +2,7 @@
 //! Built-in commands. Each one is registered in [`crate::Registry::builtin`].
 
 pub mod auth;
+pub mod cal;
 pub mod config;
 pub mod mail;
 pub mod schema;

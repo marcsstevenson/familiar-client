@@ -110,12 +110,35 @@ pub struct Signature {
 }
 
 /// `[calendar]`.
-#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Calendar {
+    /// How far back events are kept on this device, for example `3m`.
+    #[serde(default = "default_calendar_past")]
+    pub past: String,
+    /// How far ahead events are kept on this device, for example `1y`.
+    #[serde(default = "default_calendar_future")]
+    pub future: String,
     /// Named purposes (`--purpose family`) mapped to a calendar on an account.
     #[serde(default)]
     pub purposes: BTreeMap<String, Purpose>,
+}
+
+impl Default for Calendar {
+    fn default() -> Self {
+        Self {
+            past: default_calendar_past(),
+            future: default_calendar_future(),
+            purposes: BTreeMap::new(),
+        }
+    }
+}
+
+fn default_calendar_past() -> String {
+    "3m".into()
+}
+fn default_calendar_future() -> String {
+    "1y".into()
 }
 
 /// One entry in `[calendar.purposes]`.

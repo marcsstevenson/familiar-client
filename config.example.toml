@@ -47,6 +47,10 @@ reply = '''
 <p>Your Name<br>Your club role</p>
 '''
 
+[calendar]
+past = "3m"                # events kept on this device from this far back
+future = "1y"              # and this far ahead
+
 # Named calendars for `fam cal add --purpose family`.
 [calendar.purposes]
 family = { account = "hotmail", calendar = "Family Room" }

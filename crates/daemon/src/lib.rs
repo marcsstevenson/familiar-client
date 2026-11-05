@@ -3,7 +3,7 @@
 //!
 //! - [`policy`]: what to keep and how often to poll, from `[sync]`.
 //! - [`engine`]: one task per account: first sync, polling, body backfill
-//!   for the window, ageing and the body cache.
+//!   for the window, ageing and the body cache, and calendars.
 //! - [`service`]: requests from `fam` and the GUI (status, pin, on-demand
 //!   body fetch, server search, sync now, the consistency check, stop).
 //! - [`indexer`]: keeps the search index beside the store up to date.
@@ -25,7 +25,7 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use familiar_core::daemon::DaemonPaths;
-use familiar_provider_graph::{GraphClient, MailApi, MailSync};
+use familiar_provider_graph::{CalendarApi, CalendarSync, GraphClient, MailApi, MailSync};
 use familiar_store::{NewAccount, SharedWriter, Writer};
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
@@ -151,6 +151,7 @@ impl Daemon {
                     })
                 })
                 .map_err(StartError::Store)?;
+            let calendar = CalendarSync::new(CalendarApi::new(spec.client.clone()), id);
             let api = MailApi::new(spec.client);
             let mut sync = MailSync::new(api.clone(), id);
             if let Some(n) = opts.page_size {
@@ -161,6 +162,7 @@ impl Daemon {
                 spec.key.clone(),
                 id,
                 sync,
+                calendar,
                 w.clone(),
                 policy.clone(),
                 opts.clock.clone(),

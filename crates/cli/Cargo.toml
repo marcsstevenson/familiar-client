@@ -29,4 +29,6 @@ workspace = true
 schemars.workspace = true
 serde.workspace = true
 familiar-mock-graph.workspace = true
+familiar-provider-graph.workspace = true
+tempfile = "3"
 tokio = { version = "1", features = ["rt-multi-thread"] }

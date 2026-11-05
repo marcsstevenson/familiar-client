@@ -9,6 +9,9 @@ repository.workspace = true
 publish.workspace = true
 
 [dependencies]
+chrono = { version = "0.4", default-features = false, features = ["std"] }
+chrono-tz = { version = "0.10", features = ["case-insensitive"] }
+iana-time-zone = "0.1"
 familiar-auth.workspace = true
 familiar-config.workspace = true
 familiar-store.workspace = true

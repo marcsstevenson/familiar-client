@@ -37,6 +37,11 @@ pub const MIGRATIONS: &[Migration] = &[
         name: "search queue",
         sql: include_str!("../migrations/0003_search_queue.sql"),
     },
+    Migration {
+        version: 4,
+        name: "calendar",
+        sql: include_str!("../migrations/0004_calendar.sql"),
+    },
 ];
 
 /// The schema version this build reads and writes.
@@ -100,13 +105,15 @@ mod tests {
     #[test]
     fn fresh_store_gets_every_table() {
         let mut c = mem();
-        assert_eq!(migrate(&mut c, MIGRATIONS).unwrap(), vec![1, 2, 3]);
+        assert_eq!(migrate(&mut c, MIGRATIONS).unwrap(), vec![1, 2, 3, 4]);
         assert_eq!(version(&c).unwrap(), SCHEMA_VERSION);
         assert_eq!(
             tables(&c),
             [
                 "accounts",
                 "bodies",
+                "calendars",
+                "events",
                 "folder_threads",
                 "folders",
                 "messages",
