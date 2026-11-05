@@ -119,6 +119,17 @@ impl Reader {
         query::folder_messages(&self.conn, folder, after, limit)
     }
 
+    /// Like [`Reader::messages`], keeping only the messages `filter` allows.
+    pub fn messages_filtered(
+        &self,
+        folder: FolderId,
+        filter: MessageFilter,
+        after: Option<Cursor>,
+        limit: usize,
+    ) -> Result<Vec<Message>> {
+        query::folder_messages_filtered(&self.conn, folder, filter, after, limit)
+    }
+
     /// A page of a folder's conversations, newest first.
     pub fn threads(
         &self,

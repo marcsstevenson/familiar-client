@@ -233,6 +233,15 @@ pub struct FolderThread {
     pub unread_count: i64,
 }
 
+/// Which of a folder's messages to list.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct MessageFilter {
+    /// Only unread messages.
+    pub unread_only: bool,
+    /// Only flagged messages.
+    pub flagged_only: bool,
+}
+
 /// A keyset paging position: the last row of the previous page. Pages are
 /// newest first, so the next page holds rows strictly older than this.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]

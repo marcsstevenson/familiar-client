@@ -21,6 +21,7 @@
 //! | [`METHOD_SYNC_NOW`] | [`SyncNowParams`] | `{}` |
 //! | [`METHOD_SEARCH_ONLINE`] | [`SearchOnlineParams`] | [`SearchOnlineResult`] |
 //! | [`METHOD_CHECK`] | [`CheckParams`] | [`CheckReport`] |
+//! | [`METHOD_GRAPH_GET`] | [`GraphGetParams`] | the Graph response's JSON |
 //! | [`METHOD_STOP`] | none | `{}`, then the daemon exits |
 //!
 //! # Where
@@ -54,6 +55,9 @@ pub const METHOD_SEARCH_ONLINE: &str = "mail.search_online";
 pub const METHOD_STOP: &str = "daemon.stop";
 /// `sync.check`: compare the store with the server and report drift (WP 1.12).
 pub const METHOD_CHECK: &str = "sync.check";
+
+/// `graph.get`: GET a Microsoft Graph path with an account's token (`fam api`).
+pub const METHOD_GRAPH_GET: &str = "graph.get";
 
 /// The `sync_state` resource the engine sets once an account's first sync of
 /// headers has finished.
@@ -384,6 +388,17 @@ pub struct SearchOnlineResult {
     /// Accounts whose search failed.
     #[serde(default)]
     pub failures: Vec<AccountFailure>,
+}
+
+/// `graph.get` params.
+#[derive(Debug, Clone, Default, Serialize, Deserialize, JsonSchema)]
+pub struct GraphGetParams {
+    /// Account key; may be left out when famd syncs only one account.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub account: Option<String>,
+    /// A path under `https://graph.microsoft.com/v1.0` such as
+    /// `/me/mailFolders?$top=5`, or a full link Graph returned (`@odata.nextLink`).
+    pub path: String,
 }
 
 /// `sync.check` params.

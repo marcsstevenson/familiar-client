@@ -38,7 +38,7 @@ A failed step is recorded on the folder (shown under `errors` in `fam sync statu
 | --- | --- | --- |
 | Window | While the message is newer than `sync.window` | The body backfill |
 | Pinned | Always | `fam mail pin`; downloaded first if needed |
-| Cached | Until the cache needs room (least recently used first) | Opening an older message (the `mail.fetch_body` request, which `fam mail fetch` (WP 1.10) and the app will use), or unpinning one outside the window |
+| Cached | Until the cache needs room (least recently used first) | Opening an older message (`fam mail fetch`, or the app, through the `mail.fetch_body` request), or unpinning one outside the window |
 
 `sync.cache_limit` bounds the cached bodies only; window and pinned bodies don't count against it. `sync.older_bodies = "none"` refuses on-demand downloads of bodies older than the window (pinning still downloads).
 
@@ -53,6 +53,7 @@ JSON-RPC 2.0, one JSON object per line. The protocol types and a blocking client
 | `mail.fetch_body` | `{"message": id}` | `{"message", "fetched", "cached"}` |
 | `sync.now` | `{"account": key}` (optional) | `{}` |
 | `sync.check` | `{"account", "limit", "no_settle"}` (all optional) | the check report, below |
+| `graph.get` | `{"account", "path"}` (`account` optional with one account) | Graph's JSON response (`fam api`, GET only; see [cli-read.md](cli-read.md#fam-api)) |
 | `daemon.stop` | none | `{}`, then the daemon exits |
 
 Errors carry the command error kind in `error.data.kind`, so a failure inside `famd` exits `fam` with the same code it would have locally (see [exit-codes.md](exit-codes.md)).
@@ -87,6 +88,8 @@ Threads are built locally, not by asking Graph per folder. Every message row poi
 
 - `conversation(thread)` and `conversation_of(message)`: the whole conversation oldest first, with each message's folder, `from_me` (sent from the account's address), `in_trash` (Deleted Items or Junk Email; `without_trash()` leaves those out), the subject without `RE:`/`FW:` prefixes, the participants and per-folder counts. Copies of one message (same Internet Message-ID, such as mail to yourself in both Inbox and Sent Items) are shown once: the copy outside the trash, then one with a body, then the oldest; it is unread if any copy is, and the others are listed under `copies`.
 - `conversations(folder, after, limit)`: a threaded folder list, newest first by the folder's own newest message and keyset paged with `row.cursor()`. Each row has the folder's counts and the totals across all folders, plus the newest message anywhere, so an Inbox row shows a reply that is in Sent Items.
+
+The read commands built on these views (`fam mail list`, `thread`, `fetch`, `fam folder list`) are described in [cli-read.md](cli-read.md).
 
 ## Tests
 

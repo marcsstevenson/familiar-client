@@ -159,6 +159,35 @@ pub(crate) fn folder_messages(
         .collect::<Result<_, _>>()?)
 }
 
+/// Like [`folder_messages`], keeping only unread and/or flagged messages.
+pub(crate) fn folder_messages_filtered(
+    c: &Connection,
+    folder: FolderId,
+    filter: MessageFilter,
+    after: Option<Cursor>,
+    limit: usize,
+) -> Result<Vec<Message>> {
+    let (t, id) = after.map_or((i64::MAX, i64::MAX), |k| (k.received_at, k.id));
+    let mut s = c.prepare_cached(&format!(
+        "SELECT {MESSAGE_COLS} FROM messages m
+          WHERE m.folder_id = ?1 AND (m.received_at, m.id) < (?2, ?3)
+            AND (?5 = 0 OR m.is_read = 0) AND (?6 = 0 OR m.is_flagged = 1)
+          ORDER BY m.received_at DESC, m.id DESC LIMIT ?4"
+    ))?;
+    Ok(s.query_map(
+        params![
+            folder,
+            t,
+            id,
+            limit as i64,
+            filter.unread_only,
+            filter.flagged_only
+        ],
+        message,
+    )?
+    .collect::<Result<_, _>>()?)
+}
+
 /// Threads in a folder, newest first, keyset paged on (last_received_at, thread id).
 pub(crate) fn folder_threads(
     c: &Connection,

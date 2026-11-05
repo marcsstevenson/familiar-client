@@ -11,8 +11,9 @@ use std::sync::Arc;
 
 use familiar_core::daemon::{
     AccountFailure, CheckParams, CheckReport, DaemonStatus, FetchBodyParams, FetchBodyResult,
-    METHOD_CHECK, METHOD_FETCH_BODY, METHOD_PIN, METHOD_SEARCH_ONLINE, METHOD_STATUS, METHOD_STOP,
-    METHOD_SYNC_NOW, PinParams, PinResult, SearchOnlineParams, SearchOnlineResult, SyncNowParams,
+    GraphGetParams, METHOD_CHECK, METHOD_FETCH_BODY, METHOD_GRAPH_GET, METHOD_PIN,
+    METHOD_SEARCH_ONLINE, METHOD_STATUS, METHOD_STOP, METHOD_SYNC_NOW, PinParams, PinResult,
+    SearchOnlineParams, SearchOnlineResult, SyncNowParams,
 };
 use familiar_core::{CommandError, ErrorKind};
 use familiar_provider_graph::{Error as GraphError, MailApi, Priority};
@@ -103,12 +104,59 @@ impl Service {
                 Ok(json!({}))
             }
             METHOD_CHECK => to_value(&self.check(params(p)?).await?),
+            METHOD_GRAPH_GET => self.graph_get(params(p)?).await,
             METHOD_STOP => {
                 let _ = self.shutdown.send(true);
                 Ok(json!({}))
             }
             m => Err(CommandError::usage(format!("famd has no method {m:?}"))),
         }
+    }
+
+    /// `graph.get` (`fam api`): one GET with the account's token, at user
+    /// priority on its scheduler, so throttling and token refresh behave as
+    /// they do for sync. Only GET exists; writes come with the op queue.
+    pub async fn graph_get(&self, p: GraphGetParams) -> Result<Value, CommandError> {
+        let mut keys: Vec<&str> = self.accounts.values().map(|a| a.key.as_str()).collect();
+        keys.sort_unstable();
+        let handle = match p.account.as_deref() {
+            Some(k) => self.accounts.values().find(|a| a.key == k).ok_or_else(|| {
+                CommandError::new(
+                    ErrorKind::NotFound,
+                    format!("famd is not syncing an account {k:?}"),
+                )
+            })?,
+            None => {
+                let mut all = self.accounts.values();
+                match (all.next(), all.next()) {
+                    (Some(a), None) => a,
+                    (None, _) => {
+                        return Err(CommandError::new(
+                            ErrorKind::NotFound,
+                            "famd is not syncing any account",
+                        ));
+                    }
+                    _ => {
+                        return Err(CommandError::usage(format!(
+                            "say which account with --account ({})",
+                            keys.join(", ")
+                        )));
+                    }
+                }
+            }
+        };
+        handle
+            .api
+            .client()
+            .get(&p.path, Priority::User, &[])
+            .await
+            .map_err(|e| match e {
+                // A malformed request is the caller's mistake, not the server's.
+                GraphError::Graph { status: 400, .. } => {
+                    CommandError::usage(format!("Graph rejected the request: {e}"))
+                }
+                e => command_error(e),
+            })
     }
 
     /// `daemon.status`.

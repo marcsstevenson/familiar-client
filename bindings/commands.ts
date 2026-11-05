@@ -128,6 +128,17 @@ export type AccountSyncStatus = {
   unread: number;
 };
 
+export type AnyValue = unknown;
+
+export type ApiInput = {
+  /** The account whose token to use (its name in config.toml). May be left out when famd syncs only one account. */
+  account?: string | null;
+  /** HTTP method. Only GET is allowed until writes arrive in Phase 2. */
+  method?: string | null;
+  /** A Graph path under https://graph.microsoft.com/v1.0, such as '/me/mailFolders?$top=5', or a full link Graph returned, such as an @odata.nextLink. */
+  path: string;
+};
+
 export type AuthLoginInput = {
   /** The account name, for example `hotmail` (lowercase letters, digits, - and _). */
   account: string;
@@ -166,6 +177,10 @@ export type AuthStatusOutput = {
   /** Where tokens are kept: `keychain` or `file`. */
   store: string;
 };
+
+export type BodyFormat = "text" | "html";
+
+export type BodyType = "text" | "html";
 
 export type CalCalendar = {
   /** Account name. */
@@ -382,7 +397,146 @@ export type ExitCodeDoc = {
   kind?: ErrorKind | null;
 };
 
+export type FolderListInput = {
+  /** Only this account (its name in config.toml). */
+  account?: string | null;
+};
+
+export type FolderListOutput = {
+  /** Folders by account, each account's tree depth first, siblings by name. */
+  folders: Array<FolderRow>;
+};
+
+export type FolderRow = {
+  /** Account name. */
+  account: string;
+  /** How deep it is: 0 at the top level. */
+  depth: number;
+  /** Local folder ID. */
+  id: number;
+  /** Display name. */
+  name: string;
+  /** Parent folder's local ID; absent at the top level. */
+  parent?: number | null;
+  /** Full path from the top of the mailbox, such as `Inbox/Club`. Accepted by `fam mail list --folder`. */
+  path: string;
+  /** Graph folder ID. */
+  remote_id: string;
+  /** Messages in the folder on this device. */
+  total: number;
+  /** Unread messages in the folder. */
+  unread: number;
+  /** Graph well-known name (`inbox`, `sentitems`, `deleteditems`, ...), if any. */
+  well_known?: string | null;
+};
+
 export type HitSource = "local" | "online";
+
+export type Importance = "low" | "normal" | "high";
+
+export type ListedFolder = {
+  /** Account name. */
+  account: string;
+  /** Folder path. */
+  folder: string;
+  /** Local folder ID. */
+  folder_id: number;
+  /** Messages in the folder. */
+  total: number;
+  /** Unread messages in the folder. */
+  unread: number;
+};
+
+export type MailAddress = {
+  /** Email address. */
+  addr: string;
+  /** Display name, possibly empty. */
+  name: string;
+};
+
+export type MailFetchInput = {
+  /** text (default) converts HTML to plain text; html returns the body as stored. */
+  format?: BodyFormat;
+  /** Don't download: show the body only if it is already on this device. */
+  local?: boolean;
+  /** The message's local ID. */
+  message: number;
+};
+
+export type MailFetchOutput = {
+  /** Account name. */
+  account: string;
+  /** The body; absent with `--local` when it isn't on this device. */
+  body?: string | null;
+  /** Whether the body is on this device. */
+  body_local: boolean;
+  /** Whether the body is pinned to this device. */
+  body_pinned: boolean;
+  /** The type of `body` as returned. */
+  body_type?: BodyType | null;
+  /** Whether the body is kept in the on-demand cache (it is outside the sync window and not pinned), so it may be evicted later. */
+  cached: boolean;
+  /** Cc recipients. */
+  cc: Array<MailAddress>;
+  /** Whether the body was downloaded for this request. */
+  downloaded: boolean;
+  /** Folder path, such as `Inbox` or `Inbox/Club`. */
+  folder: string;
+  /** Local folder ID. */
+  folder_id: number;
+  /** Sender. */
+  from: MailAddress;
+  /** Has file attachments. */
+  has_attachments: boolean;
+  /** Local message ID, for `fam mail thread`, `fetch` and `pin`. */
+  id: number;
+  /** Importance. */
+  importance: Importance;
+  /** RFC 5322 Message-ID, when known. */
+  internet_message_id?: string | null;
+  /** Follow-up flag. */
+  is_flagged: boolean;
+  /** Read state. */
+  is_read: boolean;
+  /** Short text preview. */
+  preview: string;
+  /** Received time (RFC 3339, UTC). */
+  received_at: string;
+  /** Graph immutable ID, for `fam api`. */
+  remote_id: string;
+  /** Sent time (RFC 3339, UTC), when known. */
+  sent_at?: string | null;
+  /** Subject. */
+  subject: string;
+  /** Local conversation ID. */
+  thread: number;
+  /** To recipients. */
+  to: Array<MailAddress>;
+};
+
+export type MailListInput = {
+  /** Only this account (its name in config.toml, or its address). Default: every account. */
+  account?: string | null;
+  /** The next-page token from a previous list. */
+  after?: string | null;
+  /** Only flagged messages. */
+  flagged?: boolean;
+  /** Folder name, path (Inbox/Club) or well-known name (inbox, sentitems, drafts, deleteditems, archive, junkemail). Default: inbox. */
+  folder?: string | null;
+  /** Most messages per page (default 50, at most 500). */
+  limit?: number | null;
+  /** Only unread messages. */
+  unread?: boolean;
+};
+
+export type MailListOutput = {
+  /** The folders listed (one per account when no account is named). */
+  folders: Array<ListedFolder>;
+  /** Messages, newest first, across those folders. */
+  messages: Array<MessageHeader>;
+  /** Pass as `--after` for the next page. */
+  next?: string | null;
+};
 
 export type MailPinInput = {
   /** The message's local ID. */
@@ -417,6 +571,36 @@ export type MailSearchOutput = {
   query: string;
 };
 
+export type MailThreadInput = {
+  /** The local ID of any message in the conversation. */
+  message: number;
+  /** Leave out messages in Deleted Items and Junk Email. */
+  no_trash?: boolean;
+};
+
+export type MailThreadOutput = {
+  /** Account name. */
+  account: string;
+  /** Graph conversation ID. */
+  conversation_id: string;
+  /** Where the conversation's messages are. */
+  folders: Array<ThreadFolder>;
+  /** Newest message time (RFC 3339, UTC). */
+  last_received_at: string;
+  /** Messages after copies are merged (trash included). */
+  message_count: number;
+  /** The messages, oldest first, across every folder. */
+  messages: Array<ThreadMessage>;
+  /** Everyone on the conversation, in order of first appearance. */
+  participants: Array<MailAddress>;
+  /** Subject without RE:/FW: prefixes. */
+  subject: string;
+  /** Local conversation ID. */
+  thread: number;
+  /** Messages with an unread copy. */
+  unread_count: number;
+};
+
 export type McpAnnotations = {
   /** The tool may delete or send. */
   destructiveHint: boolean;
@@ -442,6 +626,49 @@ export type McpTool = {
 export type McpToolList = {
   /** One tool per command. */
   tools: Array<McpTool>;
+};
+
+export type MessageHeader = {
+  /** Account name. */
+  account: string;
+  /** Whether the body is on this device. */
+  body_local: boolean;
+  /** Whether the body is pinned to this device. */
+  body_pinned: boolean;
+  /** Cc recipients. */
+  cc: Array<MailAddress>;
+  /** Folder path, such as `Inbox` or `Inbox/Club`. */
+  folder: string;
+  /** Local folder ID. */
+  folder_id: number;
+  /** Sender. */
+  from: MailAddress;
+  /** Has file attachments. */
+  has_attachments: boolean;
+  /** Local message ID, for `fam mail thread`, `fetch` and `pin`. */
+  id: number;
+  /** Importance. */
+  importance: Importance;
+  /** RFC 5322 Message-ID, when known. */
+  internet_message_id?: string | null;
+  /** Follow-up flag. */
+  is_flagged: boolean;
+  /** Read state. */
+  is_read: boolean;
+  /** Short text preview. */
+  preview: string;
+  /** Received time (RFC 3339, UTC). */
+  received_at: string;
+  /** Graph immutable ID, for `fam api`. */
+  remote_id: string;
+  /** Sent time (RFC 3339, UTC), when known. */
+  sent_at?: string | null;
+  /** Subject. */
+  subject: string;
+  /** Local conversation ID. */
+  thread: number;
+  /** To recipients. */
+  to: Array<MailAddress>;
 };
 
 export type OnlineStatus = "not_requested" | "not_needed" | "searched" | "offline" | "daemon_unavailable" | "failed";
@@ -558,6 +785,64 @@ export type SyncStatusOutput = {
   window: string;
 };
 
+export type ThreadFolder = {
+  /** Messages (copies included) in the folder. */
+  count: number;
+  /** Folder path. */
+  folder: string;
+  /** Local folder ID. */
+  folder_id: number;
+};
+
+export type ThreadMessage = {
+  /** Account name. */
+  account: string;
+  /** Whether the body is on this device. */
+  body_local: boolean;
+  /** Whether the body is pinned to this device. */
+  body_pinned: boolean;
+  /** Cc recipients. */
+  cc: Array<MailAddress>;
+  /** Local IDs of other copies of the same message (same Message-ID), such as mail sent to yourself, which is in both Inbox and Sent Items. */
+  copies: Array<number>;
+  /** Folder path, such as `Inbox` or `Inbox/Club`. */
+  folder: string;
+  /** Local folder ID. */
+  folder_id: number;
+  /** Sender. */
+  from: MailAddress;
+  /** Sent from the account's own address. */
+  from_me: boolean;
+  /** Has file attachments. */
+  has_attachments: boolean;
+  /** Local message ID, for `fam mail thread`, `fetch` and `pin`. */
+  id: number;
+  /** Importance. */
+  importance: Importance;
+  /** In Deleted Items or Junk Email. */
+  in_trash: boolean;
+  /** RFC 5322 Message-ID, when known. */
+  internet_message_id?: string | null;
+  /** Follow-up flag. */
+  is_flagged: boolean;
+  /** Read state. */
+  is_read: boolean;
+  /** Short text preview. */
+  preview: string;
+  /** Received time (RFC 3339, UTC). */
+  received_at: string;
+  /** Graph immutable ID, for `fam api`. */
+  remote_id: string;
+  /** Sent time (RFC 3339, UTC), when known. */
+  sent_at?: string | null;
+  /** Subject. */
+  subject: string;
+  /** Local conversation ID. */
+  thread: number;
+  /** To recipients. */
+  to: Array<MailAddress>;
+};
+
 export type VersionInput = {
   /** Also report the operating system and CPU architecture. */
   verbose?: boolean;
@@ -576,6 +861,8 @@ export type VersionOutput = {
 
 /** Every command, by dotted name, with its input and output types. */
 export interface Commands {
+  /** Call Microsoft Graph directly (GET only) */
+  "api": { input: ApiInput; output: AnyValue };
   /** Sign in to a Microsoft account */
   "auth.login": { input: AuthLoginInput; output: AccountSignIn };
   /** Sign out: forget an account's tokens */
@@ -590,10 +877,18 @@ export interface Commands {
   "config.path": { input: ConfigPathInput; output: ConfigPathOutput };
   /** Check config.toml for errors */
   "config.validate": { input: ConfigPathInput; output: ConfigValidateOutput };
+  /** List mail folders */
+  "folder.list": { input: FolderListInput; output: FolderListOutput };
+  /** Show a message with its text */
+  "mail.fetch": { input: MailFetchInput; output: MailFetchOutput };
+  /** List messages in a folder */
+  "mail.list": { input: MailListInput; output: MailListOutput };
   /** Keep a message's body on this device */
   "mail.pin": { input: MailPinInput; output: PinResult };
   /** Search mail across all accounts */
   "mail.search": { input: MailSearchInput; output: MailSearchOutput };
+  /** Show a whole conversation */
+  "mail.thread": { input: MailThreadInput; output: MailThreadOutput };
   /** Describe every command, its input, output and errors */
   "schema": { input: SchemaInput; output: SchemaOutput };
   /** Compare the store with the server and report drift */
@@ -609,6 +904,7 @@ export type CommandName = keyof Commands;
 
 /** Every command name, in order. */
 export const COMMAND_NAMES = [
+  "api",
   "auth.login",
   "auth.logout",
   "auth.status",
@@ -616,8 +912,12 @@ export const COMMAND_NAMES = [
   "cal.list",
   "config.path",
   "config.validate",
+  "folder.list",
+  "mail.fetch",
+  "mail.list",
   "mail.pin",
   "mail.search",
+  "mail.thread",
   "schema",
   "sync.check",
   "sync.status",
