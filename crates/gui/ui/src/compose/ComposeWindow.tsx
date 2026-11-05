@@ -56,6 +56,8 @@ export function ComposeWindow(props: { info: UiInfo; spec: ComposeSpec }) {
   const [outside, setOutside] = createSignal<string | null>(null);
   const [sending, setSending] = createSignal<{ op: number; at: number } | null>(null);
   const [now, setNow] = createSignal(Date.now());
+  // A save is waiting on the engine: the From account can't change under it.
+  const [inFlight, setInFlight] = createSignal(false);
 
   // What changed since the last save, and attachments to take off.
   const edited = new Set<Field>();
@@ -114,7 +116,10 @@ export function ComposeWindow(props: { info: UiInfo; spec: ComposeSpec }) {
     if (id === null && blank()) return;
     const fresh = attachments().filter((a) => a.path !== undefined);
     const attach = fresh.map((a) => a.path!);
+    const removing = removals;
+    removals = [];
     setStatus("Saving…");
+    setInFlight(true);
     try {
       if (id === null) {
         const out = await run("draft.create", {
@@ -138,20 +143,22 @@ export function ComposeWindow(props: { info: UiInfo; spec: ComposeSpec }) {
           ...(edited.has("subject") ? { subject: subject() } : {}),
           ...(edited.has("body") ? body() : {}),
           attach,
-          remove_attachment: removals,
+          remove_attachment: removing,
         });
       }
       // Files are on the draft now; they need no path from here on.
       setAttachments((list) => list.map((a) => (fresh.includes(a) ? { name: a.name, size: a.size } : a)));
-      removals = [];
       if (generation === gen) edited.clear();
       savedGeneration = gen;
       setProblem(null);
       setStatus("Saved");
     } catch (e) {
+      removals = [...removing, ...removals];
       setStatus("");
       setProblem(`Not saved: ${errorText(e)}`);
       throw e;
+    } finally {
+      setInFlight(false);
     }
   }
 
@@ -497,7 +504,7 @@ export function ComposeWindow(props: { info: UiInfo; spec: ComposeSpec }) {
               <select
                 id="compose-from"
                 value={account() ?? ""}
-                disabled={busy() || !canSwitchAccount()}
+                disabled={busy() || inFlight() || !canSwitchAccount()}
                 title={canSwitchAccount() ? "" : "A reply or a saved draft stays on its account"}
                 onChange={(e) => switchAccount(e.currentTarget.value)}
               >
