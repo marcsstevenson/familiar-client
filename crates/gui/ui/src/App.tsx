@@ -3,6 +3,7 @@
 // reading pane.
 import { Show, createSignal, onCleanup, onMount } from "solid-js";
 import { type DaemonState, type UiInfo, watchDaemon } from "./api";
+import { ReadingPane } from "./reading/ReadingPane";
 import { TitleBar } from "./TitleBar";
 
 function daemonText(s: DaemonState): string {
@@ -32,9 +33,7 @@ export function App(props: { info: UiInfo }) {
         <section class="pane list" aria-label="Messages">
           <div class="pane-empty">No messages</div>
         </section>
-        <section class="pane reading" aria-label="Reading pane">
-          <div class="pane-empty">Select a message to read it</div>
-        </section>
+        <ReadingPane />
       </main>
       <footer class="statusbar" role="status">
         <span classList={{ warn: daemon().state === "unavailable" }}>{daemonText(daemon())}</span>

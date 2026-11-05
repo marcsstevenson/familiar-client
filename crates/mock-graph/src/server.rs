@@ -1201,6 +1201,8 @@ fn route(c: &Ctx<'_>, method: &str) -> R {
         }
         ["messages"] => list_messages(c, None),
         ["messages", _] => get_message(c, segs[1], None),
+        ["messages", _, "attachments"] => list_attachments(c, segs[1]),
+        ["messages", _, "attachments", _] => get_attachment(c, segs[1], segs[3]),
         ["calendars"] => {
             let items: Vec<Value> = st
                 .calendars
@@ -1425,6 +1427,43 @@ fn get_message(c: &Ctx<'_>, id: &str, folder: Option<&str>) -> R {
         return Err(GraphError::not_found());
     }
     Ok(Reply::ok(c.select(render::message(rec, &c.prefer))))
+}
+
+fn attachment_json(a: &crate::model::Attachment) -> Value {
+    json!({
+        "@odata.type": "#microsoft.graph.fileAttachment",
+        "id": a.id,
+        "name": a.name,
+        "contentType": a.content_type,
+        "size": a.content_bytes.len() / 4 * 3,
+        "isInline": a.is_inline,
+        "contentId": a.content_id,
+        "contentBytes": a.content_bytes,
+    })
+}
+
+fn list_attachments(c: &Ctx<'_>, id: &str) -> R {
+    let st = c.st;
+    let imm = st.lookup_message(id).ok_or_else(GraphError::not_found)?;
+    let items: Vec<Value> = st.messages[imm]
+        .msg
+        .attachments
+        .iter()
+        .map(|a| c.select(attachment_json(a)))
+        .collect();
+    paged(c, items, "users('me')/messages/attachments", DEFAULT_PAGE)
+}
+
+fn get_attachment(c: &Ctx<'_>, id: &str, att: &str) -> R {
+    let st = c.st;
+    let imm = st.lookup_message(id).ok_or_else(GraphError::not_found)?;
+    let a = st.messages[imm]
+        .msg
+        .attachments
+        .iter()
+        .find(|a| a.id == att)
+        .ok_or_else(GraphError::not_found)?;
+    Ok(Reply::ok(c.select(attachment_json(a))))
 }
 
 // --- delta -----------------------------------------------------------------

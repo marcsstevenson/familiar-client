@@ -1,0 +1,14 @@
+<!-- Remote content: blocked by default, counted, layout kept. -->
+<p>Newsletter</p>
+<img src="https://cdn.example.com/hero.jpg" width="600" height="200" alt="Hero">
+<img src="http://track.example.com/open.gif?u=123" width="1" height="1">
+<img srcset="https://cdn.example.com/a.jpg 1x, https://cdn.example.com/b.jpg 2x" src="https://cdn.example.com/a.jpg">
+<table background="https://cdn.example.com/bg.png"><tr><td style="background-image:url('https://cdn.example.com/cell.png')">cell</td></tr></table>
+<style>@import url("https://evil.example/i.css"); .x { background: url(https://evil.example/pixel.png) }</style>
+<video poster="https://cdn.example.com/poster.jpg" src="https://cdn.example.com/v.mp4"></video>
+<audio src="https://cdn.example.com/a.mp3"></audio>
+<picture><source srcset="https://cdn.example.com/p.webp"><img src="https://cdn.example.com/p.jpg"></picture>
+<img src="//cdn.example.com/protocol-relative.png">
+<img src="data:image/png;base64,iVBORw0KGgo=" alt="inline data image stays">
+<img src="data:text/html;base64,PHNjcmlwdD4=" alt="data html image goes">
+<img src="file:///C:/Windows/win.ini">
