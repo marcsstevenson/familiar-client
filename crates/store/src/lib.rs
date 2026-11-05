@@ -31,6 +31,7 @@
 
 mod bodies;
 mod calendar;
+mod contacts;
 mod conversation;
 mod error;
 mod migrate;
@@ -42,6 +43,7 @@ mod writer;
 
 pub use bodies::{BodyHash, INLINE_BODY_MAX};
 pub use calendar::{Attendee, Calendar, Event, EventData, EventRange, NewCalendar};
+pub use contacts::{Contact, NewContact, Person};
 pub use conversation::{
     Conversation, ConversationFolder, ConversationMessage, ConversationSummary, DRAFTS,
     LatestMessage, MessageCopy, SENT_ITEMS, TRASH_FOLDERS, normalize_subject,
@@ -49,10 +51,10 @@ pub use conversation::{
 pub use error::{Error, Result};
 pub use migrate::{MIGRATIONS, Migration, SCHEMA_VERSION};
 pub use model::{
-    Account, AccountId, Address, AuditEntry, BodyRef, BodyStats, CalendarId, Cursor, EventId,
-    EvictReport, Folder, FolderId, FolderThread, LOCAL_REMOTE_PREFIX, Message, MessageFilter,
-    MessageId, NewAccount, NewAudit, NewFolder, NewMessage, NewOp, Op, OpId, OpState,
-    SearchQueueBatch, SyncState, ThreadId, event_target, folder_target, message_target,
+    Account, AccountId, Address, AuditEntry, BodyRef, BodyStats, CalendarId, ContactId, Cursor,
+    EventId, EvictReport, Folder, FolderId, FolderThread, LOCAL_REMOTE_PREFIX, Message,
+    MessageFilter, MessageId, NewAccount, NewAudit, NewFolder, NewMessage, NewOp, Op, OpId,
+    OpState, SearchQueueBatch, SyncState, ThreadId, event_target, folder_target, message_target,
     series_target,
 };
 pub use reader::Reader;

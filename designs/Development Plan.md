@@ -153,7 +153,7 @@ The goal is a CLI that can replace Composio and the Microsoft 365 connector for 
 | 2.8 | **Agent skill.** The shipped skill describing common workflows, built from `fam schema --json` | 2.7 | Claude completes the gate tasks using only the skill |
 | 2.9 | **Gate tasks on real accounts.** Find a thread, save a draft, create a Family Room event from an email, all through `fam` | 2.1–2.8 | Marc confirms each task |
 
-**Status (5 Nov 2026):** Marc approved the Phase 1 gate without the few days of use. WP 2.1, 2.2, 2.3 and 2.4 are done against the mock (guide: `docs/writes.md`, tests: `crates/daemon/tests/writes.rs`, `compose.rs` and `calendar_writes.rs`). Not yet in 2.3: attachments over 3 MB (upload sessions) and send-as aliases. Not yet in 2.4: relative monthly patterns (such as the second Tuesday) and changing a series' recurrence after it is made. The `Familiar Test` folder run for 2.2 and the 2.4 done criterion (a Family Room event from a real email) are saved for one batched live session on Marc's PC.
+**Status (5 Nov 2026):** Marc approved the Phase 1 gate without the few days of use. WP 2.1 to 2.5 are done against the mock (guides: `docs/writes.md`, `docs/contacts.md`; tests: `crates/daemon/tests/writes.rs`, `compose.rs`, `calendar_writes.rs` and `contacts.rs`). Not yet in 2.3: attachments over 3 MB (upload sessions) and send-as aliases. Not yet in 2.4: relative monthly patterns (such as the second Tuesday) and changing a series' recurrence after it is made. The `Familiar Test` folder run for 2.2 and the 2.4 done criterion (a Family Room event from a real email) are saved for one batched live session on Marc's PC.
 
 **Phase 2 gate:** the WP 2.9 tasks pass. At this point Marc can switch Claude from Composio to `fam` for mail and calendar.
 

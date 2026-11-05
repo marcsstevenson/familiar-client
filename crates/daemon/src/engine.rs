@@ -40,13 +40,17 @@ use std::time::Duration;
 
 use familiar_core::daemon::{AccountLive, FIRST_SYNC_RESOURCE, SyncPhase};
 use familiar_provider_graph::{
-    CalendarSync, Error as GraphError, MailSync, Priority, events_resource, messages_resource,
+    CalendarSync, ContactSync, Error as GraphError, MailSync, Priority, events_resource,
+    messages_resource,
 };
 use familiar_store::{AccountId, Cursor, Folder, Reader, SharedWriter};
 use tokio::sync::{Notify, watch};
 use tokio::time::Instant;
 
 use crate::policy::{Clock, SyncPolicy};
+
+/// Sync state row for an account's contacts.
+pub const CONTACTS_RESOURCE: &str = "contacts";
 
 /// Shared between an account's engine and the request handlers.
 #[derive(Debug)]
@@ -147,6 +151,7 @@ pub struct Engine {
     account: AccountId,
     sync: MailSync,
     calendar: CalendarSync,
+    contacts: ContactSync,
     w: SharedWriter,
     policy: Arc<SyncPolicy>,
     clock: Clock,
@@ -160,6 +165,7 @@ pub struct Engine {
     body_cursor: Option<Cursor>,
     ageing_due: Instant,
     calendar_due: Instant,
+    contacts_due: Instant,
     failures: u32,
     /// The `sync.now` ticket the current work answers.
     serving: u64,
@@ -173,6 +179,7 @@ impl Engine {
         account: AccountId,
         sync: MailSync,
         calendar: CalendarSync,
+        contacts: ContactSync,
         w: SharedWriter,
         policy: Arc<SyncPolicy>,
         clock: Clock,
@@ -184,6 +191,7 @@ impl Engine {
             account,
             sync,
             calendar,
+            contacts,
             w,
             policy,
             clock,
@@ -196,6 +204,7 @@ impl Engine {
             body_cursor: None,
             ageing_due: Instant::now(),
             calendar_due: Instant::now(),
+            contacts_due: Instant::now(),
             failures: 0,
             serving: 0,
         }
@@ -237,6 +246,7 @@ impl Engine {
                 let now = Instant::now();
                 self.tree_due = Some(now);
                 self.calendar_due = now;
+                self.contacts_due = now;
                 for f in self.folders.values_mut() {
                     f.due = now;
                 }
@@ -313,6 +323,11 @@ impl Engine {
             self.calendar_due = Instant::now() + self.policy.calendar_interval;
             return Ok(Next::Now);
         }
+        if self.contacts_due <= now {
+            self.sync_contacts().await?;
+            self.contacts_due = Instant::now() + self.policy.contacts_interval;
+            return Ok(Next::Now);
+        }
 
         // 2. Due folders.
         let mut due: Vec<&FolderPlan> = self.folders.values().filter(|f| f.due <= now).collect();
@@ -352,7 +367,10 @@ impl Engine {
         }
 
         // Idle until the next thing is due.
-        let mut next = self.ageing_due.min(self.calendar_due);
+        let mut next = self
+            .ageing_due
+            .min(self.calendar_due)
+            .min(self.contacts_due);
         if let Some(t) = self.tree_due {
             next = next.min(t);
         }
@@ -557,6 +575,33 @@ impl Engine {
         }
         self.phase(prev);
         Ok(())
+    }
+
+    /// Outlook contacts, in full. A mailbox that refuses (no consent for
+    /// contacts, say) is logged and left until next time.
+    async fn sync_contacts(&mut self) -> Result<(), GraphError> {
+        let acc = self.account;
+        match self.contacts.sync(&mut self.w, Priority::Background).await {
+            Ok((n, rm)) => {
+                let at = (self.clock)();
+                self.w
+                    .write(|tx| tx.set_sync_state(acc, CONTACTS_RESOURCE, None, None, at))?;
+                if rm > 0 {
+                    crate::log(&format!("{}: contacts: {n} listed, {rm} removed", self.key));
+                }
+                Ok(())
+            }
+            Err(
+                e @ (GraphError::Auth(_) | GraphError::Network(_) | GraphError::Throttled { .. }),
+            ) => Err(e),
+            Err(e) => {
+                let msg = e.to_string();
+                crate::log(&format!("{}: contacts: {msg}", self.key));
+                self.w
+                    .write(|tx| tx.set_sync_error(acc, CONTACTS_RESOURCE, &msg))?;
+                Ok(())
+            }
+        }
     }
 
     fn age(&mut self) -> Result<(), GraphError> {

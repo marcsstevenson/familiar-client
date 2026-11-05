@@ -241,6 +241,7 @@ impl Mailbox {
             messages,
             calendars,
             events,
+            contacts: Vec::new(),
         }
     }
 }

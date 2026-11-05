@@ -6,6 +6,7 @@ pub mod auth;
 pub mod cal;
 pub mod cal_write;
 pub mod config;
+pub mod contacts;
 pub mod draft;
 pub mod folder;
 pub mod mail;

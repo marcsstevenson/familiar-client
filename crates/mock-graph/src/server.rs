@@ -19,7 +19,8 @@ use tokio::sync::oneshot;
 use crate::faults::{Fault, FaultKind};
 use crate::identity::{self, IdReply, Identity};
 use crate::model::{
-    Calendar, Event, FOLDERS, Folder, Mailbox, MailboxState, Message, MutationError, ROOT_ID,
+    Calendar, Contact, Event, FOLDERS, Folder, Mailbox, MailboxState, Message, MutationError,
+    ROOT_ID,
 };
 use crate::recorded::Recording;
 use crate::render::{self, Filter, Prefer, Search, parse_dt};
@@ -491,6 +492,16 @@ impl MailboxHandle<'_> {
     /// Adds an event and returns its ID.
     pub fn add_event(&self, event: Event) -> Result<String, MutationError> {
         self.with(|m| m.insert_event(event))
+    }
+
+    /// Adds a contact and returns its ID.
+    pub fn add_contact(&self, contact: Contact) -> String {
+        self.with(|m| m.add_contact(contact))
+    }
+
+    /// Removes a contact.
+    pub fn remove_contact(&self, id: &str) {
+        self.with(|m| m.contacts.retain(|c| c.id != id));
     }
 
     /// An event by ID.
@@ -1148,6 +1159,23 @@ fn route(c: &Ctx<'_>, method: &str) -> R {
     match l.as_slice() {
         [] => Ok(Reply::ok(render::user(&st.user))),
         ["mailboxsettings"] => Ok(Reply::ok(render::mailbox_settings(&st.user))),
+        ["contacts"] => list_contacts(c, ""),
+        ["contactfolders"] => {
+            let mut ids: Vec<&str> = st
+                .contacts
+                .iter()
+                .map(|x| x.folder_id.as_str())
+                .filter(|f| !f.is_empty())
+                .collect();
+            ids.sort_unstable();
+            ids.dedup();
+            let items: Vec<Value> = ids
+                .into_iter()
+                .map(|id| json!({"id": id, "displayName": id, "parentFolderId": "contacts"}))
+                .collect();
+            paged(c, items, "users('me')/contactFolders", DEFAULT_PAGE)
+        }
+        ["contactfolders", _, "contacts"] => list_contacts(c, segs[1]),
         ["mailfolders"] => list_folders(c, ROOT_ID),
         ["mailfolders", "delta"] => folder_delta(c),
         ["mailfolders", _] => {
@@ -1670,6 +1698,30 @@ fn list_events(c: &Ctx<'_>, raw: &str, window: Option<(DateTime<Utc>, DateTime<U
         .map(|v| c.select(v))
         .collect();
     paged(c, items, "users('me')/events", DEFAULT_PAGE)
+}
+
+fn list_contacts(c: &Ctx<'_>, folder: &str) -> R {
+    let items: Vec<Value> =
+        c.st.contacts
+            .iter()
+            .filter(|x| x.folder_id == folder)
+            .map(|x| {
+                c.select(json!({
+                    "@odata.type": "#microsoft.graph.contact",
+                    "id": x.id,
+                    "displayName": x.display_name,
+                    "companyName": x.company_name,
+                    "emailAddresses": x.email_addresses.iter()
+                        .map(|e| json!({"name": e.name, "address": e.address}))
+                        .collect::<Vec<_>>(),
+                    "mobilePhone": x.mobile_phone,
+                    "businessPhones": [],
+                    "homePhones": [],
+                    "parentFolderId": if folder.is_empty() { "contacts" } else { folder },
+                }))
+            })
+            .collect();
+    paged(c, items, "users('me')/contacts", DEFAULT_PAGE)
 }
 
 /// A series master's occurrences and exceptions in a window.

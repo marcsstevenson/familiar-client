@@ -193,7 +193,7 @@ async fn single_message_and_body_preferences() {
 #[tokio::test]
 async fn unsupported_requests_fail_loudly() {
     let (mock, c) = setup().await;
-    assert_eq!(c.get("/me/contacts").await.status, 400);
+    assert_eq!(c.get("/me/todo/lists").await.status, 400);
     let beta = c.get(&mock.base_url().replace("/v1.0", "/beta/me")).await;
     assert_eq!(beta.status, 400);
     let post = c

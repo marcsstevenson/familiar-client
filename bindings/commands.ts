@@ -489,6 +489,20 @@ export type ConfigWarning = {
   message: string;
 };
 
+export type ContactsSearchInput = {
+  /** Only this account (its name in config.toml). */
+  account?: string | null;
+  /** How many to show, 1 to 200. Default 20. */
+  limit?: number | null;
+  /** The start of a name, address or company (or of any word in a name). Empty lists the people written to most. */
+  query?: string;
+};
+
+export type ContactsSearchOutput = {
+  /** Best first: contacts, then people written to most, then heard from. */
+  people: Array<PersonView>;
+};
+
 export type DaemonInfo = {
   /** Its process ID. */
   pid?: number | null;
@@ -1155,6 +1169,27 @@ export type OpsListOutput = {
   ops: Array<OpView>;
 };
 
+export type PersonView = {
+  /** Accounts that know them. */
+  accounts: Array<string>;
+  /** Address. */
+  address: string;
+  /** Company, from the contact. */
+  company?: string;
+  /** In Outlook contacts. */
+  contact: boolean;
+  /** Last message either way (RFC 3339), if any. */
+  last?: string | null;
+  /** `Name <address>`, ready for --to. */
+  mailbox: string;
+  /** Name, possibly empty. */
+  name: string;
+  /** Messages received from them. */
+  received: number;
+  /** Messages sent to them. */
+  sent: number;
+};
+
 export type PinResult = {
   /** Whether the body was downloaded to pin it. */
   fetched: boolean;
@@ -1395,6 +1430,8 @@ export interface Commands {
   "config.path": { input: ConfigPathInput; output: ConfigPathOutput };
   /** Check config.toml for errors */
   "config.validate": { input: ConfigPathInput; output: ConfigValidateOutput };
+  /** Find people to write to */
+  "contacts.search": { input: ContactsSearchInput; output: ContactsSearchOutput };
   /** Save a new draft */
   "draft.create": { input: DraftCreateInput; output: WriteOutput };
   /** Save a forward as a draft */
@@ -1470,6 +1507,7 @@ export const COMMAND_NAMES = [
   "cal.rsvp",
   "config.path",
   "config.validate",
+  "contacts.search",
   "draft.create",
   "draft.forward",
   "draft.reply",

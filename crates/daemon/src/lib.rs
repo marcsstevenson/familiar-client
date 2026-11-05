@@ -164,6 +164,10 @@ impl Daemon {
                 .map_err(StartError::Store)?;
             let cal_api = CalendarApi::new(spec.client.clone());
             let calendar = CalendarSync::new(cal_api.clone(), id);
+            let contacts = familiar_provider_graph::ContactSync::new(
+                familiar_provider_graph::ContactsApi::new(spec.client.clone()),
+                id,
+            );
             let api = MailApi::new(spec.client);
             let mut sync = MailSync::new(api.clone(), id);
             if let Some(n) = opts.page_size {
@@ -188,6 +192,7 @@ impl Daemon {
                 id,
                 sync,
                 calendar,
+                contacts,
                 w.clone(),
                 policy.clone(),
                 opts.clock.clone(),

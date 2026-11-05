@@ -53,6 +53,8 @@ pub struct SyncPolicy {
     pub calendar_future_days: u32,
     /// How often calendars and their events are polled.
     pub calendar_interval: Duration,
+    /// How often Outlook contacts are listed again.
+    pub contacts_interval: Duration,
     /// First wait before an op that failed for a passing reason (offline,
     /// throttled, server trouble) is tried again; doubles up to `op_retry_max`.
     pub op_retry_min: Duration,
@@ -77,6 +79,7 @@ impl Default for SyncPolicy {
             calendar_past_days: 90,
             calendar_future_days: 365,
             calendar_interval: Duration::from_secs(300),
+            contacts_interval: Duration::from_secs(3600),
             op_retry_min: Duration::from_secs(2),
             op_retry_max: Duration::from_secs(300),
         }

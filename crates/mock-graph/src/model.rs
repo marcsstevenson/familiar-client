@@ -371,6 +371,45 @@ pub struct Mailbox {
     /// Events.
     #[serde(default)]
     pub events: Vec<Event>,
+    /// Contacts.
+    #[serde(default)]
+    pub contacts: Vec<Contact>,
+}
+
+/// An Outlook contact (in the default contacts folder unless `folder_id` says).
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Contact {
+    /// Contact ID. Left empty, one is assigned.
+    #[serde(default)]
+    pub id: String,
+    /// Contact folder ID; empty is the default folder.
+    #[serde(default)]
+    pub folder_id: String,
+    /// Display name.
+    #[serde(default)]
+    pub display_name: String,
+    /// Company.
+    #[serde(default)]
+    pub company_name: String,
+    /// Email addresses.
+    #[serde(default)]
+    pub email_addresses: Vec<EmailAddress>,
+    /// Mobile phone.
+    #[serde(default)]
+    pub mobile_phone: Option<String>,
+}
+
+impl Contact {
+    /// A contact with one address.
+    pub fn new(name: impl Into<String>, address: impl Into<String>) -> Self {
+        let name = name.into();
+        Self {
+            display_name: name.clone(),
+            email_addresses: vec![EmailAddress::new(name, address)],
+            ..Self::default()
+        }
+    }
 }
 
 impl Mailbox {
@@ -487,6 +526,7 @@ pub(crate) struct MailboxState {
     pub event_log: ChangeLog,
     pub calendars: Vec<Calendar>,
     pub events: HashMap<String, EventRecord>,
+    pub contacts: Vec<Contact>,
     pub seq: u64,
     pub delta_epoch: u64,
     next_id: u64,
@@ -510,6 +550,7 @@ impl MailboxState {
             event_log: ChangeLog::default(),
             calendars: Vec::new(),
             events: HashMap::new(),
+            contacts: Vec::new(),
             seq: 0,
             delta_epoch: 1,
             next_id: 0,
@@ -577,6 +618,9 @@ impl MailboxState {
         }
         for e in mailbox.events {
             st.insert_event(e).expect("fixture event calendar exists");
+        }
+        for c in mailbox.contacts {
+            st.add_contact(c);
         }
         st
     }
@@ -850,6 +894,15 @@ impl MailboxState {
             .iter()
             .find(|c| c.id == id || c.name.eq_ignore_ascii_case(id))
             .map(|c| c.id.clone())
+    }
+
+    pub fn add_contact(&mut self, mut c: Contact) -> String {
+        if c.id.is_empty() {
+            c.id = self.new_id("con");
+        }
+        let id = c.id.clone();
+        self.contacts.push(c);
+        id
     }
 
     pub fn add_calendar(&mut self, mut cal: Calendar) -> String {

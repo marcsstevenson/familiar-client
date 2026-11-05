@@ -194,6 +194,7 @@ impl Registry {
         r.register(crate::commands::cal_write::CalEdit);
         r.register(crate::commands::cal_write::CalDelete);
         r.register(crate::commands::cal_write::CalRsvp);
+        r.register(crate::commands::contacts::ContactsSearch);
         r.register(crate::commands::write::MailRead);
         r.register(crate::commands::write::MailFlag);
         r.register(crate::commands::write::MailMove);

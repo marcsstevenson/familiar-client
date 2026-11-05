@@ -16,6 +16,7 @@
 
 mod calendar;
 mod client;
+mod contacts;
 mod error;
 mod mail;
 mod model;
@@ -29,6 +30,7 @@ pub use calendar::{
     events_resource,
 };
 pub use client::{AuthTokens, ClientOptions, GRAPH_V1, GraphClient, StaticToken, TokenSource};
+pub use contacts::{CONTACT_FIELDS, ContactSync, ContactsApi, GraphContact, GraphContactEmail};
 pub use error::{Error, Result};
 pub use mail::{DELTA_PAGE_SIZE, MailApi, STATE_FIELDS};
 pub use model::{

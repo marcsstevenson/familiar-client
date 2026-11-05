@@ -40,6 +40,8 @@ id_type!(
     CalendarId,
     /// Local ID of an event.
     EventId,
+    /// Local ID of a contact.
+    ContactId,
 );
 
 /// An account to add or update, matched by `key`.
