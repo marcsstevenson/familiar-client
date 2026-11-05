@@ -1027,7 +1027,8 @@ fn keyed_location(text: &str) -> Option<String> {
 
 /// How many of `words` at the start make a time of day: `18:00` or
 /// `6pm` is one, `6:30 pm` two. A second word counts only when it is
-/// am or pm, so `20:00 10 Downing Street` keeps its street number.
+/// am or pm, so `20:00 10 Downing Street` keeps its street number, and
+/// a bare `1200` isn't a time.
 fn time_words(words: &[&str]) -> Option<usize> {
     let first = words.first()?;
     if let Some(second) = words.get(1) {
@@ -1035,6 +1036,10 @@ fn time_words(words: &[&str]) -> Option<usize> {
         if (s == "am" || s == "pm") && parse_time(&format!("{first} {second}")).is_some() {
             return Some(2);
         }
+    }
+    // A bare number such as `1200` is more likely a street number here.
+    if first.chars().all(|c| c.is_ascii_digit()) {
+        return None;
     }
     parse_time(first).map(|_| 1)
 }
@@ -1367,6 +1372,16 @@ mod tests {
                 .location
                 .as_deref(),
             Some("10 Downing Street")
+        );
+        assert_eq!(
+            suggest(
+                "Hi",
+                "Fri 6 Nov • 20:00 1200 Main Street • Springfield",
+                today
+            )
+            .location
+            .as_deref(),
+            Some("1200 Main Street, Springfield")
         );
         // A labelled address keeps its street number.
         assert_eq!(
