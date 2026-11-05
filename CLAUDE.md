@@ -4,7 +4,9 @@
 
 - Every change goes through a pull request. Do not push straight to `main`.
 - Include `@codex review` in the PR body when you open it, so Codex reviews it on first open.
-- Watch every PR you open. Answer each Codex finding by the triage rules below, fix red CI, then merge the PR yourself once CI passes. Marc does not need to review.
+- CI does not run on pull requests, because it is too slow. Before you merge, run the checks yourself on the PR branch: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets --locked -- -D warnings`, `cargo test --workspace --locked` and `bash scripts/check-licence-headers.sh`.
+- Watch every PR you open. Answer each Codex finding by the triage rules below, then merge the PR yourself once your local checks pass. Marc does not need to review.
+- CI runs on `main` after the merge. Check that run, and if it goes red, fix it in a new PR straight away.
 
 ### Codex review triage: fix what is real, decline what is imagined
 
