@@ -846,7 +846,7 @@ fn date_from(today: NaiveDate, year: Option<i32>, m: u32, d: u32) -> Option<Naiv
 pub fn parse_date(words: &[&str], today: NaiveDate) -> Option<(NaiveDate, usize)> {
     let w0 = words.first()?.trim_end_matches(',').to_ascii_lowercase();
     match w0.as_str() {
-        "today" => return Some((today, 1)),
+        "today" | "tonight" | "tonite" => return Some((today, 1)),
         "tomorrow" => return Some((today + chrono::Duration::days(1), 1)),
         _ => {}
     }
@@ -981,7 +981,72 @@ pub fn suggest(subject: &str, text: &str, today: NaiveDate) -> Suggestion {
             break;
         }
     }
-    let all = format!("{subject}\n{text}");
+    // The new part of the message first; quoted history (reply headers
+    // carry their own dates) only when it has nothing.
+    let (own, quoted) = split_quoted(text);
+    if let Some((date, time)) =
+        find_when(&format!("{subject}\n{own}"), today).or_else(|| find_when(&quoted, today))
+    {
+        out.date = Some(date);
+        out.time = time;
+    }
+    out
+}
+
+/// Splits an email's text into what the sender wrote and the quoted
+/// history below it, dropping the reply-header lines (`From:`/`Sent:`,
+/// `On ... wrote:`, `-----Original Message-----`) and `>` quotes.
+fn split_quoted(text: &str) -> (String, String) {
+    let lines: Vec<&str> = text.lines().collect();
+    let header = |l: &str| {
+        let t = l.trim().to_ascii_lowercase();
+        ["from:", "sent:", "date:", "to:", "cc:", "subject:"]
+            .iter()
+            .any(|k| t.starts_with(k))
+    };
+    let starts_history = |i: usize| {
+        let t = lines[i].trim().to_ascii_lowercase();
+        if t.starts_with("-----original message")
+            || t.starts_with("-------- forwarded")
+            || t.starts_with("---------- forwarded")
+        {
+            return true;
+        }
+        if t.starts_with("on ") {
+            let next = lines
+                .get(i + 1)
+                .map(|l| l.trim().to_ascii_lowercase())
+                .unwrap_or_default();
+            return t.ends_with("wrote:") || next.ends_with("wrote:");
+        }
+        // Outlook: From: then Sent: (or Date:) within a few lines.
+        t.starts_with("from:")
+            && lines[i + 1..].iter().take(4).any(|l| {
+                let l = l.trim().to_ascii_lowercase();
+                l.starts_with("sent:") || l.starts_with("date:")
+            })
+    };
+    let cut = (0..lines.len())
+        .find(|&i| starts_history(i))
+        .unwrap_or(lines.len());
+    let keep = |ls: &[&str]| {
+        ls.iter()
+            .filter(|l| !l.trim_start().starts_with('>'))
+            .filter(|l| !header(l))
+            .filter(|l| {
+                let t = l.trim().to_ascii_lowercase();
+                !(t.starts_with("on ") && t.ends_with("wrote:")) && !t.ends_with("wrote:")
+            })
+            .copied()
+            .collect::<Vec<_>>()
+            .join("\n")
+    };
+    (keep(&lines[..cut]), keep(&lines[cut..]))
+}
+
+/// The first date in `all` that comes with a time or is clearly a date,
+/// and the time near it.
+fn find_when(all: &str, today: NaiveDate) -> Option<(NaiveDate, Option<chrono::NaiveTime>)> {
     let clean: String = all
         .chars()
         .map(|c| {
@@ -1000,33 +1065,36 @@ pub fn suggest(subject: &str, text: &str, today: NaiveDate) -> Suggestion {
             continue;
         };
         let w = words[i].to_ascii_lowercase();
-        let strong = n > 1 || w.contains('/') || w.contains('-');
+        let strong = n > 1
+            || w.contains('/')
+            || w.contains('-')
+            || matches!(w.as_str(), "today" | "tonight" | "tonite" | "tomorrow");
         let word = |k: usize| {
             words
                 .get(k)
                 .map(|w| w.trim_end_matches(['.', ',']).to_ascii_lowercase())
         };
-        let time = (0..3)
-            .filter_map(|k| {
-                let a = word(i + n + k)?;
-                let b = word(i + n + k + 1).unwrap_or_default();
-                if b == "am" || b == "pm" {
-                    return parse_time(&format!("{a}{b}"));
-                }
-                if a.contains(':') || a.ends_with("am") || a.ends_with("pm") {
-                    return parse_time(&a);
-                }
-                None
-            })
-            .next();
+        let time_at = |k: usize| {
+            let a = word(k)?;
+            let b = word(k + 1).unwrap_or_default();
+            if b == "am" || b == "pm" {
+                return parse_time(&format!("{a}{b}"));
+            }
+            if a.contains(':') || a.ends_with("am") || a.ends_with("pm") {
+                return parse_time(&a);
+            }
+            None
+        };
+        // A few words after the date, else a few before (`6pm tonight`).
+        let time = (0..4)
+            .find_map(|k| time_at(i + n + k))
+            .or_else(|| (1..=3).filter_map(|k| i.checked_sub(k)).find_map(time_at));
         if !strong && time.is_none() {
             continue;
         }
-        out.date = Some(date);
-        out.time = time;
-        break;
+        return Some((date, time));
     }
-    out
+    None
 }
 
 /// The instant a local date and time in `iana` stands for.
@@ -1105,6 +1173,31 @@ mod tests {
         assert_eq!(s.time, None);
         // A lone weekday with no time isn't taken.
         assert_eq!(suggest("Hi", "Have a good Monday", today).date, None);
+        // Reply headers below carry dates; the event's own words win.
+        let s = suggest(
+            "RE: Spin Bowling Masterclass",
+            "Reminder: the masterclass is tonight, starting 6:00pm at the nets.\n\nFrom: Coach\nSent: Monday, 19 October 2026 2:09 pm\nTo: Marc\nSubject: Spin Bowling Masterclass\n\nSee you there",
+            today,
+        );
+        assert_eq!(s.date, Some(today));
+        assert_eq!(s.time, chrono::NaiveTime::from_hms_opt(18, 0, 0));
+        let s = suggest(
+            "Re: Round 2",
+            "Thanks, see the draw attached.\n\nOn Wed, Nov 4, 2026 at 4:37 PM Jane <jane@club.example> wrote:\n> Draw coming",
+            today,
+        );
+        assert_eq!(s.date, None, "{s:?}");
+        // Only quoted history: the original's date still counts, headers don't.
+        let s = suggest(
+            "FW: Prizegiving",
+            "-----Original Message-----\nFrom: Club\nSent: Monday, 19 October 2026 2:09 pm\nPrizegiving on Saturday 21 November at 6:30 pm",
+            today,
+        );
+        assert_eq!(s.date, Some(d(2026, 11, 21)));
+        assert_eq!(
+            suggest("Hi", "6pm tonight at the club", today).time,
+            chrono::NaiveTime::from_hms_opt(18, 0, 0)
+        );
     }
 
     #[test]

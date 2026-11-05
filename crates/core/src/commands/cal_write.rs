@@ -283,7 +283,8 @@ pub struct CalAddInput {
     pub wait_secs: Option<u32>,
 }
 
-fn mail_text(r: &Reader, id: i64) -> Result<(String, String), CommandError> {
+/// The email's subject, text and when it arrived.
+fn mail_text(r: &Reader, id: i64) -> Result<(String, String, i64), CommandError> {
     let m = r
         .message(MessageId(id))
         .map_err(store_err)?
@@ -302,7 +303,7 @@ fn mail_text(r: &Reader, id: i64) -> Result<(String, String), CommandError> {
         },
         None => m.preview.clone(),
     };
-    Ok((m.subject, text))
+    Ok((m.subject, text, m.received_at))
 }
 
 /// Turns `fam cal add`'s input into a request. `r` is needed for
@@ -317,8 +318,10 @@ pub fn add_request(
     let today = today_in(now, zone);
     let suggestion = match (i.from_mail, r) {
         (Some(id), Some(r)) => {
-            let (subject, text) = mail_text(r, id)?;
-            Some(events::suggest(&subject, &text, today))
+            let (subject, text, at) = mail_text(r, id)?;
+            // "Tonight" and "Saturday" are from when it was sent.
+            let sent = if at > 0 { today_in(at, zone) } else { today };
+            Some(events::suggest(&subject, &text, sent))
         }
         (Some(_), None) => return Err(CommandError::internal("--from-mail needs the store")),
         _ => None,
