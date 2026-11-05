@@ -114,7 +114,8 @@ fn body_html(
 fn with_signature(body: String, sig: Option<&str>) -> String {
     match sig {
         Some(s) if !s.trim().is_empty() => {
-            format!("{body}<br>\n<div id=\"Signature\">{s}</div>")
+            // A blank line between the sign-off and the signature.
+            format!("{body}<br>\n<div><br></div>\n<div id=\"Signature\">{s}</div>")
         }
         _ => body,
     }
@@ -239,18 +240,22 @@ pub fn compose_request(
     } else {
         settings.signature(&account.key, args.respond_to.is_some())
     };
+    // Signature (and body) images become inline attachments.
+    let (html, images) = crate::compose::inline_images(&with_signature(body, sig))?;
+    let mut files = attachments(&args.attach, &args.inline)?;
+    files.extend(images);
     Ok((
         ComposeRequest {
             account: Some(account.key.clone()),
             respond_to: args.respond_to,
             response: args.response,
             subject: args.subject.clone(),
-            html: with_signature(body, sig),
+            html,
             to: Recipient::parse_all(&args.to)?,
             cc: Recipient::parse_all(&args.cc)?,
             bcc: Recipient::parse_all(&args.bcc)?,
             importance: importance(args.importance.as_deref())?,
-            attachments: attachments(&args.attach, &args.inline)?,
+            attachments: files,
         },
         account,
     ))

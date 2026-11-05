@@ -154,7 +154,12 @@ async fn drafts_replies_and_sending() {
             .into_iter()
             .find(|f| f.well_known.as_deref() == Some("inbox"))
             .unwrap();
-        r.messages(f.id, None, 1).unwrap().remove(0)
+        // Not the test mail sent to ourselves above, which quotes the new signature.
+        r.messages(f.id, None, 10)
+            .unwrap()
+            .into_iter()
+            .find(|m| !m.subject.starts_with("Familiar Test"))
+            .unwrap()
     };
     let out = compose(
         &env,

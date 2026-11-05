@@ -162,6 +162,98 @@ impl AttachmentData {
     }
 }
 
+/// Turns the images an HTML body embeds (`src="data:image/png;base64,..."`,
+/// as signatures in config.toml do) or takes from a local file
+/// (`src="C:\\sig\\logo.png"`, `file:///...`) into inline attachments
+/// referenced by `cid:`. Web images (`http`, `https`) and `cid:` are left alone.
+pub fn inline_images(html: &str) -> Result<(String, Vec<AttachmentData>), CommandError> {
+    let mut out = String::with_capacity(html.len());
+    let mut found = Vec::new();
+    let lower = html.to_ascii_lowercase();
+    let mut at = 0;
+    while let Some(rel) = lower[at..].find("src=") {
+        let start = at + rel + 4;
+        let quote = html[start..].chars().next();
+        let (vstart, vend) = match quote {
+            Some(q @ ('"' | '\'')) => {
+                let Some(e) = html[start + 1..].find(q) else {
+                    break;
+                };
+                (start + 1, start + 1 + e)
+            }
+            _ => {
+                let e = html[start..]
+                    .find(|c: char| c.is_whitespace() || c == '>')
+                    .unwrap_or(html.len() - start);
+                (start, start + e)
+            }
+        };
+        let src = &html[vstart..vend];
+        let n = found.len() + 1;
+        let made = if let Some(data) = src.strip_prefix("data:") {
+            data_uri(data, n)
+        } else if let Some(path) = local_path(src) {
+            let mut a = AttachmentData::read(&path, true)?;
+            a.content_id = Some(format!("img{n}.{}@familiar", a.name));
+            Some(a)
+        } else {
+            None
+        };
+        out.push_str(&html[at..vstart]);
+        match made {
+            Some(a) => {
+                out.push_str("cid:");
+                out.push_str(a.content_id.as_deref().unwrap_or_default());
+                found.push(a);
+            }
+            None => out.push_str(src),
+        }
+        at = vend;
+    }
+    out.push_str(&html[at..]);
+    Ok((out, found))
+}
+
+fn data_uri(data: &str, n: usize) -> Option<AttachmentData> {
+    let (meta, payload) = data.split_once(',')?;
+    let mime = meta.strip_suffix(";base64")?;
+    if !mime.starts_with("image/") {
+        return None;
+    }
+    let b64: String = payload.chars().filter(|c| !c.is_whitespace()).collect();
+    let ext = match mime {
+        "image/jpeg" => "jpg",
+        "image/svg+xml" => "svg",
+        m => m.trim_start_matches("image/"),
+    };
+    let name = format!("image{n}.{ext}");
+    let size = (b64.trim_end_matches('=').len() * 3 / 4) as u64;
+    Some(AttachmentData {
+        content_type: mime.to_string(),
+        content_id: Some(format!("{name}@familiar")),
+        inline: true,
+        size,
+        content_b64: b64,
+        name,
+    })
+}
+
+fn local_path(src: &str) -> Option<String> {
+    let p = src
+        .strip_prefix("file:///")
+        .map(|p| {
+            if cfg!(windows) {
+                p.to_string()
+            } else {
+                format!("/{p}")
+            }
+        })
+        .unwrap_or_else(|| src.to_string());
+    let p = p.replace("%20", " ");
+    let path = std::path::Path::new(&p);
+    (path.is_absolute() && path.is_file()).then_some(p)
+}
+
 fn mime_for(name: &str) -> &'static str {
     let ext = name
         .rsplit_once('.')
@@ -695,6 +787,38 @@ pub fn check_outside(
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn signature_images_become_inline_attachments() {
+        let html = "<p>Cheers</p><img alt=logo src=\"data:image/png;base64,iVBO\nRw0K\"> <img src='https://example.com/a.png'><img src=\"cid:x\">";
+        let (out, files) = super::inline_images(html).unwrap();
+        assert_eq!(files.len(), 1);
+        let f = &files[0];
+        assert!(f.inline);
+        assert_eq!(f.content_type, "image/png");
+        assert_eq!(f.content_b64, "iVBORw0K");
+        assert_eq!(f.content_id.as_deref(), Some("image1.png@familiar"));
+        assert!(out.contains("src=\"cid:image1.png@familiar\""), "{out}");
+        assert!(out.contains("src='https://example.com/a.png'"));
+        assert!(out.contains("src=\"cid:x\""));
+        // A local file is read; one that doesn't exist is left as it was.
+        let dir = std::env::temp_dir().join(format!("fam-inline-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let logo = dir.join("logo.gif");
+        std::fs::write(&logo, b"GIF89a").unwrap();
+        let (out, files) = super::inline_images(&format!(
+            "<img src=\"{}\"><img src=\"/no/such.png\">",
+            logo.display()
+        ))
+        .unwrap();
+        assert_eq!(files.len(), 1);
+        assert_eq!(files[0].content_type, "image/gif");
+        assert!(
+            out.contains("cid:img1.logo.gif@familiar") && out.contains("/no/such.png"),
+            "{out}"
+        );
+    }
+
     use super::*;
 
     #[test]
