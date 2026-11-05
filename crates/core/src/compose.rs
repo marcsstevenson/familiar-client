@@ -167,6 +167,17 @@ impl AttachmentData {
 /// (`src="C:\\sig\\logo.png"`, `file:///...`) into inline attachments
 /// referenced by `cid:`. Web images (`http`, `https`) and `cid:` are left alone.
 pub fn inline_images(html: &str) -> Result<(String, Vec<AttachmentData>), CommandError> {
+    images_in(html, true)
+}
+
+/// Like [`inline_images`], but only for images embedded as `data:` URIs: no
+/// files are read. For a whole body being replaced, which can hold a quoted
+/// message whose HTML someone else wrote.
+pub fn embedded_images(html: &str) -> Result<(String, Vec<AttachmentData>), CommandError> {
+    images_in(html, false)
+}
+
+fn images_in(html: &str, files: bool) -> Result<(String, Vec<AttachmentData>), CommandError> {
     let mut out = String::with_capacity(html.len());
     let mut found = Vec::new();
     let lower = html.to_ascii_lowercase();
@@ -191,7 +202,7 @@ pub fn inline_images(html: &str) -> Result<(String, Vec<AttachmentData>), Comman
         let src = &html[vstart..vend];
         let made = if let Some(data) = src.strip_prefix("data:") {
             data_uri(data)
-        } else if let Some(path) = local_path(src) {
+        } else if let Some(path) = local_path(src).filter(|_| files) {
             let mut a = AttachmentData::read(&path, true)?;
             a.content_id = Some(format!(
                 "{}.{}@familiar",
@@ -874,6 +885,10 @@ mod tests {
         .unwrap();
         assert_eq!(files.len(), 1);
         assert_eq!(files[0].content_type, "image/gif");
+        // A replaced body reads no files.
+        let (kept, none) =
+            super::embedded_images(&format!("<img src=\"{}\">", logo.display())).unwrap();
+        assert!(none.is_empty() && kept.contains("logo.gif"), "{kept}");
         assert!(
             out.contains(".logo.gif@familiar") && out.contains("/no/such.png"),
             "{out}"

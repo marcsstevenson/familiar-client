@@ -133,7 +133,7 @@ async fn drafts_replies_and_sending() {
     // attached once. Then a body without it, removing notes.txt by name:
     // both go.
     let body_update = |html: &str, remove: Vec<String>| {
-        let (html, images) = familiar_core::compose::inline_images(html).unwrap();
+        let (html, images) = familiar_core::compose::embedded_images(html).unwrap();
         WriteRequest::DraftUpdate {
             message: draft,
             subject: None,

@@ -30,9 +30,17 @@ export function htmlToText(html: string): string {
 
 const SIG = '[id="Signature"]';
 
+/** The signature of the part being written: above a quoted original, never the original sender's. */
+export function ownSignature(root: HTMLElement): HTMLElement | null {
+  const sig = root.querySelector<HTMLElement>(SIG);
+  const quote = root.querySelector("#divRplyFwdMsg");
+  if (sig && quote && sig.compareDocumentPosition(quote) & Node.DOCUMENT_POSITION_PRECEDING) return null;
+  return sig;
+}
+
 /** Puts `sig` in as the signature (replacing one there), or takes it out when null. */
 export function setSignature(root: HTMLElement, sig: string | null): void {
-  const old = root.querySelector<HTMLElement>(SIG);
+  const old = ownSignature(root);
   if (old) {
     if (sig === null) {
       // The blank line `fam` puts before a signature goes with it.
@@ -109,6 +117,6 @@ export function plainToRich(text: string, sigText: string | null, sigHtml: strin
 /** True when the body has nothing typed in it (the signature doesn't count). */
 export function isBlank(root: HTMLElement): boolean {
   const copy = root.cloneNode(true) as HTMLElement;
-  copy.querySelector(SIG)?.remove();
+  ownSignature(copy)?.remove();
   return copy.textContent!.trim() === "" && !copy.querySelector("img");
 }

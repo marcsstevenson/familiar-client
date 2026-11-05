@@ -682,7 +682,9 @@ impl Command for DraftUpdate {
         // draft. Their content IDs follow their bytes, so images the draft
         // already has are not added again.
         let html = if i.body.is_some() || i.body_file.is_some() {
-            let (html, images) = crate::compose::inline_images(&body_html(
+            // Only embedded images: the body may quote someone else's HTML,
+            // which must not be able to name local files.
+            let (html, images) = crate::compose::embedded_images(&body_html(
                 i.body.as_deref(),
                 i.body_file.as_deref(),
                 i.html,

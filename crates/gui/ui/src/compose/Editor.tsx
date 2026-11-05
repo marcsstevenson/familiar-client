@@ -2,6 +2,7 @@
 // plain textarea. Rich editing uses the browser's own editing commands, which
 // WebView2 and WebKit both support.
 import { For, Show, createSignal } from "solid-js";
+import { ownSignature } from "./html";
 
 type Tool = { cmd: string; label: string; text: string; key?: string };
 
@@ -161,7 +162,7 @@ export function insertImage(editor: HTMLElement, src: string, at?: { x: number; 
     sel?.addRange(range);
   } else {
     // Above the signature, or at the end.
-    const sig = editor.querySelector('[id="Signature"]');
+    const sig = ownSignature(editor);
     const line = document.createElement("div");
     line.append(img);
     if (sig) (sig.previousElementSibling ?? sig).before(line);

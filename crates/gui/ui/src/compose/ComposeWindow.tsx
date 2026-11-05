@@ -9,7 +9,7 @@ import { type CommandError, isCommandError, run, type UiInfo } from "../api";
 import { TitleBar } from "../TitleBar";
 import { type Attachment, createdDraft, loadDraft } from "./draft";
 import { PlainEditor, RichEditor, insertImage } from "./Editor";
-import { bodyOf, htmlToText, isBlank, plainToRich, serialize, setSignature, showCids } from "./html";
+import { bodyOf, htmlToText, isBlank, ownSignature, plainToRich, serialize, setSignature, showCids } from "./html";
 import { type ComposeInfo, type FileInfo, type Identity, composeInfo, fileInfo, pickFiles } from "./ipc";
 import { Recipients, addressOf } from "./Recipients";
 import type { ComposeSpec } from "./spec";
@@ -185,7 +185,7 @@ export function ComposeWindow(props: { info: UiInfo; spec: ComposeSpec }) {
       setSignature(editor!, sigHtml());
       touch("body");
     } else {
-      const s = editor!.querySelector('[id="Signature"]');
+      const s = ownSignature(editor!);
       const text = s ? htmlToText(s.innerHTML).trim() : null;
       setSig(!s ? "none" : text === sigText("reply")?.trim() ? "reply" : "new");
     }
