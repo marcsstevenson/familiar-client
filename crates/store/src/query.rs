@@ -326,6 +326,36 @@ pub(crate) fn audit_log(c: &Connection, since: i64, limit: usize) -> Result<Vec<
         .collect::<Result<_, _>>()?)
 }
 
+/// Audit rows at or after `since`, newest first, only of `source` and
+/// `outcome` when given (`source` ending in `*` matches the start).
+pub(crate) fn audit_filtered(
+    c: &Connection,
+    since: i64,
+    source: Option<&str>,
+    outcome: Option<&str>,
+    limit: usize,
+) -> Result<Vec<AuditEntry>> {
+    let esc = |s: &str| {
+        s.replace('\\', "\\\\")
+            .replace('%', "\\%")
+            .replace('_', "\\_")
+    };
+    let source = source.map(|s| match s.strip_suffix('*') {
+        Some(p) => format!("{}%", esc(p)),
+        None => esc(s),
+    });
+    let mut s = c.prepare_cached(&format!(
+        "SELECT {AUDIT_COLS} FROM audit WHERE at >= ?1
+           AND (?2 IS NULL OR source LIKE ?2 ESCAPE '\\')
+           AND (?3 IS NULL OR outcome = ?3)
+         ORDER BY id DESC LIMIT ?4"
+    ))?;
+    Ok(
+        s.query_map(params![since, source, outcome, limit as i64], audit)?
+            .collect::<Result<_, _>>()?,
+    )
+}
+
 pub(crate) fn op_by_id(c: &Connection, id: OpId) -> Result<Option<Op>> {
     let mut s = c.prepare_cached(&format!("SELECT {OP_COLS} FROM ops WHERE id = ?1"))?;
     Ok(s.query_row([id], op).optional()?)

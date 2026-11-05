@@ -24,7 +24,7 @@ Your own config has your signatures in it, so keep it in a private repo, not in 
 - Calendar purposes and rules name accounts that exist; rule names are unique per account; rules have at least one condition and one action.
 - `sync.window` and `sync.headers` are periods (`90d`, `4w`, `6m`, `1y`), headers cover at least the window, `cache_limit` is a size (`500MB`, `2GB`).
 - View names are unique, queries aren't empty, and no key is bound twice.
-- `agent.allow` uses the access levels `read`, `draft`, `write`, `send`, `delete`, `rules`.
+- `agent.allow` uses the access levels `read`, `draft`, `write`, `send`, `delete`, `rules`. `send`, `delete` and `rules` can't be in `agent.allow`; they go under `[agent.accounts.<name>]`, which must name an account. See [agent.md](agent.md).
 
 ## Sections
 
@@ -39,7 +39,8 @@ Your own config has your signatures in it, so keep it in a private repo, not in 
 | `[[views]]` | `name`, `query` |
 | `[[rules]]` | `name`, `account`, `run` (`server`, `local`), `enabled` (default true), `when`, `then`. Conditions and actions are checked by the rules engine later. |
 | `[keys]` | `<action> = "<key>"` |
-| `[agent]` | `allow` (default `["read", "draft"]`) |
+| `[agent]` | `allow` (default `["read", "draft"]`; may add `write`) |
+| `[agent.accounts.<name>]` | `allow`: more access on that account, e.g. `["send", "delete"]` |
 
 ## Writing back
 

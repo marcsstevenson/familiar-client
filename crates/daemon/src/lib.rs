@@ -73,6 +73,28 @@ pub struct DaemonOptions {
     pub clock: Clock,
     /// Messages per delta page; `None` for the provider's default.
     pub page_size: Option<usize>,
+    /// What agent sessions may do (WP 2.6).
+    pub agent: AgentGrants,
+}
+
+/// Where famd gets the agent grants from.
+#[derive(Debug, Clone)]
+pub enum AgentGrants {
+    /// These, for good (tests).
+    Fixed(familiar_core::agent::Grants),
+    /// `[agent]` of this config file, read again for each agent write so a
+    /// change applies without a restart.
+    File(std::path::PathBuf),
+}
+
+impl AgentGrants {
+    /// The grants now.
+    pub fn get(&self) -> familiar_core::agent::Grants {
+        match self {
+            AgentGrants::Fixed(g) => g.clone(),
+            AgentGrants::File(p) => familiar_core::agent::Grants::load_from(p),
+        }
+    }
 }
 
 impl DaemonOptions {
@@ -84,6 +106,7 @@ impl DaemonOptions {
             accounts,
             clock: system_clock(),
             page_size: None,
+            agent: AgentGrants::Fixed(familiar_core::agent::Grants::default()),
         }
     }
 }
@@ -217,6 +240,7 @@ impl Daemon {
             started_at: (opts.clock)(),
             shutdown: tx.clone(),
             signals,
+            agent: opts.agent.clone(),
         });
         let mut tasks: Vec<JoinHandle<()>> =
             engines.into_iter().map(|e| tokio::spawn(e.run())).collect();

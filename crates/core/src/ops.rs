@@ -1630,8 +1630,22 @@ pub fn finish_local(
 
 /// Plans `params.request` and, unless it is a dry run, applies and queues
 /// it, all in `tx`. Each queued write is also recorded in the audit log.
-pub fn submit(tx: &WriteTx<'_>, params: &SubmitParams) -> Result<WriteOutput, CommandError> {
+///
+/// A write from an agent source is checked against `grants` first and
+/// refused whole, with nothing changed, if any op isn't allowed; see
+/// [`crate::agent`]. Log the refusal with [`record_denied`] in a new
+/// transaction, since this one is rolled back.
+pub fn submit(
+    tx: &WriteTx<'_>,
+    params: &SubmitParams,
+    grants: &crate::agent::Grants,
+) -> Result<WriteOutput, CommandError> {
     let planned = plan(tx, &params.request)?;
+    if crate::agent::is_agent(&params.source) {
+        if let Some(d) = crate::agent::check(tx, grants, &planned) {
+            return Err(d.error());
+        }
+    }
     let mut ops = Vec::with_capacity(planned.len());
     let mut last_item: Option<i64> = None;
     let now = std::time::SystemTime::now()
@@ -1711,6 +1725,49 @@ pub fn submit(tx: &WriteTx<'_>, params: &SubmitParams) -> Result<WriteOutput, Co
         waited: false,
         ops,
     })
+}
+
+/// Writes a `denied` audit row for a write [`submit`] refused for want of a
+/// grant. Does nothing for a dry run or a write that is allowed.
+pub fn record_denied(
+    tx: &WriteTx<'_>,
+    params: &SubmitParams,
+    grants: &crate::agent::Grants,
+) -> Result<(), CommandError> {
+    if params.dry_run || !crate::agent::is_agent(&params.source) {
+        return Ok(());
+    }
+    let planned = plan(tx, &params.request)?;
+    if let Some(d) = crate::agent::check(tx, grants, &planned) {
+        tx.add_audit(&NewAudit {
+            account: Some(d.account),
+            source: params.source.clone(),
+            command: params.request.command().into(),
+            outcome: "denied".into(),
+            op: None,
+            detail: format!(
+                "needs {}: {}",
+                crate::agent::access_name(d.access),
+                d.summary
+            ),
+        })
+        .map_err(store_err)?;
+    }
+    Ok(())
+}
+
+/// Submits `params` through `w`, logging a refusal. For callers holding
+/// the writer themselves (`fam` without famd).
+pub fn submit_with<W: familiar_store::StoreWriter>(
+    w: &mut W,
+    params: &SubmitParams,
+    grants: &crate::agent::Grants,
+) -> Result<WriteOutput, CommandError> {
+    let r = with_tx(w, |tx| submit(tx, params, grants));
+    if matches!(&r, Err(e) if e.kind == ErrorKind::PermissionDenied) {
+        with_tx(w, |tx| record_denied(tx, params, grants))?;
+    }
+    r
 }
 
 /// Cancels a pending or failed op and undoes its local change. Returns

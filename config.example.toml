@@ -81,7 +81,12 @@ then = { delete = true, stop = true }
 archive = "e"
 reply = "r"
 
-# What agent sessions (fam from a script, or MCP) may do on every account:
-# read, draft, write, send, delete, rules. Read and draft is the safe baseline.
+# What agent sessions (fam run by an agent, or MCP) may do on every account:
+# read, draft, and optionally write (mark read, move, folders, events).
+# Read and draft is the safe baseline.
 [agent]
 allow = ["read", "draft"]
+
+# Send, delete and rule changes are granted per account, for example:
+# [agent.accounts.home]
+# allow = ["send"]

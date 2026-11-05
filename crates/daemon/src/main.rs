@@ -91,6 +91,7 @@ fn run() -> Result<(), (u8, String)> {
     rt.block_on(async move {
         let mut opts = DaemonOptions::new(paths.clone(), accounts);
         opts.policy = policy;
+        opts.agent = familiar_daemon::AgentGrants::File(path.clone());
         let daemon = Daemon::start(opts).map_err(|e| (1, e.to_string()))?;
         log(&format!(
             "started: store {}, socket {}",

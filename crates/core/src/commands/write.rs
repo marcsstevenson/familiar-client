@@ -141,7 +141,7 @@ pub fn submit_at(
                 ));
             }
             let mut w = direct_writer(paths)?;
-            ops::with_tx(&mut w, |tx| ops::submit(tx, &params))
+            ops::submit_with(&mut w, &params, &crate::agent::Grants::load())
         }
         Err(e) => Err(e),
     }
@@ -152,7 +152,7 @@ pub(crate) fn flags(dry_run: bool, wait: bool, wait_secs: Option<u32>) -> WriteF
         dry_run,
         wait,
         wait_secs: wait_secs.map(u64::from),
-        source: String::new(),
+        source: crate::agent::session_source(),
     }
 }
 

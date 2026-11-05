@@ -50,6 +50,7 @@ pub struct Service {
     pub(crate) started_at: i64,
     pub(crate) shutdown: watch::Sender<bool>,
     pub(crate) signals: Arc<crate::ops::OpSignals>,
+    pub(crate) agent: crate::AgentGrants,
 }
 
 /// Maps a provider error to the command error kind (and exit code) it means.
@@ -108,7 +109,18 @@ impl Service {
 
     /// `ops.submit`.
     pub fn ops_submit(&self, p: SubmitParams) -> Result<WriteOutput, CommandError> {
-        let out = self.write(|tx| familiar_core::ops::submit(tx, &p))?;
+        let grants = if familiar_core::agent::is_agent(&p.source) {
+            self.agent.get()
+        } else {
+            familiar_core::agent::Grants::default()
+        };
+        let out = match self.write(|tx| familiar_core::ops::submit(tx, &p, &grants)) {
+            Err(e) if e.kind == ErrorKind::PermissionDenied => {
+                self.write(|tx| familiar_core::ops::record_denied(tx, &p, &grants))?;
+                return Err(e);
+            }
+            r => r?,
+        };
         if !out.dry_run {
             self.wake_runners();
         }

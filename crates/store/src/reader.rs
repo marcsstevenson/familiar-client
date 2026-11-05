@@ -259,6 +259,18 @@ impl Reader {
         query::audit_log(&self.conn, since, limit)
     }
 
+    /// Audit rows at or after `since`, newest first, only of `source` (a
+    /// trailing `*` matches the start) and `outcome` when given.
+    pub fn audit_filtered(
+        &self,
+        since: i64,
+        source: Option<&str>,
+        outcome: Option<&str>,
+        limit: usize,
+    ) -> Result<Vec<AuditEntry>> {
+        query::audit_filtered(&self.conn, since, source, outcome, limit)
+    }
+
     /// Messages with these IDs, in no particular order; missing IDs are
     /// left out.
     pub fn messages_by_ids(&self, ids: &[MessageId]) -> Result<Vec<Message>> {

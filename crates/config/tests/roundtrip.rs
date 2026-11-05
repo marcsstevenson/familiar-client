@@ -258,7 +258,11 @@ query = "x"
 archive = "e"
 delete = "e"
 [agent]
-allow = ["draft", "calendar-write"]
+allow = ["draft", "calendar-write", "send"]
+[agent.accounts.ghost]
+allow = ["send"]
+[agent.accounts.dup]
+allow = ["delete", "everything"]
 "#;
     let r = check(text);
     let paths: Vec<(&str, Severity)> = r
@@ -283,10 +287,13 @@ allow = ["draft", "calendar-write"]
         ("keys.delete", Error),
         ("agent.allow[1]", Error),
         ("agent.allow", Warning),
+        ("agent.allow[2]", Error),
+        ("agent.accounts.ghost", Error),
+        ("agent.accounts.dup.allow[1]", Error),
     ] {
         assert!(paths.contains(&want), "missing {want:?} in {paths:#?}");
     }
-    assert_eq!(paths.len(), 15, "{:#?}", r.problems);
+    assert_eq!(paths.len(), 18, "{:#?}", r.problems);
     // Every problem here can be located.
     for p in &r.problems {
         assert!(p.line.is_some(), "no line for {p}");

@@ -66,6 +66,13 @@ export type AccountCheck = {
   settled_on_recheck: number;
 };
 
+export type AccountGrants = {
+  /** Account name in config.toml. */
+  account: string;
+  /** Access levels granted: read, draft, write, send, delete, rules. */
+  allow: Array<string>;
+};
+
 export type AccountSignIn = {
   /** When the current access token expires (RFC 3339, UTC). */
   access_expires_at?: string | null;
@@ -128,6 +135,17 @@ export type AccountSyncStatus = {
   unread: number;
 };
 
+export type AgentStatusInput = Record<string, never>;
+
+export type AgentStatusOutput = {
+  /** Per account. */
+  accounts: Array<AccountGrants>;
+  /** True when this session's writes are checked against the grants. */
+  agent: boolean;
+  /** The source its writes are logged under (`cli` for a person). */
+  source: string;
+};
+
 export type AnyValue = unknown;
 
 export type ApiInput = {
@@ -137,6 +155,41 @@ export type ApiInput = {
   method?: string | null;
   /** A Graph path under https://graph.microsoft.com/v1.0, such as '/me/mailFolders?$top=5', or a full link Graph returned, such as an @odata.nextLink. */
   path: string;
+};
+
+export type AuditListInput = {
+  /** Most rows (default 50). */
+  limit?: number | null;
+  /** Only this outcome: queued, denied, done or failed. */
+  outcome?: string | null;
+  /** Only this far back: a period like 7d, 4w or 6m. Default all. */
+  since?: string | null;
+  /** Only this source, e.g. mcp or agent:claude-code; a trailing * matches the start (agent:*). */
+  source?: string | null;
+};
+
+export type AuditListOutput = {
+  /** Rows, newest first. */
+  entries: Array<AuditView>;
+};
+
+export type AuditView = {
+  /** Account name, if any. */
+  account?: string | null;
+  /** When (RFC 3339, UTC). */
+  at: string;
+  /** The command, e.g. mail.move. */
+  command: string;
+  /** The summary, or why it was refused or failed. */
+  detail: string;
+  /** Row ID. */
+  id: number;
+  /** The op it queued, if any. */
+  op?: number | null;
+  /** queued, denied, done or failed. */
+  outcome: string;
+  /** Who asked: cli, gui, mcp or agent:<name>. */
+  source: string;
 };
 
 export type AuthLoginInput = {
@@ -1406,8 +1459,12 @@ export type WriteOutput = {
 
 /** Every command, by dotted name, with its input and output types. */
 export interface Commands {
+  /** Show what agents may do */
+  "agent.status": { input: AgentStatusInput; output: AgentStatusOutput };
   /** Call Microsoft Graph directly (GET only) */
   "api": { input: ApiInput; output: AnyValue };
+  /** List the audit log of writes */
+  "audit.list": { input: AuditListInput; output: AuditListOutput };
   /** Sign in to a Microsoft account */
   "auth.login": { input: AuthLoginInput; output: AccountSignIn };
   /** Sign out: forget an account's tokens */
@@ -1495,7 +1552,9 @@ export type CommandName = keyof Commands;
 
 /** Every command name, in order. */
 export const COMMAND_NAMES = [
+  "agent.status",
   "api",
+  "audit.list",
   "auth.login",
   "auth.logout",
   "auth.status",

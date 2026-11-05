@@ -2,7 +2,9 @@
 //! Checks that go beyond the shape: references between sections, formats and
 //! duplicates. Every problem found is reported, not just the first.
 
-use crate::model::{AGENT_ACCESS, CURRENT_VERSION, Config, MAX_SEND_DELAY_SECONDS};
+use crate::model::{
+    AGENT_ACCESS, CURRENT_VERSION, Config, MAX_SEND_DELAY_SECONDS, PER_ACCOUNT_ACCESS,
+};
 use std::collections::{BTreeMap, BTreeSet};
 
 /// How serious a problem is.
@@ -262,6 +264,32 @@ pub fn check(c: &Config) -> Vec<Problem> {
                     AGENT_ACCESS.join(", ")
                 ),
             ));
+        }
+    }
+    for (i, a) in c.agent.allow.iter().enumerate() {
+        if PER_ACCOUNT_ACCESS.contains(&a.as_str()) {
+            p.push(Problem::error(
+                format!("agent.allow[{i}]"),
+                format!(
+                    "`{a}` is granted per account: put it under [agent.accounts.<name>] instead"
+                ),
+            ));
+        }
+    }
+    for (name, grant) in &c.agent.accounts {
+        if !c.accounts.contains_key(name) {
+            p.push(unknown_account(format!("agent.accounts.{name}"), name));
+        }
+        for (i, a) in grant.allow.iter().enumerate() {
+            if !AGENT_ACCESS.contains(&a.as_str()) {
+                p.push(Problem::error(
+                    format!("agent.accounts.{name}.allow[{i}]"),
+                    format!(
+                        "unknown access `{a}`; expected one of {}",
+                        AGENT_ACCESS.join(", ")
+                    ),
+                ));
+            }
         }
     }
     if !c.agent.allow.iter().any(|a| a == "read") {

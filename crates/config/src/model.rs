@@ -265,17 +265,32 @@ pub enum RuleRun {
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Agent {
-    /// Access levels agent sessions get on every account.
+    /// Access levels agent sessions get on every account. `send`, `delete`
+    /// and `rules` can't go here: they are granted per account.
     #[serde(default = "default_agent_allow")]
     pub allow: Vec<String>,
+    /// More access on one account, keyed by account name
+    /// (`[agent.accounts.hotmail] allow = ["send"]`).
+    #[serde(default)]
+    pub accounts: BTreeMap<String, AgentGrant>,
 }
 
 impl Default for Agent {
     fn default() -> Self {
         Self {
             allow: default_agent_allow(),
+            accounts: BTreeMap::new(),
         }
     }
+}
+
+/// `[agent.accounts.<name>]`.
+#[derive(Debug, Clone, PartialEq, Default, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct AgentGrant {
+    /// Access levels added on this account.
+    #[serde(default)]
+    pub allow: Vec<String>,
 }
 
 fn default_agent_allow() -> Vec<String> {
@@ -285,3 +300,7 @@ fn default_agent_allow() -> Vec<String> {
 /// The values `agent.allow` accepts. These match `familiar_core::Access`
 /// (a test in familiar-core keeps the two in step).
 pub const AGENT_ACCESS: &[&str] = &["read", "draft", "write", "send", "delete", "rules"];
+
+/// The access levels that need a grant per account: sending (and so
+/// forwarding), deleting and rule changes.
+pub const PER_ACCOUNT_ACCESS: &[&str] = &["send", "delete", "rules"];
