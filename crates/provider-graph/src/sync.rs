@@ -321,9 +321,30 @@ impl MailSync {
                     "message delta page with neither nextLink nor deltaLink".into(),
                 ));
             };
+            // Outlook.com's incremental rounds can list a changed message with
+            // only its ID and the changed state (no received time, subject or
+            // conversation). Storing that as a header would blank the row, so
+            // fetch the full header for such items first.
+            let mut items = page.items;
+            for item in &mut items {
+                if let DeltaItem::Upsert(m) = item {
+                    if m.received_date_time.is_none() {
+                        // Gone, or moved on since: settle it like a removal.
+                        *item = match self.api.message(&m.id, priority).await? {
+                            Some(full)
+                                if full.parent_folder_id.as_deref()
+                                    == Some(folder.remote_id.as_str()) =>
+                            {
+                                DeltaItem::Upsert(full)
+                            }
+                            _ => DeltaItem::Removed(m.id.clone()),
+                        };
+                    }
+                }
+            }
             let stash = &mut self.stash;
             w.write(|tx| {
-                for item in &page.items {
+                for item in &items {
                     match item {
                         DeltaItem::Upsert(m) => {
                             upsert_header(tx, acc, folder.id, m, stash)?;

@@ -139,6 +139,49 @@ async fn first_sync_matches_the_server_and_rounds_resume_from_saved_links() {
     assert_eq!((inbox.total, inbox.unread), (2, 1));
 }
 
+/// Found on the WP 1.13 live run: Outlook.com listed new and changed Inbox
+/// messages with only an ID and read state, and they were stored blank
+/// (received at 0, no subject, sender or conversation).
+#[tokio::test]
+async fn sparse_delta_items_are_stored_with_their_full_header() {
+    let mut env = Env::new(MockGraph::start().await.unwrap(), "test-token");
+    env.sync_tree().await;
+    env.sync_all().await;
+    let before = env.local("imm-small-01").unwrap();
+
+    let mock = env.mock.clone();
+    let mbx = mock.mailbox("default");
+    mock.set_sparse_message_delta(true);
+    mbx.update_message("imm-small-01", |m| m.is_read = true)
+        .unwrap();
+    let fresh = mbx
+        .add_message(Message::new(
+            "inbox",
+            "Fresh news",
+            EmailAddress::new("Avery Lee", "avery.lee@example.com"),
+            Utc.with_ymd_and_hms(2026, 11, 4, 10, 0, 0).unwrap(),
+        ))
+        .unwrap();
+    let r = env.sync_folders(&["fld-inbox"]).await;
+    assert_eq!(r.full_rounds, 0);
+    assert_eq!(r.upserted, 2);
+
+    let changed = env.local("imm-small-01").unwrap();
+    assert!(changed.is_read);
+    assert_eq!(changed.subject, before.subject);
+    assert_eq!(changed.received_at, before.received_at);
+    assert_eq!(changed.thread, before.thread);
+    let new = env.local(&fresh).unwrap();
+    assert_eq!(new.subject, "Fresh news");
+    assert_eq!(new.from.addr, "avery.lee@example.com");
+    assert_eq!(
+        new.received_at,
+        Utc.with_ymd_and_hms(2026, 11, 4, 10, 0, 0)
+            .unwrap()
+            .timestamp()
+    );
+}
+
 #[tokio::test]
 async fn small_pages_keep_the_next_link_as_bookmark() {
     let mock = MockGraph::start().await.unwrap();

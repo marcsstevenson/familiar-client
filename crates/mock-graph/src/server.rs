@@ -65,6 +65,7 @@ pub(crate) struct State {
     log: Vec<LoggedRequest>,
     latency: Duration,
     max_concurrent: Option<usize>,
+    sparse_delta: bool,
     budget: Option<Budget>,
     origin: String,
     base_url: String,
@@ -202,6 +203,7 @@ impl Builder {
             log: Vec::new(),
             latency: self.latency,
             max_concurrent: self.max_concurrent,
+            sparse_delta: false,
             budget: self.budget.map(|(limit, window)| Budget {
                 limit,
                 window,
@@ -369,6 +371,13 @@ impl MockGraph {
     /// Sets the per-request latency.
     pub fn set_latency(&self, latency: Duration) {
         self.shared.lock().latency = latency;
+    }
+
+    /// Makes incremental message delta rounds list changed messages with only
+    /// `id`, `isRead` and `flag`, as Outlook.com sometimes does, instead of
+    /// every selected field.
+    pub fn set_sparse_message_delta(&self, sparse: bool) {
+        self.shared.lock().sparse_delta = sparse;
     }
 
     /// Every request served so far, oldest first.
@@ -923,6 +932,7 @@ async fn serve(
                 path,
                 q: Q(params),
                 prefer,
+                sparse_delta: st.sparse_delta,
             };
             route(&ctx, method)
         }
@@ -1028,6 +1038,7 @@ struct Ctx<'a> {
     path: &'a str,
     q: Q<'a>,
     prefer: Prefer,
+    sparse_delta: bool,
 }
 
 impl Ctx<'_> {
@@ -1509,6 +1520,16 @@ fn message_delta(c: &Ctx<'_>, folder: &str) -> R {
     let items = entries
         .iter()
         .map(|(_, key)| match key.strip_prefix("u|") {
+            Some(id) if c.sparse_delta && ds.since > 0 => {
+                let full = render::message(&st.messages[id], &c.prefer);
+                let mut v = serde_json::Map::new();
+                for k in ["id", "isRead", "flag"] {
+                    if let Some(x) = full.get(k) {
+                        v.insert(k.into(), x.clone());
+                    }
+                }
+                Value::Object(v)
+            }
             Some(id) => c.select(render::message(&st.messages[id], &c.prefer)),
             None => {
                 let mut p = key[2..].splitn(2, '|');
