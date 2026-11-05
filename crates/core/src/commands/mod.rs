@@ -5,6 +5,7 @@ pub mod api;
 pub mod auth;
 pub mod cal;
 pub mod config;
+pub mod draft;
 pub mod folder;
 pub mod mail;
 pub mod schema;

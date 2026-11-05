@@ -102,6 +102,22 @@ Options: `--fixture FILE`, `--synthetic N --seed N`, `--recording FILE`, `--toke
 
 ## Not yet
 
-Writes over HTTP (POST/PATCH/DELETE, send, move via API) come with Phase 2 (WP 2.1–2.4).
+Writes (`src/writes.rs`), each changing the model so delta rounds see it:
+
+| Route | Does |
+| --- | --- |
+| `PATCH /me/messages/{id}` | `isRead`, `flag`, `categories`, `importance`; on drafts also subject, body and recipients |
+| `POST /me/messages/{id}/move` | Move (`destinationId`); immutable ID kept |
+| `DELETE /me/messages/{id}` | Delete for good |
+| `POST /me/messages` | Create a draft in Drafts |
+| `POST /me/messages/{id}/attachments` | Add a `fileAttachment` to a draft (413 over 3 MB) |
+| `POST /me/messages/{id}/createReply`, `createReplyAll`, `createForward` | Response draft, threaded and quoted |
+| `POST /me/messages/{id}/send` | Draft to Sent Items (202); mail to the mailbox's own address also lands in its Inbox |
+| `POST /me/mailFolders`, `/me/mailFolders/{id}/childFolders` | Create a folder (409 on a name clash) |
+| `PATCH /me/mailFolders/{id}` | Rename |
+| `POST /me/mailFolders/{id}/move` | Move a folder |
+| `DELETE /me/mailFolders/{id}` | Into Deleted Items, or for good when already there |
+
+`LoggedRequest.body` holds each request's body for assertions.
 Tests change mailboxes through `MockGraph::mailbox(...)` until then. A capture tool for new
 recordings would run on Marc's machine and is left for when the provider needs one.

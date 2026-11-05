@@ -202,6 +202,12 @@ impl Registry {
         r.register(crate::commands::write::OpsList);
         r.register(crate::commands::write::OpsRetry);
         r.register(crate::commands::write::OpsCancel);
+        r.register(crate::commands::draft::DraftCreate);
+        r.register(crate::commands::draft::DraftReply);
+        r.register(crate::commands::draft::DraftForward);
+        r.register(crate::commands::draft::DraftUpdate);
+        r.register(crate::commands::draft::DraftSend);
+        r.register(crate::commands::draft::MailSend);
         r
     }
 

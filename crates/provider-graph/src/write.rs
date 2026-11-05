@@ -172,6 +172,107 @@ impl MailApi {
             .await
     }
 
+    /// Creates a draft in Drafts from a Graph message JSON body and
+    /// returns it.
+    pub async fn create_draft(&self, message: &Value, priority: Priority) -> Result<Value> {
+        self.client()
+            .post(&self.path("/messages"), message, priority)
+            .await
+    }
+
+    /// Creates a reply (`createReply`), reply-all (`createReplyAll`) or
+    /// forward (`createForward`) draft of message `id` and returns it.
+    pub async fn create_response(
+        &self,
+        id: &str,
+        action: &str,
+        priority: Priority,
+    ) -> Result<Value> {
+        self.client()
+            .post(
+                &self.path(&format!("/messages/{id}/{action}")),
+                &json!({}),
+                priority,
+            )
+            .await
+    }
+
+    /// Changes a draft's fields (a Graph message JSON body).
+    pub async fn update_draft(&self, id: &str, fields: &Value, priority: Priority) -> Result<()> {
+        self.client()
+            .patch(&self.path(&format!("/messages/{id}")), fields, priority)
+            .await
+            .map(|_| ())
+    }
+
+    /// Adds a file attachment (a Graph `fileAttachment` JSON body, up to 3 MB).
+    pub async fn add_attachment(
+        &self,
+        id: &str,
+        attachment: &Value,
+        priority: Priority,
+    ) -> Result<Value> {
+        self.client()
+            .post(
+                &self.path(&format!("/messages/{id}/attachments")),
+                attachment,
+                priority,
+            )
+            .await
+    }
+
+    /// Sends a draft. Graph moves it to Sent Items.
+    pub async fn send_draft(&self, id: &str, priority: Priority) -> Result<()> {
+        self.client()
+            .post(
+                &self.path(&format!("/messages/{id}/send")),
+                &json!({}),
+                priority,
+            )
+            .await
+            .map(|_| ())
+    }
+
+    /// The ID of a message in Sent Items with this Internet message ID, if any.
+    pub async fn find_sent(
+        &self,
+        internet_message_id: &str,
+        priority: Priority,
+    ) -> Result<Option<String>> {
+        let filter = format!(
+            "internetMessageId eq '{}'",
+            odata_string(internet_message_id)
+        );
+        let url = format!(
+            "{}?$filter={}&$select=id",
+            self.path("/mailFolders/sentitems/messages"),
+            crate::mail::encode_query_value(&filter)
+        );
+        let v = self.client().get(&url, priority, &[]).await?;
+        Ok(v["value"]
+            .as_array()
+            .and_then(|a| a.first())
+            .and_then(|m| m["id"].as_str())
+            .map(str::to_string))
+    }
+
+    /// A message's Internet message ID.
+    pub async fn internet_message_id(
+        &self,
+        id: &str,
+        priority: Priority,
+    ) -> Result<Option<String>> {
+        let v = self
+            .client()
+            .get(
+                &self.path(&format!("/messages/{id}?$select=internetMessageId")),
+                priority,
+                &[],
+            )
+            .await?;
+        Ok(v["internetMessageId"].as_str().map(str::to_string))
+    }
+
     /// Any Graph call, for writes the typed methods don't cover.
     pub async fn raw(
         &self,

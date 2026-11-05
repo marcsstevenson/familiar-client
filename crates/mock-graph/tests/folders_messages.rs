@@ -198,7 +198,7 @@ async fn unsupported_requests_fail_loudly() {
     assert_eq!(beta.status, 400);
     let post = c
         .http
-        .post(c.url("/me/messages"))
+        .post(c.url("/me/messages/x/copy"))
         .bearer_auth("test-token")
         .send()
         .await

@@ -366,6 +366,141 @@ export type DaemonInfo = {
   version?: string | null;
 };
 
+export type DraftCreateInput = {
+  /** The account to write from (config name or address); needed with more than one. */
+  account?: string | null;
+  /** Attach a file (up to 3 MB); repeat for more. */
+  attach?: Array<string>;
+  /** Bcc. */
+  bcc?: Array<string>;
+  /** Body text (plain text unless --html). */
+  body?: string | null;
+  /** Read the body from a file. */
+  body_file?: string | null;
+  /** Cc. */
+  cc?: Array<string>;
+  /** Only show what would happen. */
+  dry_run?: boolean;
+  /** The body is HTML. */
+  html?: boolean;
+  /** low, normal or high. */
+  importance?: string | null;
+  /** Add an inline image, referenced in an HTML body as cid:<file name>. */
+  inline?: Array<string>;
+  /** Leave the account's signature off. */
+  no_signature?: boolean;
+  /** Subject. */
+  subject?: string | null;
+  /** To: an address or `Name <address>`; repeat, or separate with commas. */
+  to?: Array<string>;
+  /** Wait until the server has the draft (needs famd). */
+  wait?: boolean;
+  /** Seconds --wait waits at most (default 60). */
+  wait_secs?: number | null;
+};
+
+export type DraftForwardInput = {
+  /** Attach another file; repeat for more. */
+  attach?: Array<string>;
+  /** Bcc. */
+  bcc?: Array<string>;
+  /** Body text, above the forwarded message. */
+  body?: string | null;
+  /** Read the body from a file. */
+  body_file?: string | null;
+  /** Cc. */
+  cc?: Array<string>;
+  /** Only show what would happen. */
+  dry_run?: boolean;
+  /** The body is HTML. */
+  html?: boolean;
+  /** Local ID of the message to forward. */
+  message: number;
+  /** Leave the account's reply signature off. */
+  no_signature?: boolean;
+  /** To. */
+  to?: Array<string>;
+  /** Wait until the server has the draft (needs famd). */
+  wait?: boolean;
+  /** Seconds --wait waits at most (default 60). */
+  wait_secs?: number | null;
+};
+
+export type DraftReplyInput = {
+  /** Reply to everyone on it, not just the sender. */
+  all?: boolean;
+  /** Attach a file; repeat for more. */
+  attach?: Array<string>;
+  /** Bcc. */
+  bcc?: Array<string>;
+  /** Body text, above the quoted original (plain text unless --html). */
+  body?: string | null;
+  /** Read the body from a file. */
+  body_file?: string | null;
+  /** Cc (replaces the default with --all). */
+  cc?: Array<string>;
+  /** Only show what would happen. */
+  dry_run?: boolean;
+  /** The body is HTML. */
+  html?: boolean;
+  /** Add an inline image. */
+  inline?: Array<string>;
+  /** Local ID of the message to reply to. */
+  message: number;
+  /** Leave the account's reply signature off. */
+  no_signature?: boolean;
+  /** Replace the recipients (default: the sender, or everyone with --all). */
+  to?: Array<string>;
+  /** Wait until the server has the draft (needs famd). */
+  wait?: boolean;
+  /** Seconds --wait waits at most (default 60). */
+  wait_secs?: number | null;
+};
+
+export type DraftSendInput = {
+  /** Local ID of the draft. */
+  draft: number;
+  /** Only show what would happen. */
+  dry_run?: boolean;
+  /** Skip the undo-send delay. */
+  now?: boolean;
+  /** Wait until it has gone (needs famd; includes the undo-send delay). */
+  wait?: boolean;
+  /** Seconds --wait waits at most (default 60). */
+  wait_secs?: number | null;
+  /** Send even to many outside recipients who would see each other. */
+  yes?: boolean;
+};
+
+export type DraftUpdateInput = {
+  /** Attach a file; repeat for more. */
+  attach?: Array<string>;
+  /** Replace Bcc. */
+  bcc?: Array<string>;
+  /** Replace the whole body (plain text unless --html; no signature is added). */
+  body?: string | null;
+  /** Replace the whole body from a file. */
+  body_file?: string | null;
+  /** Replace Cc. */
+  cc?: Array<string>;
+  /** Local ID of the draft. */
+  draft: number;
+  /** Only show what would happen. */
+  dry_run?: boolean;
+  /** The body is HTML. */
+  html?: boolean;
+  /** Add an inline image. */
+  inline?: Array<string>;
+  /** New subject. */
+  subject?: string | null;
+  /** Replace To. */
+  to?: Array<string>;
+  /** Wait until the server has the change (needs famd). */
+  wait?: boolean;
+  /** Seconds --wait waits at most (default 60). */
+  wait_secs?: number | null;
+};
+
 export type Drift = {
   /** What the store has against what the server has. */
   detail: string;
@@ -700,6 +835,43 @@ export type MailSearchOutput = {
   query: string;
 };
 
+export type MailSendInput = {
+  /** The account to send from (config name or address); needed with more than one. */
+  account?: string | null;
+  /** Attach a file (up to 3 MB); repeat for more. */
+  attach?: Array<string>;
+  /** Bcc. */
+  bcc?: Array<string>;
+  /** Body text (plain text unless --html). */
+  body?: string | null;
+  /** Read the body from a file. */
+  body_file?: string | null;
+  /** Cc. */
+  cc?: Array<string>;
+  /** Only show what would happen. */
+  dry_run?: boolean;
+  /** The body is HTML. */
+  html?: boolean;
+  /** low, normal or high. */
+  importance?: string | null;
+  /** Add an inline image. */
+  inline?: Array<string>;
+  /** Leave the account's signature off. */
+  no_signature?: boolean;
+  /** Skip the undo-send delay. */
+  now?: boolean;
+  /** Subject. */
+  subject?: string | null;
+  /** To: an address or `Name <address>`; repeat, or separate with commas. */
+  to?: Array<string>;
+  /** Wait until it has gone (needs famd; includes the undo-send delay). */
+  wait?: boolean;
+  /** Seconds --wait waits at most (default 60). */
+  wait_secs?: number | null;
+  /** Send even to many outside recipients who would see each other. */
+  yes?: boolean;
+};
+
 export type MailThreadInput = {
   /** The local ID of any message in the conversation. */
   message: number;
@@ -867,8 +1039,12 @@ export type QueuedOp = {
   error?: string | null;
   /** Op ID, for `fam ops wait` and `fam ops list`; `None` on a dry run. */
   id?: number | null;
+  /** Local ID of the message or folder the op created, if any. */
+  item?: number | null;
   /** Op kind, e.g. `move_message`. */
   kind: string;
+  /** When it is due to go (RFC 3339), if held back by the undo-send delay. */
+  not_before?: string | null;
   /** `planned` (dry run), `pending`, `in_flight`, `done` or `failed`. */
   state: string;
   /** What it does, in words. */
@@ -1077,6 +1253,16 @@ export interface Commands {
   "config.path": { input: ConfigPathInput; output: ConfigPathOutput };
   /** Check config.toml for errors */
   "config.validate": { input: ConfigPathInput; output: ConfigValidateOutput };
+  /** Save a new draft */
+  "draft.create": { input: DraftCreateInput; output: WriteOutput };
+  /** Save a forward as a draft */
+  "draft.forward": { input: DraftForwardInput; output: WriteOutput };
+  /** Save a reply as a draft */
+  "draft.reply": { input: DraftReplyInput; output: WriteOutput };
+  /** Send a draft */
+  "draft.send": { input: DraftSendInput; output: WriteOutput };
+  /** Change a draft */
+  "draft.update": { input: DraftUpdateInput; output: WriteOutput };
   /** Create a mail folder */
   "folder.create": { input: FolderCreateInput; output: WriteOutput };
   /** Delete a mail folder (to Deleted Items) */
@@ -1105,6 +1291,8 @@ export interface Commands {
   "mail.read": { input: MailReadInput; output: WriteOutput };
   /** Search mail across all accounts */
   "mail.search": { input: MailSearchInput; output: MailSearchOutput };
+  /** Write and send a message */
+  "mail.send": { input: MailSendInput; output: WriteOutput };
   /** Show a whole conversation */
   "mail.thread": { input: MailThreadInput; output: MailThreadOutput };
   /** Cancel a change that hasn't reached the server */
@@ -1136,6 +1324,11 @@ export const COMMAND_NAMES = [
   "cal.list",
   "config.path",
   "config.validate",
+  "draft.create",
+  "draft.forward",
+  "draft.reply",
+  "draft.send",
+  "draft.update",
   "folder.create",
   "folder.delete",
   "folder.list",
@@ -1150,6 +1343,7 @@ export const COMMAND_NAMES = [
   "mail.pin",
   "mail.read",
   "mail.search",
+  "mail.send",
   "mail.thread",
   "ops.cancel",
   "ops.list",

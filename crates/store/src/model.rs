@@ -328,6 +328,8 @@ pub struct NewOp {
     pub source: String,
     /// One line for `fam ops list` and the audit log.
     pub summary: String,
+    /// Earliest time it may run (Unix seconds); 0 for now. The undo-send delay.
+    pub not_before: i64,
 }
 
 /// A queued op.

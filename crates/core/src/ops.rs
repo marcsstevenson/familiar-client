@@ -25,6 +25,7 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::compose::{self, AttachmentData, ComposeRequest, DraftOp, DraftUpdateOp, Recipient};
 use crate::error::{CommandError, ErrorKind};
 
 /// What one queued op does, with what it needs to undo itself.
@@ -103,6 +104,19 @@ pub enum OpPayload {
         /// Delete for good.
         permanent: bool,
     },
+    /// Create a draft (new, reply, reply all or forward) with its attachments.
+    CreateDraft(DraftOp),
+    /// Change a draft.
+    UpdateDraft(DraftUpdateOp),
+    /// Send a draft. Queued with the undo-send delay.
+    SendDraft {
+        /// Local message ID of the draft.
+        message: i64,
+        /// The draft's Internet message ID, read before sending, to tell a
+        /// lost answer from a refusal on a retry.
+        #[serde(default)]
+        internet_message_id: Option<String>,
+    },
 }
 
 impl OpPayload {
@@ -117,6 +131,9 @@ impl OpPayload {
             OpPayload::RenameFolder { .. } => "rename_folder",
             OpPayload::MoveFolder { .. } => "move_folder",
             OpPayload::DeleteFolder { .. } => "delete_folder",
+            OpPayload::CreateDraft(_) => "create_draft",
+            OpPayload::UpdateDraft(_) => "update_draft",
+            OpPayload::SendDraft { .. } => "send_draft",
         }
     }
 
@@ -127,7 +144,10 @@ impl OpPayload {
             OpPayload::SetRead { message, .. }
             | OpPayload::SetFlag { message, .. }
             | OpPayload::MoveMessage { message, .. }
-            | OpPayload::DeleteMessage { message } => message_target(MessageId(*message)),
+            | OpPayload::DeleteMessage { message }
+            | OpPayload::SendDraft { message, .. } => message_target(MessageId(*message)),
+            OpPayload::CreateDraft(d) => message_target(MessageId(d.message)),
+            OpPayload::UpdateDraft(d) => message_target(MessageId(d.message)),
             OpPayload::CreateFolder { folder, .. }
             | OpPayload::RenameFolder { folder, .. }
             | OpPayload::MoveFolder { folder, .. }
@@ -235,6 +255,39 @@ pub enum WriteRequest {
         /// Delete for good.
         permanent: bool,
     },
+    /// Save a new draft (or a reply or forward).
+    Compose {
+        /// What to write.
+        draft: ComposeRequest,
+        /// Also send it, after `send_delay_secs`.
+        send: bool,
+        /// Undo-send delay in seconds.
+        send_delay_secs: u32,
+    },
+    /// Change a draft.
+    DraftUpdate {
+        /// Local message ID of the draft.
+        message: i64,
+        /// New subject.
+        subject: Option<String>,
+        /// New whole body.
+        html: Option<String>,
+        /// New To (replaces).
+        to: Option<Vec<Recipient>>,
+        /// New Cc (replaces).
+        cc: Option<Vec<Recipient>>,
+        /// New Bcc (replaces).
+        bcc: Option<Vec<Recipient>>,
+        /// Files to add.
+        attachments: Vec<AttachmentData>,
+    },
+    /// Send a draft after `delay_secs`.
+    Send {
+        /// Local message ID of the draft.
+        message: i64,
+        /// Undo-send delay in seconds.
+        delay_secs: u32,
+    },
 }
 
 impl WriteRequest {
@@ -250,6 +303,14 @@ impl WriteRequest {
             WriteRequest::FolderRename { .. } => "folder.rename",
             WriteRequest::FolderMove { .. } => "folder.move",
             WriteRequest::FolderDelete { .. } => "folder.delete",
+            WriteRequest::Compose { send: true, .. } => "mail.send",
+            WriteRequest::Compose { draft, .. } => match draft.response {
+                None => "draft.create",
+                Some(crate::compose::ResponseKind::Forward) => "draft.forward",
+                Some(_) => "draft.reply",
+            },
+            WriteRequest::DraftUpdate { .. } => "draft.update",
+            WriteRequest::Send { .. } => "draft.send",
         }
     }
 }
@@ -281,6 +342,12 @@ pub struct QueuedOp {
     /// Why it failed, or the last retry's error.
     #[serde(default)]
     pub error: Option<String>,
+    /// Local ID of the message or folder the op created, if any.
+    #[serde(default)]
+    pub item: Option<i64>,
+    /// When it is due to go (RFC 3339), if held back by the undo-send delay.
+    #[serde(default)]
+    pub not_before: Option<String>,
 }
 
 /// What a write did.
@@ -398,6 +465,8 @@ pub struct Planned {
     pub payload: OpPayload,
     /// In words.
     pub summary: String,
+    /// Hold it back this many seconds (undo send).
+    pub delay_secs: u32,
 }
 
 fn store_err(e: familiar_store::Error) -> CommandError {
@@ -561,6 +630,7 @@ pub fn plan(tx: &WriteTx<'_>, req: &WriteRequest) -> Result<Vec<Planned>, Comman
                     continue;
                 }
                 out.push(Planned {
+                    delay_secs: 0,
                     account: m.account,
                     account_key: key_of(m.account),
                     summary: format!(
@@ -585,6 +655,7 @@ pub fn plan(tx: &WriteTx<'_>, req: &WriteRequest) -> Result<Vec<Planned>, Comman
                     continue;
                 }
                 out.push(Planned {
+                    delay_secs: 0,
                     account: m.account,
                     account_key: key_of(m.account),
                     summary: format!(
@@ -635,6 +706,7 @@ pub fn plan(tx: &WriteTx<'_>, req: &WriteRequest) -> Result<Vec<Planned>, Comman
                 match (in_deleted, permanent) {
                     (false, false) => push_move(&mut out, &m, deleted, &key, "delete"),
                     (true, true) => out.push(Planned {
+                        delay_secs: 0,
                         account: m.account,
                         account_key: key,
                         summary: format!("delete {:?} for good", short(&m.subject)),
@@ -683,6 +755,7 @@ pub fn plan(tx: &WriteTx<'_>, req: &WriteRequest) -> Result<Vec<Planned>, Comman
             }
             let where_ = parent.map_or("the top level".to_string(), |p| format!("{:?}", p.name));
             out.push(Planned {
+                delay_secs: 0,
                 account: a.id,
                 account_key: a.key.clone(),
                 summary: format!("create folder {name:?} under {where_}"),
@@ -712,6 +785,7 @@ pub fn plan(tx: &WriteTx<'_>, req: &WriteRequest) -> Result<Vec<Planned>, Comman
                 return Ok(out);
             }
             out.push(Planned {
+                delay_secs: 0,
                 account: a.id,
                 account_key: a.key.clone(),
                 summary: format!("rename folder {:?} to {name:?}", f.name),
@@ -745,6 +819,7 @@ pub fn plan(tx: &WriteTx<'_>, req: &WriteRequest) -> Result<Vec<Planned>, Comman
             }
             let where_ = dest.map_or("the top level".to_string(), |p| format!("{:?}", p.name));
             out.push(Planned {
+                delay_secs: 0,
                 account: a.id,
                 account_key: a.key.clone(),
                 summary: format!("move folder {:?} under {where_}", f.name),
@@ -780,6 +855,7 @@ pub fn plan(tx: &WriteTx<'_>, req: &WriteRequest) -> Result<Vec<Planned>, Comman
                 }));
             }
             out.push(Planned {
+                delay_secs: 0,
                 account: a.id,
                 account_key: a.key.clone(),
                 summary: if *permanent {
@@ -795,9 +871,161 @@ pub fn plan(tx: &WriteTx<'_>, req: &WriteRequest) -> Result<Vec<Planned>, Comman
                 },
             });
         }
+        WriteRequest::Compose {
+            draft,
+            send,
+            send_delay_secs,
+        } => {
+            let a = match draft.respond_to {
+                Some(id) => {
+                    let m = tx
+                        .message(MessageId(id))
+                        .map_err(store_err)?
+                        .ok_or_else(|| {
+                            CommandError::new(ErrorKind::NotFound, format!("no message {id}"))
+                        })?;
+                    accounts
+                        .iter()
+                        .find(|a| a.id == m.account)
+                        .cloned()
+                        .ok_or_else(|| CommandError::internal("message without an account"))?
+                }
+                None => pick_account(tx, draft.account.as_deref())?,
+            };
+            let op = compose::plan_draft(tx, draft, &a)?;
+            if *send && op.to.is_empty() && op.cc.is_empty() && op.bcc.is_empty() {
+                return Err(CommandError::usage(
+                    "give at least one recipient (--to, --cc or --bcc)",
+                ));
+            }
+            let verb = match draft.response {
+                None => "draft",
+                Some(compose::ResponseKind::Forward) => "forward draft",
+                Some(_) => "reply draft",
+            };
+            out.push(Planned {
+                delay_secs: 0,
+                account: a.id,
+                account_key: a.key.clone(),
+                summary: format!("save {verb} {:?}", short(&op.subject)),
+                payload: OpPayload::CreateDraft(op.clone()),
+            });
+            if *send {
+                out.push(Planned {
+                    delay_secs: *send_delay_secs,
+                    account: a.id,
+                    account_key: a.key.clone(),
+                    summary: format!(
+                        "send {:?} to {}",
+                        short(&op.subject),
+                        who(&op.to, &op.cc, &op.bcc)
+                    ),
+                    payload: OpPayload::SendDraft {
+                        message: 0,
+                        internet_message_id: None,
+                    },
+                });
+            }
+        }
+        WriteRequest::DraftUpdate {
+            message,
+            subject,
+            html,
+            to,
+            cc,
+            bcc,
+            attachments,
+        } => {
+            let m = need_draft(tx, *message)?;
+            let prev = compose::snapshot(tx, &m).map_err(store_err)?;
+            out.push(Planned {
+                delay_secs: 0,
+                account: m.account,
+                account_key: key_of(m.account),
+                summary: format!(
+                    "update draft {:?}",
+                    short(subject.as_deref().unwrap_or(&m.subject))
+                ),
+                payload: OpPayload::UpdateDraft(DraftUpdateOp {
+                    message: *message,
+                    subject: subject.clone(),
+                    html: html
+                        .as_ref()
+                        .map(|h| format!("<html><body>{h}</body></html>")),
+                    to: to.clone(),
+                    cc: cc.clone(),
+                    bcc: bcc.clone(),
+                    attachments: attachments.clone(),
+                    attachments_done: 0,
+                    prev,
+                }),
+            });
+        }
+        WriteRequest::Send {
+            message,
+            delay_secs,
+        } => {
+            let m = need_draft(tx, *message)?;
+            if m.to.is_empty() && m.cc.is_empty() {
+                // Bcc isn't stored locally; the server refuses a draft with no
+                // recipients at all.
+            }
+            let pending_send = tx.open_ops().map_err(store_err)?.into_iter().any(|o| {
+                o.kind == "send_draft"
+                    && o.target == message_target(m.id)
+                    && o.state != OpState::Failed
+            });
+            if pending_send {
+                return Err(CommandError::new(
+                    ErrorKind::Conflict,
+                    format!("draft {message} is already being sent (fam ops list)"),
+                ));
+            }
+            let to: Vec<Recipient> =
+                m.to.iter()
+                    .map(|a| Recipient {
+                        name: a.name.clone(),
+                        address: a.addr.clone(),
+                    })
+                    .collect();
+            out.push(Planned {
+                delay_secs: *delay_secs,
+                account: m.account,
+                account_key: key_of(m.account),
+                summary: format!("send {:?} to {}", short(&m.subject), who(&to, &[], &[])),
+                payload: OpPayload::SendDraft {
+                    message: *message,
+                    internet_message_id: None,
+                },
+            });
+        }
     }
     let _ = &accounts;
     Ok(out)
+}
+
+fn who(to: &[Recipient], cc: &[Recipient], bcc: &[Recipient]) -> String {
+    let all: Vec<&Recipient> = to.iter().chain(cc).chain(bcc).collect();
+    match all.as_slice() {
+        [] => "nobody".into(),
+        [one] => one.address.clone(),
+        [first, rest @ ..] => format!("{} and {} more", first.address, rest.len()),
+    }
+}
+
+/// A message that is a draft (in its account's Drafts folder).
+fn need_draft(tx: &WriteTx<'_>, id: i64) -> Result<familiar_store::Message, CommandError> {
+    let m = tx
+        .message(MessageId(id))
+        .map_err(store_err)?
+        .ok_or_else(|| CommandError::new(ErrorKind::NotFound, format!("no message {id}")))?;
+    let f = tx.folder(m.folder).map_err(store_err)?;
+    if f.and_then(|f| f.well_known).as_deref() != Some("drafts") {
+        return Err(CommandError::usage(format!(
+            "message {id} isn't a draft (it isn't in Drafts)"
+        )));
+    }
+    Ok(m)
 }
 
 fn refuse_well_known(f: &Folder, what: &str) -> Result<(), CommandError> {
@@ -821,6 +1049,7 @@ fn push_move(
         return;
     }
     out.push(Planned {
+        delay_secs: 0,
         account: m.account,
         account_key: key.to_string(),
         summary: format!("{verb} {:?} to {}", short(&m.subject), dest.name),
@@ -837,7 +1066,7 @@ fn push_move(
 
 static PLACEHOLDER: AtomicU64 = AtomicU64::new(0);
 
-fn placeholder_remote_id() -> String {
+pub(crate) fn placeholder_remote_id() -> String {
     let nanos = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.as_nanos());
@@ -850,8 +1079,24 @@ pub fn apply_local(
     tx: &WriteTx<'_>,
     p: &mut OpPayload,
     account: AccountId,
+) -> familiar_store::Result<Option<i64>> {
+    apply_inner(tx, p, account)?;
+    Ok(match p {
+        OpPayload::CreateFolder { folder, .. } => Some(*folder),
+        OpPayload::CreateDraft(d) => Some(d.message),
+        _ => None,
+    })
+}
+
+fn apply_inner(
+    tx: &WriteTx<'_>,
+    p: &mut OpPayload,
+    account: AccountId,
 ) -> familiar_store::Result<()> {
     match p {
+        OpPayload::CreateDraft(d) => compose::apply_draft(tx, d, account).map(|_| ()),
+        OpPayload::UpdateDraft(d) => compose::apply_update(tx, d),
+        OpPayload::SendDraft { .. } => Ok(()),
         OpPayload::SetRead { message, read, .. } => tx.set_read(MessageId(*message), *read),
         OpPayload::SetFlag {
             message, flagged, ..
@@ -901,6 +1146,9 @@ pub fn undo_local(tx: &WriteTx<'_>, p: &OpPayload) -> familiar_store::Result<()>
         r => r,
     };
     match p {
+        OpPayload::CreateDraft(d) => compose::undo_draft(tx, d),
+        OpPayload::UpdateDraft(d) => compose::undo_update(tx, d),
+        OpPayload::SendDraft { .. } => Ok(()),
         OpPayload::SetRead { message, prev, .. } => gone(tx.set_read(MessageId(*message), *prev)),
         OpPayload::SetFlag { message, prev, .. } => {
             gone(tx.set_flagged(MessageId(*message), *prev))
@@ -947,6 +1195,8 @@ pub fn undo_local(tx: &WriteTx<'_>, p: &OpPayload) -> familiar_store::Result<()>
 pub struct OpResult {
     /// The server ID of a folder the op created.
     pub folder_remote_id: Option<String>,
+    /// The server ID of a draft the op created.
+    pub message_remote_id: Option<String>,
 }
 
 /// Records what the server did, once an op has landed.
@@ -957,6 +1207,15 @@ pub fn finish_local(
     result: &OpResult,
 ) -> familiar_store::Result<()> {
     match p {
+        OpPayload::CreateDraft(d) => match &result.message_remote_id {
+            Some(r) => tx.set_message_remote_id(MessageId(d.message), r),
+            None => Ok(()),
+        },
+        // The sent copy arrives in Sent Items with the next sync.
+        OpPayload::SendDraft { message, .. } => match tx.delete_message(MessageId(*message)) {
+            Err(familiar_store::Error::NotFound(_)) => Ok(()),
+            r => r,
+        },
         OpPayload::DeleteMessage { message } => match tx.delete_message(MessageId(*message)) {
             Err(familiar_store::Error::NotFound(_)) => Ok(()),
             r => r,
@@ -988,7 +1247,17 @@ pub fn finish_local(
 pub fn submit(tx: &WriteTx<'_>, params: &SubmitParams) -> Result<WriteOutput, CommandError> {
     let planned = plan(tx, &params.request)?;
     let mut ops = Vec::with_capacity(planned.len());
+    let mut last_item: Option<i64> = None;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs() as i64);
     for mut p in planned {
+        let not_before = if p.delay_secs > 0 {
+            now + i64::from(p.delay_secs)
+        } else {
+            0
+        };
+        let due = (not_before > 0).then(|| crate::commands::auth::rfc3339(not_before as u64));
         if params.dry_run {
             ops.push(QueuedOp {
                 id: None,
@@ -997,10 +1266,22 @@ pub fn submit(tx: &WriteTx<'_>, params: &SubmitParams) -> Result<WriteOutput, Co
                 summary: p.summary,
                 state: "planned".into(),
                 error: None,
+                item: None,
+                not_before: due,
             });
             continue;
         }
-        apply_local(tx, &mut p.payload, p.account).map_err(store_err)?;
+        // A send planned with its draft refers to the draft made just before.
+        if let OpPayload::SendDraft { message, .. } = &mut p.payload {
+            if *message == 0 {
+                *message =
+                    last_item.ok_or_else(|| CommandError::internal("send without a draft"))?;
+            }
+        }
+        let item = apply_local(tx, &mut p.payload, p.account).map_err(store_err)?;
+        if item.is_some() {
+            last_item = item;
+        }
         let payload =
             serde_json::to_string(&p.payload).map_err(|e| CommandError::internal(e.to_string()))?;
         let id = tx
@@ -1012,6 +1293,7 @@ pub fn submit(tx: &WriteTx<'_>, params: &SubmitParams) -> Result<WriteOutput, Co
                 idempotency_key: None,
                 source: params.source.clone(),
                 summary: p.summary.clone(),
+                not_before,
             })
             .map_err(store_err)?;
         tx.add_audit(&NewAudit {
@@ -1034,6 +1316,8 @@ pub fn submit(tx: &WriteTx<'_>, params: &SubmitParams) -> Result<WriteOutput, Co
             summary: p.summary,
             state: "pending".into(),
             error: None,
+            item,
+            not_before: due,
         });
     }
     Ok(WriteOutput {

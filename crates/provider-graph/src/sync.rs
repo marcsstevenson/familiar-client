@@ -411,6 +411,10 @@ impl MailSync {
         let acc = self.account;
         let mut report = MessageSyncReport::default();
         for (folder, id) in removals {
+            if id.starts_with(familiar_store::LOCAL_REMOTE_PREFIX) {
+                // Made here and not on the server yet (a draft): its op settles it.
+                continue;
+            }
             let Some(local) = w.write(|tx| tx.message_by_remote(acc, &id))? else {
                 continue;
             };

@@ -612,6 +612,39 @@ impl WriteTx<'_> {
         Ok(())
     }
 
+    /// The conversation ID of a message's thread.
+    pub fn conversation_of(&self, id: MessageId) -> Result<Option<String>> {
+        use rusqlite::OptionalExtension;
+        Ok(self
+            .tx
+            .query_row(
+                "SELECT t.conversation_id FROM messages m JOIN threads t ON t.id = m.thread_id
+                  WHERE m.id = ?1",
+                [id],
+                |r| r.get(0),
+            )
+            .optional()?)
+    }
+
+    /// Gives a message its server ID (a draft the server has just created).
+    /// A copy sync stored under that ID first is removed.
+    pub fn set_message_remote_id(&self, id: MessageId, remote_id: &str) -> Result<()> {
+        let acc: AccountId = query::require(query::message_by_id(self.c(), id)?, || {
+            format!("message {}", id.0)
+        })?
+        .account;
+        if let Some(dup) = query::message_by_remote(self.c(), acc, remote_id)? {
+            if dup.id != id {
+                self.delete_message(dup.id)?;
+            }
+        }
+        let n = self.tx.execute(
+            "UPDATE messages SET remote_id = ?2 WHERE id = ?1",
+            params![id, remote_id],
+        )?;
+        found(n, || format!("message {}", id.0))
+    }
+
     /// Deletes a message from the store (not from the server).
     pub fn delete_message(&self, id: MessageId) -> Result<()> {
         let n = self
@@ -739,10 +772,18 @@ impl WriteTx<'_> {
         };
         Ok(self.tx.query_row(
             "INSERT INTO ops (account_id, kind, target, payload, idempotency_key, created_at,
-                              updated_at, source, summary)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6, ?7, ?8) RETURNING id",
+                              updated_at, source, summary, not_before)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6, ?7, ?8, ?9) RETURNING id",
             params![
-                op.account, op.kind, op.target, payload, key, t, source, op.summary
+                op.account,
+                op.kind,
+                op.target,
+                payload,
+                key,
+                t,
+                source,
+                op.summary,
+                op.not_before
             ],
             |r| r.get(0),
         )?)

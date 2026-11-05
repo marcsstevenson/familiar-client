@@ -152,6 +152,35 @@ pub struct Message {
     /// HTML body. `None` gives a deterministic synthetic body.
     #[serde(default)]
     pub body_html: Option<String>,
+    /// Bcc recipients (drafts and sent mail).
+    #[serde(default)]
+    pub bcc: Vec<EmailAddress>,
+    /// File attachments.
+    #[serde(default)]
+    pub attachments: Vec<Attachment>,
+}
+
+/// A file attachment.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Attachment {
+    /// Attachment ID.
+    #[serde(default)]
+    pub id: String,
+    /// File name.
+    pub name: String,
+    /// MIME type.
+    #[serde(default)]
+    pub content_type: String,
+    /// Shown in the body (referenced by `cid:`), not in the attachment list.
+    #[serde(default)]
+    pub is_inline: bool,
+    /// Content ID for inline images.
+    #[serde(default)]
+    pub content_id: Option<String>,
+    /// The bytes, base64.
+    #[serde(default)]
+    pub content_bytes: String,
 }
 
 fn default_importance() -> String {
@@ -184,6 +213,8 @@ impl Message {
             conversation_id: String::new(),
             internet_message_id: String::new(),
             body_html: None,
+            bcc: Vec::new(),
+            attachments: Vec::new(),
         }
     }
 }

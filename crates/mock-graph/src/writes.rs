@@ -6,7 +6,7 @@
 //! anywhere else.
 
 use super::{GraphError, R, Reply, strip_prefix_ci};
-use crate::model::{Folder, MailboxState};
+use crate::model::{Attachment, EmailAddress, Folder, MailboxState, Message};
 use crate::render::{self, Prefer};
 use serde_json::{Value, json};
 
@@ -87,6 +87,20 @@ pub(super) fn route(
             update_message(st, segs[segs.len() - 1], body, prefer)
         }
         ("POST", ["messages", _, "move"]) => move_message(st, segs[1], body, prefer),
+        ("POST", ["messages"]) | ("POST", ["mailfolders", _, "messages"]) => {
+            create_draft(st, body, prefer)
+        }
+        ("POST", ["messages", _, "attachments"]) => add_attachment(st, segs[1], body),
+        ("POST", ["messages", _, "createreply"]) => {
+            create_response(st, segs[1], Response::Reply, body, prefer)
+        }
+        ("POST", ["messages", _, "createreplyall"]) => {
+            create_response(st, segs[1], Response::ReplyAll, body, prefer)
+        }
+        ("POST", ["messages", _, "createforward"]) => {
+            create_response(st, segs[1], Response::Forward, body, prefer)
+        }
+        ("POST", ["messages", _, "send"]) => send_draft(st, segs[1]),
         ("DELETE", ["messages", _]) => {
             st.delete_message(segs[1])
                 .map_err(|_| GraphError::not_found())?;
@@ -212,6 +226,7 @@ fn update_message(st: &mut MailboxState, id: &str, body: &Value, prefer: &Prefer
         .map(str::to_string);
     let to = obj.get("toRecipients").map(recipients);
     let cc = obj.get("ccRecipients").map(recipients);
+    let bcc = obj.get("bccRecipients").map(recipients);
     st.update_message(&imm, |m| {
         if let Some(r) = read {
             m.is_read = r;
@@ -236,6 +251,9 @@ fn update_message(st: &mut MailboxState, id: &str, body: &Value, prefer: &Prefer
         }
         if let Some(c) = cc {
             m.cc = c;
+        }
+        if let Some(b) = bcc {
+            m.bcc = b;
         }
     })
     .map_err(|_| GraphError::not_found())?;
@@ -359,4 +377,198 @@ fn create_folder(st: &mut MailboxState, parent: Option<&str>, body: &Value) -> R
         st,
         st.folder(&id).expect("inserted")
     ))))
+}
+
+// --- compose ------------------------------------------------------------------
+
+/// Graph's limit for an attachment added in one request.
+pub(super) const MAX_SIMPLE_ATTACHMENT: usize = 3 * 1024 * 1024;
+
+fn accepted() -> Reply {
+    Reply {
+        status: 202,
+        body: Value::Null,
+        headers: Vec::new(),
+    }
+}
+
+fn me(st: &MailboxState) -> EmailAddress {
+    EmailAddress::new(st.user.display_name.clone(), st.user.mail.clone())
+}
+
+fn create_draft(st: &mut MailboxState, body: &Value, prefer: &Prefer) -> R {
+    let mut m = Message::new(
+        "drafts",
+        body["subject"].as_str().unwrap_or(""),
+        me(st),
+        chrono::Utc::now(),
+    );
+    m.is_draft = true;
+    m.is_read = true;
+    m.to = recipients(&body["toRecipients"]);
+    m.cc = recipients(&body["ccRecipients"]);
+    m.bcc = recipients(&body["bccRecipients"]);
+    m.body_html = Some(body["body"]["content"].as_str().unwrap_or("").to_string());
+    if let Some(i) = body["importance"].as_str() {
+        m.importance = i.to_string();
+    }
+    let id = st.insert_message(m).map_err(|_| GraphError::not_found())?;
+    Ok(created(message_reply(st, &id, prefer)))
+}
+
+fn add_attachment(st: &mut MailboxState, id: &str, body: &Value) -> R {
+    let imm = st
+        .lookup_message(id)
+        .ok_or_else(GraphError::not_found)?
+        .to_string();
+    if !st.messages[&imm].msg.is_draft {
+        return Err(bad_request("Attachments can only be added to drafts."));
+    }
+    let bytes = body["contentBytes"].as_str().unwrap_or("");
+    if bytes.len() / 4 * 3 > MAX_SIMPLE_ATTACHMENT {
+        return Err(GraphError::new(
+            413,
+            "ErrorRequestEntityTooLarge",
+            "Attachments over 3 MB need an upload session.",
+        ));
+    }
+    let att_id = st.new_id("att");
+    let att = Attachment {
+        id: att_id.clone(),
+        name: str_field(body, "name")?.to_string(),
+        content_type: body["contentType"]
+            .as_str()
+            .unwrap_or("application/octet-stream")
+            .to_string(),
+        is_inline: body["isInline"].as_bool().unwrap_or(false),
+        content_id: body["contentId"].as_str().map(str::to_string),
+        content_bytes: bytes.to_string(),
+    };
+    let reply = json!({
+        "@odata.type": "#microsoft.graph.fileAttachment",
+        "id": att_id,
+        "name": att.name,
+        "contentType": att.content_type,
+        "isInline": att.is_inline,
+        "contentId": att.content_id,
+        "size": bytes.len() / 4 * 3,
+    });
+    st.update_message(&imm, |m| {
+        if !att.is_inline {
+            m.has_attachments = true;
+        }
+        m.attachments.push(att);
+    })
+    .map_err(|_| GraphError::not_found())?;
+    Ok(created(reply))
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Response {
+    Reply,
+    ReplyAll,
+    Forward,
+}
+
+fn create_response(
+    st: &mut MailboxState,
+    id: &str,
+    kind: Response,
+    body: &Value,
+    prefer: &Prefer,
+) -> R {
+    let imm = st
+        .lookup_message(id)
+        .ok_or_else(GraphError::not_found)?
+        .to_string();
+    let orig = st.messages[&imm].msg.clone();
+    let quoted = render::message_body(&st.messages[&imm]);
+    let me = me(st);
+    let prefix = if kind == Response::Forward {
+        "FW: "
+    } else {
+        "RE: "
+    };
+    let subject = if orig.subject.to_ascii_uppercase().starts_with(prefix.trim()) {
+        orig.subject.clone()
+    } else {
+        format!("{prefix}{}", orig.subject)
+    };
+    let mut m = Message::new("drafts", subject, me.clone(), chrono::Utc::now());
+    m.is_draft = true;
+    m.is_read = true;
+    m.conversation_id = orig.conversation_id.clone();
+    let not_me = |a: &EmailAddress| !a.address.eq_ignore_ascii_case(&me.address);
+    match kind {
+        Response::Reply => m.to = vec![orig.from.clone()],
+        Response::ReplyAll => {
+            m.to = std::iter::once(orig.from.clone())
+                .chain(orig.to.iter().cloned())
+                .filter(not_me)
+                .collect();
+            m.cc = orig.cc.iter().filter(|a| not_me(a)).cloned().collect();
+        }
+        Response::Forward => {
+            m.to = recipients(&body["toRecipients"]);
+            m.attachments = orig.attachments.clone();
+            m.has_attachments = orig.has_attachments;
+        }
+    }
+    let comment = body["comment"].as_str().unwrap_or("");
+    m.body_html = Some(format!(
+        "<html><body><div>{comment}</div><hr><div id=\"divRplyFwdMsg\"><b>From:</b> {} &lt;{}&gt;<br><b>Subject:</b> {}</div>{quoted}</body></html>",
+        orig.from.name, orig.from.address, orig.subject
+    ));
+    let new_id = st.insert_message(m).map_err(|_| GraphError::not_found())?;
+    Ok(created(message_reply(st, &new_id, prefer)))
+}
+
+fn send_draft(st: &mut MailboxState, id: &str) -> R {
+    let imm = st
+        .lookup_message(id)
+        .ok_or_else(GraphError::not_found)?
+        .to_string();
+    let draft = st.messages[&imm].msg.clone();
+    if !draft.is_draft {
+        return Err(bad_request("Only drafts can be sent."));
+    }
+    if draft.to.is_empty() && draft.cc.is_empty() && draft.bcc.is_empty() {
+        return Err(GraphError::new(
+            400,
+            "ErrorInvalidRecipients",
+            "At least one recipient isn't valid.",
+        ));
+    }
+    let now = chrono::Utc::now();
+    st.update_message(&imm, |m| {
+        m.is_draft = false;
+        m.sent_date_time = Some(now);
+        m.received_date_time = now;
+    })
+    .map_err(|_| GraphError::not_found())?;
+    st.move_message(&imm, "sentitems")
+        .map_err(|_| GraphError::not_found())?;
+    // Mail to the mailbox's own address arrives in its Inbox.
+    let mine = st.user.mail.clone();
+    let to_me = draft
+        .to
+        .iter()
+        .chain(&draft.cc)
+        .chain(&draft.bcc)
+        .any(|a| a.address.eq_ignore_ascii_case(&mine));
+    if to_me {
+        let mut copy = draft.clone();
+        copy.id = String::new();
+        copy.folder_id = "inbox".into();
+        copy.is_draft = false;
+        copy.is_read = false;
+        copy.bcc.clear();
+        copy.received_date_time = now;
+        copy.sent_date_time = Some(now);
+        let internet_id = st.messages[&imm].msg.internet_message_id.clone();
+        copy.internet_message_id = internet_id;
+        st.insert_message(copy)
+            .map_err(|_| GraphError::not_found())?;
+    }
+    Ok(accepted())
 }
