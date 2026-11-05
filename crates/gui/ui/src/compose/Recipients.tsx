@@ -163,12 +163,9 @@ export function Recipients(props: {
             }
           }}
           onKeyDown={onKeyDown}
-          onBlur={() => {
-            // Let a click on a suggestion land first.
-            setTimeout(() => {
-              if (document.activeElement !== input) commit();
-            }, 150);
-          }}
+          // Suggestions are picked on mousedown without taking focus, so a
+          // blur is always the end of typing (Send included): commit now.
+          onBlur={commit}
         />
       </div>
       <Show when={people().length > 0}>
