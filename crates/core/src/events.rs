@@ -996,8 +996,10 @@ pub fn suggest(subject: &str, text: &str, today: NaiveDate) -> Suggestion {
             .or_else(|| line.find("  "))
             .unwrap_or(line.len());
         let v = line[..end].trim().trim_end_matches('.').trim();
-        // "held at 6pm" is a time, not a place.
-        if !v.is_empty() && !starts_with_time(v) {
+        // "held at 6pm" is a time, not a place; a labelled field such as
+        // `Location: 1200 Main Street` is taken as written.
+        let prose = key.ends_with(' ');
+        if !v.is_empty() && !(prose && starts_with_time(v)) {
             out.location = Some(v.to_string());
             break;
         }
@@ -1319,6 +1321,13 @@ mod tests {
             .location
             .as_deref(),
             Some("Wolfbrook Arena, Christchurch")
+        );
+        // A labelled address keeps its street number.
+        assert_eq!(
+            suggest("Hi", "Location: 1200 Main Street\nSee you", today)
+                .location
+                .as_deref(),
+            Some("1200 Main Street")
         );
         // A time after "held at" isn't a place.
         assert_eq!(
