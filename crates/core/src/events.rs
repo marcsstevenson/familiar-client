@@ -976,7 +976,7 @@ pub fn suggest(subject: &str, text: &str, today: NaiveDate) -> Suggestion {
     // nothing.
     let (own, quoted) = split_quoted(text);
     out.location = keyed_location(&own)
-        .or_else(|| listed_location(&own))
+        .or_else(|| listed_location(&own, today))
         // The whole text, so `> Location: ...` quotes count too.
         .or_else(|| keyed_location(text));
     if let Some((date, time)) =
@@ -1053,7 +1053,7 @@ fn starts_with_time(s: &str) -> bool {
 /// separators, with the place after the time:
 /// `Fri 6 Nov • 20:00 Wolfbrook Arena • Christchurch` gives
 /// `Wolfbrook Arena, Christchurch`.
-fn listed_location(text: &str) -> Option<String> {
+fn listed_location(text: &str, today: NaiveDate) -> Option<String> {
     const SEPS: [char; 3] = ['•', '|', '·'];
     for line in text.lines() {
         let parts: Vec<&str> = line
@@ -1089,10 +1089,15 @@ fn listed_location(text: &str) -> Option<String> {
             {
                 place.push(here.to_string());
             }
-            // A short follow-on part without digits is the town.
+            // Short follow-on parts are the venue and town, until one
+            // reads as a time, a date or a price.
             for next in &parts[i + 1..] {
-                let short = next.split_whitespace().count() <= 4;
-                if !short || next.chars().any(|c| c.is_ascii_digit()) || place.len() >= 2 {
+                let words: Vec<&str> = next.split_whitespace().collect();
+                let other = words.len() > 4
+                    || time_words(&words).is_some()
+                    || parse_date(&words, today).is_some()
+                    || next.contains(['$', '€', '£']);
+                if other || place.len() >= 2 {
                     break;
                 }
                 place.push((*next).to_string());
@@ -1382,6 +1387,19 @@ mod tests {
             .location
             .as_deref(),
             Some("1200 Main Street, Springfield")
+        );
+        // Venue names may have digits; a date or price after them stops.
+        assert_eq!(
+            suggest("Hi", "Sat 7 Nov | 7:30 pm | The O2 | London", today)
+                .location
+                .as_deref(),
+            Some("The O2, London")
+        );
+        assert_eq!(
+            suggest("Hi", "20:00 | 3Arena | Sat 7 Nov | $45", today)
+                .location
+                .as_deref(),
+            Some("3Arena")
         );
         // A labelled address keeps its street number.
         assert_eq!(
