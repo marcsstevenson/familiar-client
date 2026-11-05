@@ -28,6 +28,12 @@ export function SearchBar() {
     setBusy(true);
     try {
       const out = await run("mail.search", { query: q, scope: "all", limit: 100 });
+      // The search changed while the server was asked: drop the answer.
+      if (searchQuery() !== q) return;
+      for (const n of out.notices) notify(n);
+      // Offline, famd not running or failed: the notices say why, and the
+      // button still offers to try again.
+      if (out.online !== "searched" && out.online !== "not_needed") return;
       setOnlineHits(
         out.hits
           .filter((h) => h.source === "online")
@@ -38,7 +44,6 @@ export function SearchBar() {
             account: h.account,
           })),
       );
-      for (const n of out.notices) notify(n);
     } catch (e) {
       notify(isCommandError(e) ? e.message : String(e), true);
     } finally {
