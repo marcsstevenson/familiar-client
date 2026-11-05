@@ -943,9 +943,18 @@ pub fn bare_subject(s: &str) -> String {
     let mut s = s.trim();
     loop {
         let lower = s.to_ascii_lowercase();
-        match ["re:", "fw:", "fwd:"]
-            .iter()
-            .find(|p| lower.starts_with(*p))
+        match [
+            "re:",
+            "fw:",
+            "fwd:",
+            "event reminder:",
+            "reminder:",
+            "invitation:",
+            "updated invitation:",
+            "save the date:",
+        ]
+        .iter()
+        .find(|p| lower.starts_with(*p))
         {
             Some(p) => s = s[p.len()..].trim_start(),
             None => return s.to_string(),
@@ -1185,6 +1194,10 @@ mod tests {
             today,
         );
         assert_eq!(s.subject, "Club prizegiving");
+        assert_eq!(
+            bare_subject("Event Reminder: Flight of the Conchords"),
+            "Flight of the Conchords"
+        );
         assert_eq!(s.date, Some(d(2026, 11, 21)));
         assert_eq!(s.time, chrono::NaiveTime::from_hms_opt(18, 30, 0));
         assert_eq!(s.location.as_deref(), Some("Parklands hall"));

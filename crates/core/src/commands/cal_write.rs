@@ -283,8 +283,8 @@ pub struct CalAddInput {
     pub wait_secs: Option<u32>,
 }
 
-/// The email's subject, text and when it arrived.
-fn mail_text(r: &Reader, id: i64) -> Result<(String, String, i64), CommandError> {
+/// The email's subject, text, when it arrived and its account's key.
+fn mail_text(r: &Reader, id: i64) -> Result<(String, String, i64, String), CommandError> {
     let m = r
         .message(MessageId(id))
         .map_err(store_err)?
@@ -303,7 +303,14 @@ fn mail_text(r: &Reader, id: i64) -> Result<(String, String, i64), CommandError>
         },
         None => m.preview.clone(),
     };
-    Ok((m.subject, text, m.received_at))
+    let key = r
+        .accounts()
+        .map_err(store_err)?
+        .into_iter()
+        .find(|a| a.id == m.account)
+        .map(|a| a.key)
+        .unwrap_or_default();
+    Ok((m.subject, text, m.received_at, key))
 }
 
 /// Turns `fam cal add`'s input into a request. `r` is needed for
@@ -316,9 +323,11 @@ pub fn add_request(
     now: i64,
 ) -> Result<WriteRequest, CommandError> {
     let today = today_in(now, zone);
+    let mut mail_account = None;
     let suggestion = match (i.from_mail, r) {
         (Some(id), Some(r)) => {
-            let (subject, text, at) = mail_text(r, id)?;
+            let (subject, text, at, key) = mail_text(r, id)?;
+            mail_account = (!key.is_empty()).then_some(key);
             // "Tonight" and "Saturday" are from when it was sent.
             let sent = if at > 0 { today_in(at, zone) } else { today };
             Some(events::suggest(&subject, &text, sent))
@@ -385,12 +394,16 @@ pub fn add_request(
         ));
     }
     let body = i.body.as_deref().map(text_to_html).unwrap_or_default();
-    let (account, calendar) = target(
+    let (mut account, calendar) = target(
         cfg,
         i.calendar.as_deref(),
         i.purpose.as_deref(),
         i.account.as_deref(),
     )?;
+    // From an email with nothing else naming one: the email's account.
+    if account.is_none() && calendar.is_none() {
+        account = mail_account;
+    }
     if i.reminder.is_some() && i.no_reminder {
         return Err(CommandError::usage(
             "give --reminder or --no-reminder, not both",

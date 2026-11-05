@@ -485,10 +485,23 @@ fn quote(tx: &WriteTx<'_>, orig: &Message, new_part: &str) -> Result<String, Com
         "<html><body><div>{new_part}</div><hr><div id=\"divRplyFwdMsg\"><b>From:</b> {} &lt;{}&gt;<br><b>Sent:</b> {}<br><b>To:</b> {}<br><b>Subject:</b> {}</div><br>{body}</body></html>",
         html_escape(&orig.from.name),
         html_escape(&orig.from.addr),
-        crate::commands::auth::rfc3339(orig.sent_at.unwrap_or(orig.received_at).max(0) as u64),
+        sent_text(
+            orig.sent_at.unwrap_or(orig.received_at),
+            crate::tz::local_zone()
+        ),
         to.join("; "),
         html_escape(&orig.subject),
     ))
+}
+
+/// A quoted message's time as Outlook writes it in this computer's zone:
+/// "Thursday, 5 November 2026 8:56 pm".
+fn sent_text(secs: i64, zone: chrono_tz::Tz) -> String {
+    chrono::DateTime::<chrono::Utc>::from_timestamp(secs, 0)
+        .unwrap_or_default()
+        .with_timezone(&zone)
+        .format("%A, %-d %B %Y %-I:%M %P")
+        .to_string()
 }
 
 fn prefixed(prefix: &str, subject: &str) -> String {
@@ -787,6 +800,15 @@ pub fn check_outside(
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn quoted_time_reads_like_outlook() {
+        // 2026-11-05T07:56:25Z is 8:56 pm in Auckland.
+        assert_eq!(
+            super::sent_text(1_793_865_385, chrono_tz::Pacific::Auckland),
+            "Thursday, 5 November 2026 8:56 pm"
+        );
+    }
 
     #[test]
     fn signature_images_become_inline_attachments() {

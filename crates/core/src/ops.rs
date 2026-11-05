@@ -1334,6 +1334,9 @@ fn plan_event_create(
         events::when_text(f.start_at, f.end_at, f.all_day, &f.time_zone),
         cal.name
     );
+    if !f.location.trim().is_empty() {
+        summary.push_str(&format!(" at {:?}", short(&f.location)));
+    }
     if let Some(r) = &f.recurrence {
         let every = match r.every {
             events::RepeatKind::Daily => "day",
