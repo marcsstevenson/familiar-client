@@ -38,7 +38,7 @@ function matches(query: string, text: string): boolean {
     .every((w) => t.includes(w));
 }
 
-export function Palette(props: { initial?: string; onClose: () => void }) {
+export function Palette(props: { initial?: string; values?: Values; onClose: () => void }) {
   const [query, setQuery] = createSignal("");
   const [active, setActive] = createSignal(0);
   const [form, setForm] = createSignal<CommandDoc | null>(null);
@@ -150,16 +150,22 @@ export function Palette(props: { initial?: string; onClose: () => void }) {
             </>
           }
         >
-          {(doc) => <CommandForm doc={doc()} onBack={() => setForm(null)} />}
+          {(doc) => (
+            <CommandForm
+              doc={doc()}
+              values={doc().name === props.initial ? props.values : undefined}
+              onBack={() => setForm(null)}
+            />
+          )}
         </Show>
       </div>
     </div>
   );
 }
 
-function CommandForm(props: { doc: CommandDoc; onBack: () => void }) {
+function CommandForm(props: { doc: CommandDoc; values?: Values; onBack: () => void }) {
   const fields = fieldsOf(props.doc.input);
-  const [values, setValues] = createSignal<Values>(prefill(fields));
+  const [values, setValues] = createSignal<Values>({ ...prefill(fields), ...props.values });
   const [result, setResult] = createSignal<{ ok: boolean; text: string } | null>(null);
   const [busy, setBusy] = createSignal(false);
   const set = (name: string, v: string | boolean) => setValues((o) => ({ ...o, [name]: v }));

@@ -4,6 +4,7 @@
 // so nothing in the message can run, while this pane can still reach into the
 // document to show where a link goes and to open links outside the app.
 import { createEffect, onCleanup } from "solid-js";
+import { onGlobalKey } from "../actions/registry";
 
 export type HoverLink = { href: string; text: string } | null;
 
@@ -29,6 +30,8 @@ export function MessageFrame(props: {
   const attach = () => {
     const doc = frame.contentDocument;
     if (!doc) return;
+    // Keys pressed while the body has focus don't reach the app's window.
+    doc.addEventListener("keydown", onGlobalKey);
     doc.addEventListener("mouseover", (e) => {
       const a = linkOf(e.target);
       props.onHover(a ? { href: a.getAttribute("href") ?? "", text: a.textContent ?? "" } : null);

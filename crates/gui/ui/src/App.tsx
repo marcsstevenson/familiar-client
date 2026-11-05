@@ -31,9 +31,9 @@ type UiCommand =
 export function App(props: { info: UiInfo }) {
   const [daemon, setDaemon] = createSignal<DaemonState>({ state: "starting" });
   // The palette: closed, open on the list, or open on one command's form.
-  const [palette, setPalette] = createSignal<{ initial?: string } | null>(null);
+  const [palette, setPalette] = createSignal<{ initial?: string; values?: Record<string, string | boolean> } | null>(null);
   setKeyOverrides(props.info.keys);
-  registerBuiltinActions((initial) => setPalette({ initial }));
+  registerBuiltinActions((initial, values) => setPalette({ initial, values }));
   onMount(async () => {
     window.addEventListener("keydown", onGlobalKey);
     const stopDaemon = await watchDaemon(setDaemon);
@@ -71,7 +71,7 @@ export function App(props: { info: UiInfo }) {
         <span>Familiar {props.info.version}</span>
       </footer>
       <Show when={palette()}>
-        {(p) => <Palette initial={p().initial} onClose={() => setPalette(null)} />}
+        {(p) => <Palette initial={p().initial} values={p().values} onClose={() => setPalette(null)} />}
       </Show>
     </div>
   );

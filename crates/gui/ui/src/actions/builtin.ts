@@ -21,7 +21,7 @@ async function onSelected(
   }
 }
 
-export function registerBuiltinActions(openPalette: (prefill?: string) => void): void {
+export function registerBuiltinActions(openPalette: (prefill?: string, values?: Record<string, string | boolean>) => void): void {
   registerAction({ id: "palette", title: "Show all commands", key: "Ctrl+K", run: () => openPalette() });
   registerAction({ id: "next", title: "Next message", key: "j", run: () => listNav.move(1) });
   registerAction({ id: "previous", title: "Previous message", key: "k", run: () => listNav.move(-1) });
@@ -59,9 +59,10 @@ export function registerBuiltinActions(openPalette: (prefill?: string) => void):
     title: "Mark read or unread",
     key: "u",
     enabled: hasMessage,
-    cli: () => `fam mail read ${selectedMessage()}${selectedRow()?.is_read ? " --unread" : ""}`,
+    cli: () => `fam mail read ${selectedMessage()}${(selectedRow()?.is_read ?? true) ? " --unread" : ""}`,
     run: () => {
-      const unread = selectedRow()?.is_read ?? false;
+      // No row: it left the list (the Unread filter) because opening it marked it read.
+      const unread = selectedRow()?.is_read ?? true;
       return onSelected(unread ? "Marked unread" : "Marked read", (id) =>
         run("mail.read", { messages: [id], unread }),
       );
@@ -82,7 +83,7 @@ export function registerBuiltinActions(openPalette: (prefill?: string) => void):
     key: "a",
     enabled: hasMessage,
     cli: () => `fam draft reply ${selectedMessage()} --all`,
-    run: () => openPalette("draft.reply"),
+    run: () => openPalette("draft.reply", { all: true }),
   });
   registerAction({
     id: "forward",

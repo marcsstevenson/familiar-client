@@ -96,7 +96,8 @@ export function inputOf(fields: Field[], values: Values): Record<string, unknown
     else if (typeof v !== "string") continue;
     else if (f.kind === "integer" || f.kind === "number") out[f.name] = number(f.name, v);
     else if (f.kind === "list") {
-      const items = v.split(",").map((x) => x.trim()).filter(Boolean);
+      // Commas inside quotes or <...> stay: `"Doe, Jane" <jane@example.com>`.
+      const items = (v.match(/(?:"[^"]*"|<[^>]*>|[^,])+/g) ?? []).map((x) => x.trim()).filter(Boolean);
       out[f.name] = f.numericItems ? items.map((x) => number(f.name, x)) : items;
     } else if (f.kind === "json") out[f.name] = JSON.parse(v);
     else out[f.name] = v;
