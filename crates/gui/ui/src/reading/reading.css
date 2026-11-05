@@ -1,0 +1,152 @@
+/* The reading pane. Colours and sizes come from styles/tokens.css. */
+.reading-message {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+.reading-header {
+  padding: var(--space-5) var(--space-5) var(--space-4);
+  border-bottom: 1px solid var(--border);
+}
+.reading-subject {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-xl);
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+.reading-from {
+  font-weight: 600;
+}
+.reading-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2) var(--space-4);
+  margin-top: var(--space-2);
+  font-size: var(--text-sm);
+}
+.reading .muted {
+  color: var(--text-muted);
+}
+.reading .warn {
+  color: var(--warn);
+}
+.reading-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-5);
+  background: var(--bg-sidebar);
+  border-bottom: 1px solid var(--border);
+  font-size: var(--text-sm);
+}
+.reading-banner.quiet {
+  color: var(--text-muted);
+}
+.reading-banner.warn {
+  color: var(--warn);
+}
+.reading button {
+  font: inherit;
+  font-size: var(--text-sm);
+  color: var(--accent);
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-3);
+  cursor: pointer;
+}
+.reading button:hover {
+  background: var(--bg-hover);
+}
+.reading button:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
+.reading button:disabled {
+  color: var(--text-muted);
+  cursor: default;
+}
+.reading-attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin: 0;
+  padding: var(--space-3) var(--space-5);
+  list-style: none;
+  border-bottom: 1px solid var(--border);
+  font-size: var(--text-sm);
+}
+.attachment {
+  display: flex;
+  gap: var(--space-1);
+}
+.attachment[aria-busy="true"] {
+  opacity: 0.6;
+}
+.attachment .attachment-name {
+  color: var(--text);
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.message-frame {
+  flex: 1;
+  width: 100%;
+  min-height: 0;
+  border: 0;
+  background: #fff;
+}
+.reading-wait {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  color: var(--text-muted);
+}
+.reading-status {
+  position: absolute;
+  left: var(--space-3);
+  bottom: var(--space-3);
+  max-width: calc(100% - 2 * var(--space-3));
+  padding: var(--space-2) var(--space-3);
+  background: var(--bg-chrome);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.attachment-preview {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+}
+.attachment-preview-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-5);
+  border-bottom: 1px solid var(--border);
+}
+.attachment-preview-body {
+  flex: 1;
+  overflow: auto;
+  padding: var(--space-5);
+}
+.attachment-preview-body img {
+  max-width: 100%;
+}
+.attachment-preview-body pre {
+  margin: 0;
+  white-space: pre-wrap;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}

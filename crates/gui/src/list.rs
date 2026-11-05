@@ -43,6 +43,10 @@ pub struct ViewSpec {
     /// Sort order.
     #[serde(default)]
     pub sort: Sort,
+    /// Increases with each open. An open older than the current view is
+    /// ignored, since overlapping opens can take the lock out of order.
+    #[serde(default)]
+    pub generation: u64,
 }
 
 /// The result of opening a view.
@@ -80,6 +84,7 @@ struct Inner {
     reader: Option<Reader>,
     ids: Vec<MessageId>,
     accounts: HashMap<i64, String>,
+    generation: u64,
 }
 
 fn store_error(e: impl std::fmt::Display) -> CommandError {
@@ -113,6 +118,10 @@ impl Lists {
             .inner
             .lock()
             .map_err(|_| store_error("lock poisoned"))?;
+        if spec.generation < g.generation {
+            return Ok(Opened { total: g.ids.len() });
+        }
+        g.generation = spec.generation;
         let (ids, accounts) = g
             .reader()?
             .snapshot(|r| {
@@ -295,6 +304,7 @@ mod tests {
                 folders: vec![f.0],
                 unread_only: false,
                 sort,
+                generation: 0,
             };
             sorted_ids(&r, &[f], &spec).unwrap()
         };

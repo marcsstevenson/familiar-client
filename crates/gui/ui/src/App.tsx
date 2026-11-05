@@ -2,6 +2,7 @@
 // Each pane is its own component folder; they share selection through state.ts.
 import { Show, createSignal, onCleanup, onMount } from "solid-js";
 import { type DaemonState, type UiInfo, watchDaemon } from "./api";
+import { ReadingPane } from "./reading/ReadingPane";
 import { FolderTree } from "./folders/FolderTree";
 import { MessageList } from "./list/MessageList";
 import { TitleBar } from "./TitleBar";
@@ -33,9 +34,7 @@ export function App(props: { info: UiInfo }) {
         <section class="pane list" aria-label="Messages">
           <MessageList />
         </section>
-        <section class="pane reading" aria-label="Reading pane">
-          <div class="pane-empty">Select a message to read it</div>
-        </section>
+        <ReadingPane />
       </main>
       <footer class="statusbar" role="status">
         <span classList={{ warn: daemon().state === "unavailable" }}>{daemonText(daemon())}</span>

@@ -28,6 +28,7 @@ serde_json.workspace = true
 tokio = { version = "1", features = ["rt-multi-thread", "net", "io-util", "macros", "sync", "time", "signal"] }
 
 [dev-dependencies]
+base64 = "0.22"
 chrono = { version = "0.4", default-features = false, features = ["std"] }
 familiar-mock-graph.workspace = true
 rusqlite = { version = "0.41", features = ["bundled"] }
