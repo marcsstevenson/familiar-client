@@ -10,6 +10,7 @@ The Phase 1 read commands (WP 1.10). Each one is a registry command, so it has `
 | `fam mail thread <id>` | A whole conversation across folders | No |
 | `fam mail fetch <id>` | A message with its text | Only to download a body that isn't local |
 | `fam mail pin <id>` | Keep a body on this device; see [sync.md](sync.md) | Yes |
+| `fam mail attachments <id>` | List a message's attachments, or save them with `--save DIR` | Yes |
 | `fam api <path>` | GET any Microsoft Graph path with an account's token | Yes |
 
 The commands that don't need famd read the local store directly, so they work offline and while famd is stopped. Before anything has synced they exit 6 (`not_found`). IDs are local message IDs, as shown by `list`, `search` and `thread`.
@@ -70,6 +71,16 @@ fam mail fetch 1234 --local
 The header plus `body` and `body_type` (`text` or `html`). By default HTML is converted to plain text; `--format html` returns the body as stored (a plain-text message stays `text`).
 
 Bodies newer than `sync.window` are already local. An older one is downloaded through famd into the on-demand cache (`downloaded: true`, `cached: true`), which is bounded by `sync.cache_limit` and evicts least recently used first; use `fam mail pin` to keep one for good. If famd isn't running the command exits 11 and says so; `--local` never downloads and returns the header without `body`. With `sync.older_bodies = "none"` an old body is refused with exit 5.
+
+## fam mail attachments
+
+```sh
+fam mail attachments 812                         # names, types and sizes
+fam mail attachments 812 --save ~/Downloads      # save them all
+fam mail attachments 812 --save . --name minutes.pdf
+```
+
+Attachments aren't synced, so this reads them from the server through famd. A saved file never replaces one already there: the second `minutes.pdf` becomes `minutes (2).pdf`. Inline images (the ones shown inside the body) are left out unless `--inline`. Attached Outlook items and OneDrive links are listed with their kind but can't be saved. The reading pane in the desktop app uses the same code.
 
 ## fam api
 

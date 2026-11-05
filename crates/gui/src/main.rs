@@ -8,6 +8,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod daemon;
+mod reading;
 
 use familiar_core::registry::Registry;
 use familiar_core::{CommandError, agent};
@@ -90,7 +91,23 @@ fn main() {
     tauri::Builder::default()
         .manage(std::sync::Arc::new(Registry::builtin()))
         .manage(daemon::Shared::default())
-        .invoke_handler(tauri::generate_handler![ui_info, run, daemon_state])
+        .manage(reading::Reading::load())
+        .register_asynchronous_uri_scheme_protocol("famimg", |_ctx, request, responder| {
+            tauri::async_runtime::spawn(async move {
+                responder.respond(reading::remote::proxy(request).await);
+            });
+        })
+        .invoke_handler(tauri::generate_handler![
+            ui_info,
+            run,
+            daemon_state,
+            reading::reading_open,
+            reading::reading_trust_sender,
+            reading::reading_attachments,
+            reading::reading_preview,
+            reading::reading_save,
+            reading::reading_open_link,
+        ])
         .setup(|app| {
             let builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
                 .title("Familiar")

@@ -1,0 +1,17 @@
+<!-- Script in every form we know of. Nothing here may run. -->
+<p>Hello</p>
+<script>window.parent.pwned = 1</script>
+<SCRIPT SRC="https://evil.example/x.js"></SCRIPT>
+<img src="x" onerror="window.parent.pwned = 2">
+<body onload="window.parent.pwned = 3">
+<div onclick="window.parent.pwned = 4" onmouseover="x()">Hover me</div>
+<a href="javascript:window.parent.pwned=5">js link</a>
+<a href="JaVaScRiPt:alert(1)">mixed case</a>
+<a href="java&#x09;script:alert(1)">tab in scheme</a>
+<a href="&#106;avascript:alert(1)">entity scheme</a>
+<a href="vbscript:msgbox(1)">vbscript</a>
+<a href="data:text/html,&lt;script&gt;alert(1)&lt;/script&gt;">data html</a>
+<svg><script>window.parent.pwned = 6</script><circle onload="x()"/></svg>
+<math><mtext><script>window.parent.pwned = 7</script></mtext></math>
+<details open ontoggle="window.parent.pwned = 8">x</details>
+<p style="behavior:url(x.htc);background:expression(alert(1))">old IE only: modern engines ignore both, so the style may stay</p>
