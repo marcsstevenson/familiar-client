@@ -1481,6 +1481,23 @@ export type ThreadMessage = {
   to: Array<MailAddress>;
 };
 
+export type UiDone = {
+  /** What the app now shows, in words. */
+  shown: string;
+};
+
+export type UiFolderInput = {
+  /** The account the folder is in (its name in config.toml). Needed when a folder is given and there is more than one account. */
+  account?: string | null;
+  /** Folder path (Inbox/Club) or well-known name (inbox, sentitems, drafts, archive). Default: every account's Inbox together. */
+  folder?: string | null;
+};
+
+export type UiOpenInput = {
+  /** Local ID of the message to open. */
+  message: number;
+};
+
 export type VersionInput = {
   /** Also report the operating system and CPU architecture. */
   verbose?: boolean;
@@ -1596,6 +1613,10 @@ export interface Commands {
   "sync.check": { input: SyncCheckInput; output: CheckReport };
   /** Show how far each account's sync has got */
   "sync.status": { input: SyncStatusInput; output: SyncStatusOutput };
+  /** Show a folder in the app */
+  "ui.folder": { input: UiFolderInput; output: UiDone };
+  /** Open a message in the app */
+  "ui.open": { input: UiOpenInput; output: UiDone };
   /** Show the Familiar version */
   "version": { input: VersionInput; output: VersionOutput };
 }
@@ -1649,5 +1670,7 @@ export const COMMAND_NAMES = [
   "schema",
   "sync.check",
   "sync.status",
+  "ui.folder",
+  "ui.open",
   "version",
 ] as const satisfies readonly CommandName[];

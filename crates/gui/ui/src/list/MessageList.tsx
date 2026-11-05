@@ -2,7 +2,7 @@
 // component asks for the rows on screen a page at a time and draws only those.
 import { For, Show, createEffect, createSignal, on, onCleanup, onMount } from "solid-js";
 import { isCommandError } from "../api";
-import { selectedFolder, selectedMessage, setSelectedMessage } from "../state";
+import { listNav, selectedFolder, selectedMessage, setSelectedMessage, setSelectedRow } from "../state";
 import { type Row, type Sort, listIndexOf, listOpen, listRows, onStoreChanged } from "./api";
 import { shortDate } from "./format";
 
@@ -89,7 +89,10 @@ export function MessageList() {
         setScrollTop(0);
       }
       const sel = selectedMessage();
-      setSelIndex(sel === null ? null : await listIndexOf(sel));
+      const ix = sel === null ? null : await listIndexOf(sel);
+      if (g !== gen) return;
+      setSelIndex(ix);
+      if (ix !== null && !keepScroll) scrollIntoView(ix);
       setRev((x) => x + 1);
       prefetch();
     } catch (e) {
@@ -125,12 +128,34 @@ export function MessageList() {
 
   createEffect(on([selectedFolder, sort, unreadOnly], () => void reopen(false)));
 
+  // The selected row's flags, for actions such as "mark unread".
+  createEffect(() => {
+    const i = selIndex();
+    const r = i === null ? undefined : rowAt(i);
+    setSelectedRow(r && r.id === selectedMessage() ? { id: r.id, is_read: r.is_read, is_flagged: r.is_flagged } : null);
+  });
+
+  // `fam ui open` and other code can select a message by ID.
+  createEffect(
+    on(selectedMessage, async (id) => {
+      if (id === null) return setSelIndex(null);
+      const cur = selIndex();
+      if (cur !== null && rowAt(cur)?.id === id) return;
+      const ix = await listIndexOf(id);
+      if (ix !== null && selectedMessage() === id) {
+        setSelIndex(ix);
+        scrollIntoView(ix);
+      }
+    }, { defer: true }),
+  );
+
   onMount(async () => {
     const ro = new ResizeObserver(() => {
       setViewH(scroller.clientHeight);
       prefetch();
     });
     ro.observe(scroller);
+    listNav.move = (d) => select((selIndex() ?? -1) + d);
     const stop = await onStoreChanged(() => void reopen(true));
     onCleanup(() => {
       ro.disconnect();
@@ -138,16 +163,19 @@ export function MessageList() {
     });
   });
 
-  function select(i: number) {
-    if (total() === 0) return;
-    const ix = Math.max(0, Math.min(total() - 1, i));
-    setSelIndex(ix);
-    // Keep the row in view.
+  function scrollIntoView(ix: number) {
     const top = ix * ROW_H;
     if (top < scroller.scrollTop) scroller.scrollTop = top;
     else if (top + ROW_H > scroller.scrollTop + scroller.clientHeight) {
       scroller.scrollTop = top + ROW_H - scroller.clientHeight;
     }
+  }
+
+  function select(i: number) {
+    if (total() === 0) return;
+    const ix = Math.max(0, Math.min(total() - 1, i));
+    setSelIndex(ix);
+    scrollIntoView(ix);
     const row = rowAt(ix);
     if (row) setSelectedMessage(row.id);
     else {
@@ -165,9 +193,7 @@ export function MessageList() {
     const page = Math.max(1, Math.floor(scroller.clientHeight / ROW_H) - 1);
     const moves: Record<string, number> = {
       ArrowDown: cur + 1,
-      j: cur + 1,
       ArrowUp: cur - 1,
-      k: cur - 1,
       PageDown: cur + page,
       PageUp: cur - page,
       Home: 0,

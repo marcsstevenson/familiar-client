@@ -39,7 +39,41 @@ The list is virtualised. Rust (`src/list.rs`) holds the sorted message IDs of th
 
 A background thread checks the store's `PRAGMA data_version` once a second and sends `store_changed` when another process (famd, `fam`) has committed. The list then reopens the view and swaps in the rows on screen before redrawing, so it doesn't flash while famd syncs. The folder pane refetches its counts on the same event.
 
-Keys in the list: `j`/`k` or the arrow keys, Page Up/Down, Home and End.
+Keys in the list: the arrow keys, Page Up/Down, Home and End (and `j`/`k` from anywhere, below).
+
+## Command palette and keys
+
+Ctrl+K (Cmd+K on macOS) opens the palette. It lists the app's actions with their keys, and every registered command with its `fam` form. Choosing a command opens a form generated from its input schema (`fam schema`), prefilled with the selected message where the command takes `message` or `messages`, and shows the matching `fam` command line as you fill it in. Run shows the command's JSON output.
+
+`ui/src/actions/surface.ts` says where each registered command lives: `palette`, or `terminal` for the two that need one (`auth.login`, `mcp.serve`). It is a `Record` over every command name, so a new command fails `tsc` (and CI's front-end build) until it is placed there.
+
+Actions and their default keys (`ui/src/actions/builtin.ts`):
+
+| Action ID | Key | Does |
+| --- | --- | --- |
+| `palette` | Ctrl+K | Show all commands |
+| `next`, `previous` | `j`, `k` | Move through the list |
+| `archive` | `e` | `fam mail archive` |
+| `delete` | `#` | `fam mail delete` |
+| `flag` | `s` | `fam mail flag` (or `--clear`) |
+| `toggle_read` | `u` | `fam mail read` (or `--unread`) |
+| `reply`, `reply_all`, `forward` | `r`, `a`, `f` | Draft a reply or forward (the command form until the compose window lands) |
+| `compose` | `c` | New message |
+| `theme` | | Cycle the theme |
+
+Change a key in `config.toml`, by action ID:
+
+```toml
+[keys]
+archive = "y"
+palette = "Ctrl+P"
+```
+
+Single keys are ignored while typing in a field.
+
+## `fam ui`
+
+The app listens on its own socket (`familiar-ui.sock` in the data directory, or the pipe `\\.\pipe\familiar-ui-<hash>` on Windows), with the same line protocol as famd. `fam ui open <message>` shows a message (its folder, then the message) and `fam ui folder [<folder>] [--account <name>]` shows a folder, or all inboxes with no folder. Both bring the window to the front, and fail with exit code 11 when the app isn't running.
 
 ## Timing
 

@@ -28,6 +28,8 @@ export type UiInfo = {
   platform: Platform | string;
   theme: Theme;
   config_error: string | null;
+  /** config.toml's [keys]: action ID to key. */
+  keys: Record<string, string>;
   /** Run the timing script (FAMILIAR_BENCH_OUT is set). */
   bench: boolean;
 };

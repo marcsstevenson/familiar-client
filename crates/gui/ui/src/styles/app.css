@@ -307,3 +307,157 @@ button {
 .row-placeholder {
   height: 100%;
 }
+
+/* Command palette */
+.palette-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgb(0 0 0 / 0.25);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 10vh;
+  z-index: 10;
+}
+.palette {
+  width: min(680px, 90vw);
+  max-height: 70vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 12px 40px rgb(0 0 0 / 0.3);
+  overflow: hidden;
+}
+.palette-input {
+  font: inherit;
+  font-size: var(--text-lg);
+  color: inherit;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--border);
+  padding: var(--space-4) var(--space-5);
+  outline: none;
+}
+.palette-list {
+  list-style: none;
+  margin: 0;
+  padding: var(--space-2) 0;
+  overflow-y: auto;
+}
+.palette-list li {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-4);
+  padding: var(--space-3) var(--space-5);
+  cursor: default;
+}
+.palette-list li.active {
+  background: var(--bg-selected);
+}
+.palette-title {
+  flex: none;
+}
+.palette-cli,
+.command-cli code {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+.palette-cli {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+kbd {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0 var(--space-2);
+  color: var(--text-muted);
+}
+.palette-note {
+  color: var(--text-muted);
+}
+.command-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  overflow-y: auto;
+  user-select: text;
+}
+.command-head {
+  display: flex;
+  gap: var(--space-4);
+  align-items: flex-start;
+}
+.command-desc,
+.command-help {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+}
+.command-fields {
+  display: grid;
+  gap: var(--space-3);
+}
+.command-field {
+  display: grid;
+  grid-template-columns: 140px 1fr;
+  gap: var(--space-1) var(--space-4);
+  align-items: center;
+}
+.command-field .command-help {
+  grid-column: 2;
+}
+.command-field input:not([type="checkbox"]),
+.command-field select {
+  font: inherit;
+  color: inherit;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+}
+.command-field input[type="checkbox"] {
+  justify-self: start;
+}
+.command-cli {
+  background: var(--bg-sidebar);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3) var(--space-4);
+}
+.command-actions {
+  display: flex;
+  justify-content: flex-end;
+}
+button.primary {
+  background: var(--accent);
+  color: var(--text-on-accent);
+  border: 0;
+  border-radius: var(--radius-sm);
+  padding: var(--space-3) var(--space-5);
+}
+button.primary:disabled {
+  opacity: 0.6;
+}
+button.link {
+  border: 0;
+  background: transparent;
+  font-size: var(--text-xl);
+  line-height: 1;
+  padding: 0 var(--space-2);
+}
+.command-result {
+  margin: 0;
+  max-height: 30vh;
+  overflow: auto;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  background: var(--bg-sidebar);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3) var(--space-4);
+}
