@@ -769,7 +769,9 @@ pub fn parse_time(s: &str) -> Option<chrono::NaiveTime> {
     let (h, m) = match num.split_once(':') {
         Some((h, m)) => (h.parse::<u32>().ok()?, m.parse::<u32>().ok()?),
         None if pm.is_some() => (num.parse::<u32>().ok()?, 0),
-        None if num.len() == 4 => (num[..2].parse().ok()?, num[2..].parse().ok()?),
+        None if num.len() == 4 && num.is_ascii() => {
+            (num[..2].parse().ok()?, num[2..].parse().ok()?)
+        }
         None => return None,
     };
     let h = match pm {
@@ -994,7 +996,8 @@ pub fn suggest(subject: &str, text: &str, today: NaiveDate) -> Suggestion {
             .or_else(|| line.find("  "))
             .unwrap_or(line.len());
         let v = line[..end].trim().trim_end_matches('.').trim();
-        if !v.is_empty() {
+        // "held at 6pm" is a time, not a place.
+        if !v.is_empty() && !starts_with_time(v) {
             out.location = Some(v.to_string());
             break;
         }
@@ -1012,6 +1015,12 @@ pub fn suggest(subject: &str, text: &str, today: NaiveDate) -> Suggestion {
         out.time = time;
     }
     out
+}
+
+/// True when `s` opens with a time of day (`6pm on Friday`, `18:00`).
+fn starts_with_time(s: &str) -> bool {
+    let words: Vec<&str> = s.split_whitespace().collect();
+    (1..=words.len().min(2)).any(|n| parse_time(&words[..n].join(" ")).is_some())
 }
 
 /// A place from a ticket-style line that lists the details between
@@ -1293,6 +1302,17 @@ mod tests {
             .as_deref(),
             Some("Wolfbrook Arena, Christchurch")
         );
+        // A time after "held at" isn't a place.
+        assert_eq!(
+            suggest("Hi", "The session will be held at 6pm on Friday.", today).location,
+            None
+        );
+        // Emoji and other non-ASCII words don't trip the time parser.
+        assert_eq!(
+            suggest("Hi", "📍 Town Hall | Christchurch", today).location,
+            None
+        );
+        assert_eq!(parse_time("📍"), None);
         // A separator line with no time gives nothing.
         assert_eq!(
             suggest("Hi", "Home • About • Contact", today).location,
