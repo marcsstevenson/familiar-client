@@ -1048,9 +1048,27 @@ fn listed_location(text: &str) -> Option<String> {
                 continue;
             };
             let mut place: Vec<String> = Vec::new();
+            // `20:00 - 22:00`: the end time is part of the time too.
+            let mut n = n;
+            if let Some(sep) = words.get(n) {
+                if ["-", "–", "—", "to", "until"].contains(&sep.to_ascii_lowercase().as_str())
+                    && starts_with_time(&words[n + 1..].join(" "))
+                {
+                    let rest = &words[n + 1..];
+                    n += 1
+                        + (1..=rest.len().min(2))
+                            .rev()
+                            .find(|&k| parse_time(&rest[..k].join(" ")).is_some())
+                            .unwrap_or(0);
+                }
+            }
             let here = words[n..].join(" ");
             let here = here.trim_start_matches("at ").trim();
-            if !here.is_empty() {
+            // Whatever is left must read as a name, not more times.
+            if !here.is_empty()
+                && here.starts_with(char::is_alphanumeric)
+                && !starts_with_time(here)
+            {
                 place.push(here.to_string());
             }
             // A short follow-on part without digits is the town.
@@ -1313,6 +1331,29 @@ mod tests {
             None
         );
         assert_eq!(parse_time("📍"), None);
+        // A time range isn't part of the place.
+        assert_eq!(
+            suggest("Hi", "Fri 6 Nov • 20:00 - 22:00 • Town Hall", today)
+                .location
+                .as_deref(),
+            Some("Town Hall")
+        );
+        assert_eq!(
+            suggest(
+                "Hi",
+                "Fri 6 Nov • 7pm to 9 pm Town Hall • Christchurch",
+                today
+            )
+            .location
+            .as_deref(),
+            Some("Town Hall, Christchurch")
+        );
+        assert_eq!(
+            suggest("Hi", "Fri 6 Nov • 20:00 –22:00 • Town Hall", today)
+                .location
+                .as_deref(),
+            Some("Town Hall")
+        );
         // A separator line with no time gives nothing.
         assert_eq!(
             suggest("Hi", "Home • About • Contact", today).location,
