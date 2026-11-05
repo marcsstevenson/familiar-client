@@ -92,6 +92,21 @@ fn ui_info() -> UiInfo {
 /// Names the file the bench results go to.
 const BENCH_ENV: &str = "FAMILIAR_BENCH_OUT";
 
+/// When set with `FAMILIAR_BENCH_OUT`, the app stays open after reporting,
+/// so a harness can measure its idle memory.
+const BENCH_HOLD_ENV: &str = "FAMILIAR_BENCH_HOLD";
+
+/// When `main` started, for cold start timing.
+static STARTED: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
+
+/// Milliseconds since the process started.
+#[tauri::command]
+fn bench_elapsed_ms() -> f64 {
+    STARTED
+        .get()
+        .map_or(0.0, |t| t.elapsed().as_secs_f64() * 1000.0)
+}
+
 /// Writes the front end's timing results (JSON) to `FAMILIAR_BENCH_OUT`, then
 /// closes the app.
 #[tauri::command]
@@ -101,7 +116,9 @@ fn bench_report(report: Value, app: tauri::AppHandle) -> Result<(), CommandError
     };
     std::fs::write(&path, format!("{report:#}\n"))
         .map_err(|e| CommandError::internal(format!("write bench results: {e}")))?;
-    app.exit(0);
+    if std::env::var_os(BENCH_HOLD_ENV).is_none() {
+        app.exit(0);
+    }
     Ok(())
 }
 
@@ -169,6 +186,7 @@ fn list_index_of(id: i64, lists: tauri::State<'_, std::sync::Arc<list::Lists>>) 
 }
 
 fn main() {
+    STARTED.get_or_init(std::time::Instant::now);
     tauri::Builder::default()
         .manage(std::sync::Arc::new(Registry::builtin()))
         .manage(daemon::Shared::default())
@@ -197,7 +215,8 @@ fn main() {
             compose::compose_info,
             compose::open_compose,
             compose::file_info,
-            compose::pick_files
+            compose::pick_files,
+            bench_elapsed_ms
         ])
         .setup(|app| {
             let builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::default())

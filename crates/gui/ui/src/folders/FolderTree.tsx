@@ -119,14 +119,14 @@ function FolderItem(props: {
       classList={{ selected: props.selected, unread: props.unread > 0 }}
       role="treeitem"
       aria-selected={props.selected}
-      aria-label={props.unread > 0 ? `${props.name}, ${props.unread} unread` : props.name}
       style={{ "padding-left": `calc(var(--space-4) + ${props.depth} * var(--space-5))` }}
       onClick={props.onSelect}
     >
       <span class="folder-name">{props.name}</span>
       <Show when={props.unread > 0}>
-        <span class="folder-count" aria-hidden="true">
+        <span class="folder-count">
           {props.unread}
+          <span class="visually-hidden"> unread</span>
         </span>
       </Show>
     </button>

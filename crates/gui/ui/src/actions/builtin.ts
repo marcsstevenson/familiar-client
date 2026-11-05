@@ -4,6 +4,7 @@ import { isCommandError, run } from "../api";
 import { listNav, notify, selectedMessage, selectedRow } from "../state";
 import { searchFocus } from "../list/SearchBar";
 import { cycleTheme } from "../theme";
+import { openCompose } from "../compose/spec";
 import { registerAction } from "./registry";
 
 const hasMessage = () => selectedMessage() !== null;
@@ -22,7 +23,7 @@ async function onSelected(
   }
 }
 
-export function registerBuiltinActions(openPalette: (prefill?: string, values?: Record<string, string | boolean>) => void): void {
+export function registerBuiltinActions(openPalette: (prefill?: string) => void): void {
   registerAction({ id: "palette", title: "Show all commands", key: "Ctrl+K", run: () => openPalette() });
   registerAction({ id: "next", title: "Next message", key: "j", run: () => listNav.move(1) });
   registerAction({ id: "previous", title: "Previous message", key: "k", run: () => listNav.move(-1) });
@@ -68,14 +69,18 @@ export function registerBuiltinActions(openPalette: (prefill?: string, values?: 
       );
     },
   });
-  // Until the compose window lands, these open the command's form in the palette.
+  // These open a compose window.
+  const composeOn = (f: (id: number) => Parameters<typeof openCompose>[0]) => async () => {
+    const id = selectedMessage();
+    if (id !== null) await openCompose(f(id));
+  };
   registerAction({
     id: "reply",
     title: "Reply",
     key: "r",
     enabled: hasMessage,
     cli: () => `fam draft reply ${selectedMessage()}`,
-    run: () => openPalette("draft.reply"),
+    run: composeOn((message) => ({ kind: "reply", message })),
   });
   registerAction({
     id: "reply_all",
@@ -83,7 +88,7 @@ export function registerBuiltinActions(openPalette: (prefill?: string, values?: 
     key: "a",
     enabled: hasMessage,
     cli: () => `fam draft reply ${selectedMessage()} --all`,
-    run: () => openPalette("draft.reply", { all: true }),
+    run: composeOn((message) => ({ kind: "reply", message, all: true })),
   });
   registerAction({
     id: "forward",
@@ -91,14 +96,14 @@ export function registerBuiltinActions(openPalette: (prefill?: string, values?: 
     key: "f",
     enabled: hasMessage,
     cli: () => `fam draft forward ${selectedMessage()}`,
-    run: () => openPalette("draft.forward"),
+    run: composeOn((message) => ({ kind: "forward", message })),
   });
   registerAction({
     id: "compose",
     title: "New message",
     key: "c",
     cli: () => "fam draft create",
-    run: () => openPalette("draft.create"),
+    run: () => openCompose({ kind: "new" }),
   });
   registerAction({ id: "search", title: "Search mail", key: "/", cli: () => "fam mail search", run: () => searchFocus.focus() });
   registerAction({ id: "theme", title: "Change theme (system, light, dark)", run: cycleTheme });
