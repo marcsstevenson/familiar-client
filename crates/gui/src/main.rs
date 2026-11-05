@@ -9,6 +9,8 @@
 
 mod compose;
 mod daemon;
+mod list;
+mod reading;
 
 use familiar_core::registry::Registry;
 use familiar_core::{CommandError, agent};
@@ -32,6 +34,9 @@ struct UiInfo {
     theme: &'static str,
     /// Why config.toml could not be read, if it couldn't.
     config_error: Option<String>,
+    /// True when `FAMILIAR_BENCH_OUT` names a file: the front end then runs
+    /// its timing script and reports with `bench_report`.
+    bench: bool,
 }
 
 #[tauri::command]
@@ -49,7 +54,24 @@ fn ui_info() -> UiInfo {
         platform: std::env::consts::OS,
         theme,
         config_error,
+        bench: std::env::var_os(BENCH_ENV).is_some(),
     }
+}
+
+/// Names the file the bench results go to.
+const BENCH_ENV: &str = "FAMILIAR_BENCH_OUT";
+
+/// Writes the front end's timing results (JSON) to `FAMILIAR_BENCH_OUT`, then
+/// closes the app.
+#[tauri::command]
+fn bench_report(report: Value, app: tauri::AppHandle) -> Result<(), CommandError> {
+    let Some(path) = std::env::var_os(BENCH_ENV) else {
+        return Ok(());
+    };
+    std::fs::write(&path, format!("{report:#}\n"))
+        .map_err(|e| CommandError::internal(format!("write bench results: {e}")))?;
+    app.exit(0);
+    Ok(())
 }
 
 fn theme_name(t: familiar_config::model::Theme) -> &'static str {
@@ -87,15 +109,60 @@ fn daemon_state(state: tauri::State<'_, daemon::Shared>) -> daemon::DaemonState 
     state.get()
 }
 
+/// Opens a message list view; see [`list::Lists::open`].
+#[tauri::command]
+async fn list_open(
+    spec: list::ViewSpec,
+    lists: tauri::State<'_, std::sync::Arc<list::Lists>>,
+) -> Result<list::Opened, CommandError> {
+    let lists = std::sync::Arc::clone(&lists);
+    tauri::async_runtime::spawn_blocking(move || lists.open(&spec))
+        .await
+        .map_err(|e| CommandError::internal(format!("list task failed: {e}")))?
+}
+
+/// Rows of the open view by position.
+#[tauri::command]
+fn list_rows(
+    start: usize,
+    count: usize,
+    lists: tauri::State<'_, std::sync::Arc<list::Lists>>,
+) -> Result<Vec<list::Row>, CommandError> {
+    lists.rows(start, count)
+}
+
+/// Where a message is in the open view, if it is there.
+#[tauri::command]
+fn list_index_of(id: i64, lists: tauri::State<'_, std::sync::Arc<list::Lists>>) -> Option<usize> {
+    lists.index_of(id)
+}
+
 fn main() {
     tauri::Builder::default()
         .manage(std::sync::Arc::new(Registry::builtin()))
         .manage(daemon::Shared::default())
         .plugin(tauri_plugin_dialog::init())
+        .manage(reading::Reading::load())
+        .register_asynchronous_uri_scheme_protocol("famimg", |_ctx, request, responder| {
+            tauri::async_runtime::spawn(async move {
+                responder.respond(reading::remote::proxy(request).await);
+            });
+        })
+        .manage(std::sync::Arc::new(list::Lists::default()))
         .invoke_handler(tauri::generate_handler![
             ui_info,
             run,
             daemon_state,
+            reading::reading_open,
+            reading::reading_trust_sender,
+            reading::reading_attachments,
+            reading::reading_preview,
+            reading::reading_save,
+            reading::reading_open_link,
+            list_open,
+            list_rows,
+            list_index_of,
+            bench_report,
             compose::compose_info,
             compose::open_compose,
             compose::file_info,
@@ -118,6 +185,8 @@ fn main() {
             let handle = app.handle().clone();
             let shared = app.state::<daemon::Shared>().inner().clone();
             std::thread::spawn(move || daemon::keep_running(&handle, &shared));
+            let handle = app.handle().clone();
+            std::thread::spawn(move || list::watch_store(&handle));
             Ok(())
         })
         .run(tauri::generate_context!())

@@ -16,12 +16,21 @@ path = "src/main.rs"
 tauri-build = { version = "2.5", features = [] }
 
 [dependencies]
+ammonia = "4.2"
+base64 = "0.22"
+dirs = "6"
 familiar-core.workspace = true
 familiar-config.workspace = true
+familiar-store.workspace = true
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "http2"] }
 serde.workspace = true
 serde_json.workspace = true
 tauri = { version = "2.12", features = [] }
 tauri-plugin-dialog = "2"
+webbrowser = "1"
+
+[dev-dependencies]
+tempfile = "3"
 
 [features]
 default = ["custom-protocol"]

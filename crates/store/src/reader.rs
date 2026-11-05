@@ -296,4 +296,34 @@ impl Reader {
     pub fn flagged_ids(&self) -> Result<Vec<MessageId>> {
         query::ids_where(&self.conn, true)
     }
+
+    /// Every message in `folders`, as (ID, received time), newest first, for
+    /// a list that pages by position (the GUI's virtualised list).
+    /// `unread_only` keeps only unread messages.
+    pub fn message_order(
+        &self,
+        folders: &[FolderId],
+        unread_only: bool,
+    ) -> Result<Vec<(MessageId, i64)>> {
+        query::message_order(&self.conn, folders, unread_only)
+    }
+
+    /// Every message in `folders` with the text the list can sort by: the
+    /// sender's name (or address) or the subject.
+    pub fn message_sort_text(
+        &self,
+        folders: &[FolderId],
+        unread_only: bool,
+        column: SortText,
+    ) -> Result<Vec<(MessageId, String)>> {
+        query::message_sort_text(&self.conn, folders, unread_only, column)
+    }
+
+    /// A number that changes whenever another connection commits, so a
+    /// reader can tell cheaply that the store has changed.
+    pub fn data_version(&self) -> Result<i64> {
+        Ok(self
+            .conn
+            .query_row("PRAGMA data_version", [], |r| r.get(0))?)
+    }
 }

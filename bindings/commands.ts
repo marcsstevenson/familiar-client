@@ -159,6 +159,25 @@ export type ApiInput = {
   path: string;
 };
 
+export type AttachmentInfo = {
+  /** MIME type, such as `application/pdf`. */
+  content_type: string;
+  /** Graph attachment ID. */
+  id: string;
+  /** Shown inside the body (a `cid:` image) rather than in the list. */
+  is_inline: boolean;
+  /** File, item or reference. */
+  kind: AttachmentKind;
+  /** File name. */
+  name: string;
+  /** Where it was saved, with --save. */
+  saved_to?: string | null;
+  /** Size in bytes, as Graph reports it. */
+  size: number;
+};
+
+export type AttachmentKind = "file" | "item" | "reference";
+
 export type AuditListInput = {
   /** Most rows (default 50). */
   limit?: number | null;
@@ -869,6 +888,24 @@ export type MailArchiveInput = {
   wait_secs?: number | null;
 };
 
+export type MailAttachmentsInput = {
+  /** Include inline images (the ones shown inside the body). */
+  inline?: boolean;
+  /** The message's local ID. */
+  message: number;
+  /** Only the attachment with this name or ID (with --save). */
+  name?: string | null;
+  /** Save the attachments into this folder. A file that already exists is kept and the new one gets a number, like `report (2).pdf`. */
+  save?: string | null;
+};
+
+export type MailAttachmentsOutput = {
+  /** The attachments, in the order Graph lists them. */
+  attachments: Array<AttachmentInfo>;
+  /** The message's local ID. */
+  message: number;
+};
+
 export type MailDeleteInput = {
   /** Only show what would change. */
   dry_run?: boolean;
@@ -1525,6 +1562,8 @@ export interface Commands {
   "folder.rename": { input: FolderRenameInput; output: WriteOutput };
   /** Move messages to Archive */
   "mail.archive": { input: MailArchiveInput; output: WriteOutput };
+  /** List or save a message's attachments */
+  "mail.attachments": { input: MailAttachmentsInput; output: MailAttachmentsOutput };
   /** Move messages to Deleted Items */
   "mail.delete": { input: MailDeleteInput; output: WriteOutput };
   /** Show a message with its text */
@@ -1594,6 +1633,7 @@ export const COMMAND_NAMES = [
   "folder.move",
   "folder.rename",
   "mail.archive",
+  "mail.attachments",
   "mail.delete",
   "mail.fetch",
   "mail.flag",

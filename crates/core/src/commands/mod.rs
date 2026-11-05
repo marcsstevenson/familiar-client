@@ -3,6 +3,7 @@
 
 pub mod agent;
 pub mod api;
+pub mod attachments;
 pub mod auth;
 pub mod cal;
 pub mod cal_write;

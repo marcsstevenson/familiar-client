@@ -1,0 +1,9 @@
+Hi Marc,
+
+The draw is at https://club.example/draw?season=2026&grade=3. Shout if
+anything's wrong, or mail secretary@club.example (mailto:secretary@club.example).
+
+<script>alert(1)</script> and a < b & c > d stay as text.
+
+-- 
+Sam

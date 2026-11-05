@@ -468,6 +468,21 @@ Moves messages to their account's Archive folder, on this device at once and que
 - `--wait`: Wait until the server has the change (needs famd).
 - `--wait-secs <wait-secs>`: Seconds --wait waits at most (default 60).
 
+## mail.attachments
+
+List or save a message's attachments. Access: `read`.
+
+```
+fam mail attachments <MESSAGE>
+```
+
+Lists a message's attachments with their names, types and sizes, read from the server through famd (attachments aren't kept on this device). --save DIR downloads them into a folder, never replacing a file that is already there; --name picks one. Inline images are left out unless --inline. Attached Outlook items and cloud links are listed but can't be saved.
+
+- `--inline`: Include inline images (the ones shown inside the body).
+- `MESSAGE` (required): The message's local ID.
+- `--name <name>`: Only the attachment with this name or ID (with --save).
+- `--save <save>`: Save the attachments into this folder. A file that already exists is kept and the new one gets a number, like `report (2).pdf`.
+
 ## mail.delete
 
 Move messages to Deleted Items. Access: `delete`.

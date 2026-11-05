@@ -15,3 +15,4 @@ render(
   () => (spec ? <ComposeWindow info={info} spec={spec} /> : <App info={info} />),
   document.getElementById("root")!,
 );
+if (!spec && info.bench) void import("./bench").then((b) => b.runBench());

@@ -28,6 +28,8 @@ export type UiInfo = {
   platform: Platform | string;
   theme: Theme;
   config_error: string | null;
+  /** Run the timing script (FAMILIAR_BENCH_OUT is set). */
+  bench: boolean;
 };
 
 export const uiInfo = (): Promise<UiInfo> => invoke<UiInfo>("ui_info");

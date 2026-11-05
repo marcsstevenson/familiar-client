@@ -386,3 +386,41 @@ fn unknown_ids_are_not_found() {
     let out = w.write(|tx| tx.delete_message(MessageId(999)));
     assert!(matches!(out, Err(Error::NotFound(_))));
 }
+
+#[test]
+fn message_order_merges_folders_newest_first_and_sort_text_falls_back_to_address() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut w = Writer::open(dir.path()).unwrap();
+    let a = account(&mut w, "hotmail");
+    let b = account(&mut w, "parklands");
+    let ia = folder(&mut w, a, "Inbox");
+    let ib = folder(&mut w, b, "Inbox");
+    let (m1, m2, m3) = w
+        .write(|tx| {
+            let mut nameless = msg(b, ib, "m2", "c2", 200, true);
+            nameless.from = Address {
+                name: String::new(),
+                addr: "zed@example.com".into(),
+            };
+            Ok((
+                tx.upsert_message(&msg(a, ia, "m1", "c1", 100, false))?,
+                tx.upsert_message(&nameless)?,
+                tx.upsert_message(&msg(a, ia, "m3", "c3", 300, false))?,
+            ))
+        })
+        .unwrap();
+
+    let r = Reader::open(dir.path()).unwrap();
+    let ids = |v: Vec<(MessageId, i64)>| v.into_iter().map(|(id, _)| id).collect::<Vec<_>>();
+    assert_eq!(
+        ids(r.message_order(&[ia, ib], false).unwrap()),
+        [m3, m2, m1]
+    );
+    assert_eq!(ids(r.message_order(&[ia, ib], true).unwrap()), [m3, m1]);
+    let from = r.message_sort_text(&[ib], false, SortText::From).unwrap();
+    assert_eq!(from, [(m2, "zed@example.com".to_string())]);
+
+    let v0 = r.data_version().unwrap();
+    w.write(|tx| tx.set_read(m1, true)).unwrap();
+    assert_ne!(r.data_version().unwrap(), v0);
+}
