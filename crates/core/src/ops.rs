@@ -18,8 +18,9 @@
 use std::sync::atomic::{AtomicU64, Ordering};
 
 use familiar_store::{
-    AccountId, Folder, FolderId, LOCAL_REMOTE_PREFIX, MessageId, NewAudit, NewFolder, NewOp, Op,
-    OpId, OpState, Reader, WriteTx, folder_target, message_target,
+    AccountId, EventId, Folder, FolderId, LOCAL_REMOTE_PREFIX, MessageId, NewAudit, NewFolder,
+    NewOp, Op, OpId, OpState, Reader, WriteTx, event_target, folder_target, message_target,
+    series_target,
 };
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -27,6 +28,9 @@ use serde_json::Value;
 
 use crate::compose::{self, AttachmentData, ComposeRequest, DraftOp, DraftUpdateOp, Recipient};
 use crate::error::{CommandError, ErrorKind};
+use crate::events::{
+    self, EventChanges, EventDeleteOp, EventFields, EventOp, EventRespondOp, EventUpdateOp, Rsvp,
+};
 
 /// What one queued op does, with what it needs to undo itself.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -117,6 +121,14 @@ pub enum OpPayload {
         #[serde(default)]
         internet_message_id: Option<String>,
     },
+    /// Create an event (or a recurring series).
+    CreateEvent(EventOp),
+    /// Change an event or a series.
+    UpdateEvent(EventUpdateOp),
+    /// Answer an invitation.
+    RespondEvent(EventRespondOp),
+    /// Delete an event or a series; for a meeting you organised, cancel it.
+    DeleteEvent(EventDeleteOp),
 }
 
 impl OpPayload {
@@ -134,6 +146,10 @@ impl OpPayload {
             OpPayload::CreateDraft(_) => "create_draft",
             OpPayload::UpdateDraft(_) => "update_draft",
             OpPayload::SendDraft { .. } => "send_draft",
+            OpPayload::CreateEvent(_) => "create_event",
+            OpPayload::UpdateEvent(_) => "update_event",
+            OpPayload::RespondEvent(_) => "respond_event",
+            OpPayload::DeleteEvent(_) => "delete_event",
         }
     }
 
@@ -152,6 +168,10 @@ impl OpPayload {
             | OpPayload::RenameFolder { folder, .. }
             | OpPayload::MoveFolder { folder, .. }
             | OpPayload::DeleteFolder { folder, .. } => folder_target(FolderId(*folder)),
+            OpPayload::CreateEvent(e) => event_target(EventId(e.event)),
+            OpPayload::UpdateEvent(e) => event_or_series(e.event, e.series.as_deref()),
+            OpPayload::RespondEvent(e) => event_or_series(e.event, e.series.as_deref()),
+            OpPayload::DeleteEvent(e) => event_or_series(e.event, e.series.as_deref()),
         }
     }
 
@@ -173,6 +193,13 @@ impl OpPayload {
         serde_json::from_str(&op.payload).map_err(|e| {
             CommandError::internal(format!("op {} has an unreadable payload: {e}", op.id.0))
         })
+    }
+}
+
+fn event_or_series(event: i64, series: Option<&str>) -> String {
+    match series {
+        Some(m) => series_target(m),
+        None => event_target(EventId(event)),
     }
 }
 
@@ -288,6 +315,48 @@ pub enum WriteRequest {
         /// Undo-send delay in seconds.
         delay_secs: u32,
     },
+    /// Add an event.
+    EventCreate {
+        /// Account key or address; found from the calendar when left out.
+        account: Option<String>,
+        /// Calendar name; the account's default calendar when left out.
+        calendar: Option<String>,
+        /// The event.
+        event: EventFields,
+        /// The email it comes from, linked in its body.
+        from_mail: Option<i64>,
+    },
+    /// Change an event.
+    EventUpdate {
+        /// Local event ID.
+        event: i64,
+        /// Change the whole series it belongs to.
+        series: bool,
+        /// What changes.
+        changes: EventChanges,
+    },
+    /// Delete an event (cancelling a meeting you organised).
+    EventDelete {
+        /// Local event ID.
+        event: i64,
+        /// Delete the whole series.
+        series: bool,
+        /// A note for the attendees' cancellation.
+        comment: Option<String>,
+    },
+    /// Answer an invitation.
+    EventRespond {
+        /// Local event ID.
+        event: i64,
+        /// Answer for the whole series.
+        series: bool,
+        /// The answer.
+        response: Rsvp,
+        /// A note to the organiser.
+        comment: Option<String>,
+        /// Tell the organiser.
+        send_response: bool,
+    },
 }
 
 impl WriteRequest {
@@ -311,6 +380,10 @@ impl WriteRequest {
             },
             WriteRequest::DraftUpdate { .. } => "draft.update",
             WriteRequest::Send { .. } => "draft.send",
+            WriteRequest::EventCreate { .. } => "cal.add",
+            WriteRequest::EventUpdate { .. } => "cal.edit",
+            WriteRequest::EventDelete { .. } => "cal.delete",
+            WriteRequest::EventRespond { .. } => "cal.rsvp",
         }
     }
 }
@@ -342,7 +415,7 @@ pub struct QueuedOp {
     /// Why it failed, or the last retry's error.
     #[serde(default)]
     pub error: Option<String>,
-    /// Local ID of the message or folder the op created, if any.
+    /// Local ID of the message, folder or event the op created, if any.
     #[serde(default)]
     pub item: Option<i64>,
     /// When it is due to go (RFC 3339), if held back by the undo-send delay.
@@ -999,9 +1072,308 @@ pub fn plan(tx: &WriteTx<'_>, req: &WriteRequest) -> Result<Vec<Planned>, Comman
                 },
             });
         }
+        WriteRequest::EventCreate {
+            account,
+            calendar,
+            event,
+            from_mail,
+        } => out.push(plan_event_create(
+            tx,
+            account.as_deref(),
+            calendar.as_deref(),
+            event,
+            *from_mail,
+        )?),
+        WriteRequest::EventUpdate {
+            event,
+            series,
+            changes,
+        } => {
+            let (e, master) = need_event(tx, *event, *series)?;
+            if changes.is_empty() {
+                return Err(CommandError::usage("nothing to change"));
+            }
+            let organiser_only = changes.subject.is_some()
+                || changes.retimes()
+                || changes.location.is_some()
+                || changes.attendees.is_some();
+            if organiser_only && !e.data.is_organizer {
+                return Err(CommandError::usage(format!(
+                    "{:?} was organised by {}; only they can change its subject, times, place or attendees",
+                    e.data.subject, e.data.organizer.addr
+                )));
+            }
+            if let Some(z) = &changes.time_zone {
+                if crate::tz::parse_zone(z).is_none() {
+                    return Err(CommandError::usage(format!("unknown time zone {z:?}")));
+                }
+            }
+            if changes.retimes() {
+                let all_day = changes.all_day.unwrap_or(e.data.is_all_day);
+                let start = changes.start_at.unwrap_or(e.data.start_at);
+                let end = changes.end_at.unwrap_or(e.data.end_at);
+                events::check_times(start, end, all_day)?;
+            }
+            let rows = events::rows(tx, e.id.0, master.as_deref()).map_err(store_err)?;
+            let mut what = Vec::new();
+            for (on, w) in [
+                (changes.subject.is_some(), "subject"),
+                (changes.retimes(), "time"),
+                (changes.location.is_some(), "place"),
+                (changes.body_html.is_some(), "notes"),
+                (changes.attendees.is_some(), "attendees"),
+                (changes.show_as.is_some(), "free/busy"),
+                (
+                    changes.reminder_minutes.is_some() || changes.no_reminder,
+                    "reminder",
+                ),
+                (changes.categories.is_some(), "categories"),
+            ] {
+                if on {
+                    what.push(w);
+                }
+            }
+            out.push(Planned {
+                delay_secs: 0,
+                account: e.data.account,
+                account_key: key_of(e.data.account),
+                summary: format!(
+                    "change {}{:?} on {}: {}",
+                    if master.is_some() { "every " } else { "" },
+                    short(&e.data.subject),
+                    event_when(&e.data),
+                    what.join(", ")
+                ),
+                payload: OpPayload::UpdateEvent(EventUpdateOp {
+                    event: e.id.0,
+                    series: master,
+                    changes: changes.clone(),
+                    prev: events::snapshot(&rows),
+                }),
+            });
+        }
+        WriteRequest::EventDelete {
+            event,
+            series,
+            comment,
+        } => {
+            let (e, master) = need_event(tx, *event, *series)?;
+            let meeting = e.data.is_organizer && !e.data.attendees.is_empty();
+            out.push(Planned {
+                delay_secs: 0,
+                account: e.data.account,
+                account_key: key_of(e.data.account),
+                summary: format!(
+                    "{} {}{:?} on {}{}",
+                    if meeting { "cancel" } else { "delete" },
+                    if master.is_some() { "every " } else { "" },
+                    short(&e.data.subject),
+                    event_when(&e.data),
+                    if meeting {
+                        format!(" and tell {} attendees", e.data.attendees.len())
+                    } else {
+                        String::new()
+                    }
+                ),
+                payload: OpPayload::DeleteEvent(EventDeleteOp {
+                    event: e.id.0,
+                    series: master,
+                    comment: comment.clone().filter(|_| meeting),
+                }),
+            });
+        }
+        WriteRequest::EventRespond {
+            event,
+            series,
+            response,
+            comment,
+            send_response,
+        } => {
+            let (e, master) = need_event(tx, *event, *series)?;
+            if e.data.is_organizer {
+                return Err(CommandError::usage(format!(
+                    "you organised {:?}; there is no invitation to answer",
+                    e.data.subject
+                )));
+            }
+            let rows = events::rows(tx, e.id.0, master.as_deref()).map_err(store_err)?;
+            out.push(Planned {
+                delay_secs: 0,
+                account: e.data.account,
+                account_key: key_of(e.data.account),
+                summary: format!(
+                    "{} {}{:?} on {}{}",
+                    response.verb(),
+                    if master.is_some() { "every " } else { "" },
+                    short(&e.data.subject),
+                    event_when(&e.data),
+                    if *send_response {
+                        format!(" and tell {}", e.data.organizer.addr)
+                    } else {
+                        " without telling the organiser".into()
+                    }
+                ),
+                payload: OpPayload::RespondEvent(EventRespondOp {
+                    event: e.id.0,
+                    series: master,
+                    response: *response,
+                    comment: comment.clone(),
+                    send_response: *send_response,
+                    prev: events::snapshot(&rows),
+                }),
+            });
+        }
     }
     let _ = &accounts;
     Ok(out)
+}
+
+fn event_when(d: &familiar_store::EventData) -> String {
+    events::when_text(
+        d.start_at,
+        d.end_at,
+        d.is_all_day,
+        d.start_tz.as_deref().unwrap_or("UTC"),
+    )
+}
+
+/// An event, and its series master's server ID when `series`.
+fn need_event(
+    tx: &WriteTx<'_>,
+    id: i64,
+    series: bool,
+) -> Result<(familiar_store::Event, Option<String>), CommandError> {
+    let e = tx
+        .event(EventId(id))
+        .map_err(store_err)?
+        .ok_or_else(|| CommandError::new(ErrorKind::NotFound, format!("no event {id}")))?;
+    let master = if series {
+        Some(e.data.series_master_id.clone().ok_or_else(|| {
+            CommandError::usage(format!(
+                "event {id} ({:?}) isn't part of a recurring series",
+                e.data.subject
+            ))
+        })?)
+    } else {
+        None
+    };
+    Ok((e, master))
+}
+
+fn plan_event_create(
+    tx: &WriteTx<'_>,
+    account: Option<&str>,
+    calendar: Option<&str>,
+    f: &EventFields,
+    from_mail: Option<i64>,
+) -> Result<Planned, CommandError> {
+    let mut found = Vec::new();
+    let accounts = match (account, calendar) {
+        (None, Some(_)) => tx.accounts().map_err(store_err)?,
+        _ => vec![pick_account(tx, account)?],
+    };
+    for a in &accounts {
+        for c in tx.calendars(a.id).map_err(store_err)? {
+            let ok = match calendar {
+                Some(n) => c.name.eq_ignore_ascii_case(n.trim()),
+                None => c.is_default,
+            };
+            if ok {
+                found.push((a.clone(), c));
+            }
+        }
+    }
+    let (acc, cal) = match found.len() {
+        1 => found.remove(0),
+        0 => {
+            let what = match calendar {
+                Some(n) => format!("no calendar called {n:?}"),
+                None => "no default calendar has synced yet".into(),
+            };
+            return Err(CommandError::new(ErrorKind::NotFound, what));
+        }
+        _ => {
+            let mut keys: Vec<String> = found.iter().map(|(a, _)| a.key.clone()).collect();
+            keys.sort();
+            return Err(CommandError::usage(format!(
+                "more than one account has that calendar; pick one with --account ({})",
+                keys.join(", ")
+            )));
+        }
+    };
+    if !cal.can_edit {
+        return Err(CommandError::new(
+            ErrorKind::PermissionDenied,
+            format!("{:?} is read-only for {}", cal.name, acc.key),
+        ));
+    }
+    if crate::tz::parse_zone(&f.time_zone).is_none() {
+        return Err(CommandError::usage(format!(
+            "unknown time zone {:?}",
+            f.time_zone
+        )));
+    }
+    events::check_times(f.start_at, f.end_at, f.all_day)?;
+    if let Some(r) = &f.recurrence {
+        if r.interval == 0 {
+            return Err(CommandError::usage("--every must be 1 or more"));
+        }
+        if r.until.is_some() && r.count.is_some() {
+            return Err(CommandError::usage("give --until or --count, not both"));
+        }
+    }
+    if let Some(m) = from_mail {
+        tx.message(MessageId(m))
+            .map_err(store_err)?
+            .ok_or_else(|| CommandError::new(ErrorKind::NotFound, format!("no message {m}")))?;
+    }
+    let invited: Vec<Recipient> = f.attendees.iter().chain(&f.optional).cloned().collect();
+    let mut summary = format!(
+        "add {:?} on {} to {}",
+        short(&f.subject),
+        events::when_text(f.start_at, f.end_at, f.all_day, &f.time_zone),
+        cal.name
+    );
+    if let Some(r) = &f.recurrence {
+        let every = match r.every {
+            events::RepeatKind::Daily => "day",
+            events::RepeatKind::Weekly => "week",
+            events::RepeatKind::Monthly => "month",
+            events::RepeatKind::Yearly => "year",
+        };
+        summary.push_str(&if r.interval > 1 {
+            format!(", every {} {every}s", r.interval)
+        } else {
+            format!(", every {every}")
+        });
+        if let Some(n) = r.count {
+            summary.push_str(&format!(", {n} times"));
+        }
+        if let Some(u) = &r.until {
+            summary.push_str(&format!(" until {u}"));
+        }
+    }
+    if !invited.is_empty() {
+        summary.push_str(&format!(", inviting {}", who(&invited, &[], &[])));
+    }
+    let tid = placeholder_remote_id();
+    Ok(Planned {
+        delay_secs: 0,
+        account: acc.id,
+        account_key: acc.key.clone(),
+        summary,
+        payload: OpPayload::CreateEvent(EventOp {
+            event: 0,
+            calendar: cal.id.0,
+            fields: f.clone(),
+            transaction_id: tid
+                .strip_prefix(LOCAL_REMOTE_PREFIX)
+                .unwrap_or(&tid)
+                .to_string(),
+            remote_id: None,
+            from_mail,
+        }),
+    })
 }
 
 fn who(to: &[Recipient], cc: &[Recipient], bcc: &[Recipient]) -> String {
@@ -1084,6 +1456,7 @@ pub fn apply_local(
     Ok(match p {
         OpPayload::CreateFolder { folder, .. } => Some(*folder),
         OpPayload::CreateDraft(d) => Some(d.message),
+        OpPayload::CreateEvent(e) => Some(e.event),
         _ => None,
     })
 }
@@ -1097,6 +1470,10 @@ fn apply_inner(
         OpPayload::CreateDraft(d) => compose::apply_draft(tx, d, account).map(|_| ()),
         OpPayload::UpdateDraft(d) => compose::apply_update(tx, d),
         OpPayload::SendDraft { .. } => Ok(()),
+        OpPayload::CreateEvent(e) => events::apply_create(tx, e),
+        OpPayload::UpdateEvent(e) => events::apply_update(tx, e),
+        OpPayload::RespondEvent(e) => events::apply_respond(tx, e),
+        OpPayload::DeleteEvent(_) => Ok(()),
         OpPayload::SetRead { message, read, .. } => tx.set_read(MessageId(*message), *read),
         OpPayload::SetFlag {
             message, flagged, ..
@@ -1149,6 +1526,11 @@ pub fn undo_local(tx: &WriteTx<'_>, p: &OpPayload) -> familiar_store::Result<()>
         OpPayload::CreateDraft(d) => compose::undo_draft(tx, d),
         OpPayload::UpdateDraft(d) => compose::undo_update(tx, d),
         OpPayload::SendDraft { .. } => Ok(()),
+        OpPayload::CreateEvent(e) => events::undo_create(tx, e),
+        OpPayload::UpdateEvent(e) => events::restore(tx, &e.prev),
+        OpPayload::RespondEvent(e) => events::restore(tx, &e.prev),
+        // Hidden while queued; shows again once the op is gone.
+        OpPayload::DeleteEvent(_) => Ok(()),
         OpPayload::SetRead { message, prev, .. } => gone(tx.set_read(MessageId(*message), *prev)),
         OpPayload::SetFlag { message, prev, .. } => {
             gone(tx.set_flagged(MessageId(*message), *prev))
@@ -1216,6 +1598,10 @@ pub fn finish_local(
             Err(familiar_store::Error::NotFound(_)) => Ok(()),
             r => r,
         },
+        OpPayload::DeleteEvent(e) => events::finish_delete(tx, e.event, e.series.as_deref()),
+        OpPayload::RespondEvent(e) if e.response == Rsvp::Decline => {
+            events::finish_delete(tx, e.event, e.series.as_deref())
+        }
         OpPayload::DeleteMessage { message } => match tx.delete_message(MessageId(*message)) {
             Err(familiar_store::Error::NotFound(_)) => Ok(()),
             r => r,

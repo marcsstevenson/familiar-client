@@ -153,6 +153,29 @@ pub(super) fn route(
             Ok(no_content())
         }
 
+        // Events.
+        ("POST", ["events"]) | ("POST", ["calendar", "events"]) => {
+            events::create(st, "", body, prefer)
+        }
+        ("POST", ["calendars", _, "events"]) => events::create(st, segs[1], body, prefer),
+        ("PATCH", ["events", _])
+        | ("PATCH", ["calendar", "events", _])
+        | ("PATCH", ["calendars", _, "events", _]) => {
+            events::update(st, segs[segs.len() - 1], body, prefer)
+        }
+        ("DELETE", ["events", _])
+        | ("DELETE", ["calendar", "events", _])
+        | ("DELETE", ["calendars", _, "events", _]) => {
+            events::delete(st, segs[segs.len() - 1])?;
+            Ok(no_content())
+        }
+        ("POST", ["events", _, "accept"]) => events::respond(st, segs[1], "accepted"),
+        ("POST", ["events", _, "tentativelyaccept"]) => {
+            events::respond(st, segs[1], "tentativelyAccepted")
+        }
+        ("POST", ["events", _, "decline"]) => events::respond(st, segs[1], "declined"),
+        ("POST", ["events", _, "cancel"]) => events::cancel(st, segs[1]),
+
         _ => Err(GraphError::new(
             405,
             "ErrorInvalidRequest",
@@ -571,4 +594,459 @@ fn send_draft(st: &mut MailboxState, id: &str) -> R {
             .map_err(|_| GraphError::not_found())?;
     }
     Ok(accepted())
+}
+
+// --- events -------------------------------------------------------------------
+
+/// Event writes: create (with recurrence expanded into occurrences),
+/// update, delete, respond and cancel.
+mod events {
+    use super::{GraphError, R, accepted, bad_request, created};
+    use crate::model::{Event, MailboxState};
+    use crate::render::{self, Prefer};
+    use chrono::{DateTime, Datelike, Duration, NaiveDate, NaiveDateTime, TimeZone, Utc};
+    use chrono_tz::Tz;
+    use serde_json::Value;
+
+    /// Most occurrences one series expands to.
+    const MAX_OCCURRENCES: usize = 520;
+
+    /// The Windows zone names the tests use, plus IANA names.
+    fn zone(name: &str) -> Result<Tz, GraphError> {
+        let iana = match name {
+            "" | "UTC" | "Coordinated Universal Time" => "UTC",
+            "New Zealand Standard Time" => "Pacific/Auckland",
+            "AUS Eastern Standard Time" => "Australia/Sydney",
+            "GMT Standard Time" => "Europe/London",
+            "Pacific Standard Time" => "America/Los_Angeles",
+            "Eastern Standard Time" => "America/New_York",
+            other => other,
+        };
+        iana.parse::<Tz>().map_err(|_| {
+            GraphError::new(
+                400,
+                "TimeZoneNotSupportedException",
+                format!("A valid TimeZone value must be specified. The following TimeZone value is not supported: '{name}'."),
+            )
+        })
+    }
+
+    fn local_to_utc(t: NaiveDateTime, tz: Tz) -> DateTime<Utc> {
+        for m in (0..=180).step_by(15) {
+            if let Some(d) = tz
+                .from_local_datetime(&(t + Duration::minutes(m)))
+                .earliest()
+            {
+                return d.with_timezone(&Utc);
+            }
+        }
+        Utc.from_utc_datetime(&t)
+    }
+
+    /// Reads a `dateTimeTimeZone`: the wall-clock time and the zone name.
+    fn date_time(v: &Value, name: &str) -> Result<(NaiveDateTime, String), GraphError> {
+        let raw = v["dateTime"]
+            .as_str()
+            .ok_or_else(|| bad_request(format!("The property '{name}' is required.")))?;
+        let zname = v["timeZone"].as_str().unwrap_or("UTC").to_string();
+        zone(&zname)?;
+        let naive = NaiveDateTime::parse_from_str(raw, "%Y-%m-%dT%H:%M:%S%.f")
+            .or_else(|_| NaiveDateTime::parse_from_str(raw, "%Y-%m-%dT%H:%M:%S"))
+            .or_else(|_| NaiveDateTime::parse_from_str(raw, "%Y-%m-%dT%H:%M"))
+            .map_err(|_| bad_request(format!("Cannot convert the literal '{raw}' to a date.")))?;
+        Ok((naive, zname))
+    }
+
+    /// The instant a time stands for; all-day times are dates, kept as
+    /// midnight UTC like every all-day event in the mock.
+    fn instant(t: NaiveDateTime, zname: &str, all_day: bool) -> Result<DateTime<Utc>, GraphError> {
+        if all_day {
+            return Ok(Utc.from_utc_datetime(&t));
+        }
+        Ok(local_to_utc(t, zone(zname)?))
+    }
+
+    fn is_me(st: &MailboxState, ev: &Event) -> bool {
+        ev.organizer
+            .as_ref()
+            .is_none_or(|o| o.address.eq_ignore_ascii_case(&st.user.mail))
+    }
+
+    /// Applies the fields Graph lets a PATCH or POST set.
+    fn apply(st: &MailboxState, ev: &mut Event, body: &Value) -> Result<(), GraphError> {
+        if let Some(s) = body.get("subject").and_then(Value::as_str) {
+            ev.subject = s.to_string();
+        }
+        if let Some(b) = body.get("body") {
+            ev.body_html = Some(b["content"].as_str().unwrap_or("").to_string());
+        }
+        if let Some(a) = body.get("isAllDay").and_then(Value::as_bool) {
+            ev.is_all_day = a;
+        }
+        if let Some(v) = body.get("start").filter(|v| !v.is_null()) {
+            let (t, z) = date_time(v, "start")?;
+            ev.start = instant(t, &z, ev.is_all_day)?;
+            ev.time_zone = Some(z);
+        }
+        if let Some(v) = body.get("end").filter(|v| !v.is_null()) {
+            let (t, z) = date_time(v, "end")?;
+            ev.end = instant(t, &z, ev.is_all_day)?;
+        }
+        if let Some(l) = body.get("location") {
+            ev.location = l["displayName"].as_str().unwrap_or("").to_string();
+        }
+        if let Some(a) = body.get("attendees") {
+            ev.attendees = super::recipients(a)
+                .into_iter()
+                .filter(|a| !a.address.eq_ignore_ascii_case(&st.user.mail) || !is_me(st, ev))
+                .collect();
+        }
+        if let Some(s) = body.get("showAs").and_then(Value::as_str) {
+            ev.show_as = s.to_string();
+        }
+        if let Some(on) = body.get("isReminderOn").and_then(Value::as_bool) {
+            ev.reminder_minutes = on.then(|| ev.reminder_minutes.unwrap_or(15));
+        }
+        if let Some(m) = body
+            .get("reminderMinutesBeforeStart")
+            .and_then(Value::as_i64)
+        {
+            if ev.reminder_minutes.is_some() || body.get("isReminderOn").is_none() {
+                ev.reminder_minutes = Some(m);
+            }
+        }
+        if let Some(c) = body.get("categories").and_then(Value::as_array) {
+            ev.categories = c
+                .iter()
+                .filter_map(|c| c.as_str().map(str::to_string))
+                .collect();
+        }
+        if let Some(r) = body.get("recurrence") {
+            ev.recurrence = (!r.is_null()).then(|| r.clone());
+        }
+        if ev.end < ev.start {
+            return Err(bad_request(
+                "The end of the event must come after its start.",
+            ));
+        }
+        if ev.is_all_day {
+            let midnight = |t: &DateTime<Utc>| t.timestamp() % 86_400 == 0;
+            if !midnight(&ev.start) || !midnight(&ev.end) || ev.end == ev.start {
+                return Err(bad_request(
+                    "An all-day event's start and end must be at midnight, at least a day apart.",
+                ));
+            }
+        }
+        Ok(())
+    }
+
+    fn weekday(name: &str) -> Option<chrono::Weekday> {
+        use chrono::Weekday::*;
+        Some(match name.to_ascii_lowercase().as_str() {
+            "monday" => Mon,
+            "tuesday" => Tue,
+            "wednesday" => Wed,
+            "thursday" => Thu,
+            "friday" => Fri,
+            "saturday" => Sat,
+            "sunday" => Sun,
+            _ => return None,
+        })
+    }
+
+    fn add_months(d: NaiveDate, n: i32) -> Option<NaiveDate> {
+        let m0 = d.year() * 12 + d.month0() as i32 + n;
+        NaiveDate::from_ymd_opt(m0.div_euclid(12), m0.rem_euclid(12) as u32 + 1, d.day())
+    }
+
+    /// The local start dates a `patternedRecurrence` gives, from the master's start.
+    fn dates(rec: &Value, first: NaiveDate) -> Result<Vec<NaiveDate>, GraphError> {
+        let p = &rec["pattern"];
+        let r = &rec["range"];
+        let interval = p["interval"].as_i64().unwrap_or(1).max(1);
+        let start = r["startDate"]
+            .as_str()
+            .and_then(|s| NaiveDate::parse_from_str(s, "%Y-%m-%d").ok())
+            .unwrap_or(first);
+        let until = match r["type"].as_str().unwrap_or("noEnd") {
+            "endDate" => Some(
+                r["endDate"]
+                    .as_str()
+                    .and_then(|s| NaiveDate::parse_from_str(s, "%Y-%m-%d").ok())
+                    .ok_or_else(|| bad_request("The recurrence range needs an endDate."))?,
+            ),
+            _ => None,
+        };
+        let count = match r["type"].as_str() {
+            Some("numbered") => r["numberOfOccurrences"].as_u64().unwrap_or(1) as usize,
+            _ => MAX_OCCURRENCES,
+        }
+        .min(MAX_OCCURRENCES);
+        let horizon = until.unwrap_or(start + Duration::days(366 * 2));
+        let mut out = Vec::new();
+        let ok = |d: NaiveDate, out: &Vec<NaiveDate>| d <= horizon && out.len() < count;
+        match p["type"].as_str().unwrap_or("") {
+            "daily" => {
+                let mut d = start;
+                while ok(d, &out) {
+                    out.push(d);
+                    d += Duration::days(interval);
+                }
+            }
+            "weekly" => {
+                let mut days: Vec<chrono::Weekday> = p["daysOfWeek"]
+                    .as_array()
+                    .map(|a| {
+                        a.iter()
+                            .filter_map(|d| d.as_str().and_then(weekday))
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                if days.is_empty() {
+                    days.push(start.weekday());
+                }
+                let week0 = start - Duration::days(start.weekday().num_days_from_sunday().into());
+                let mut d = start;
+                while ok(d, &out) {
+                    let week = (d - week0).num_days() / 7;
+                    if week % interval == 0 && days.contains(&d.weekday()) {
+                        out.push(d);
+                    }
+                    d += Duration::days(1);
+                }
+            }
+            "absoluteMonthly" => {
+                let mut n = 0;
+                while let Some(d) = add_months(start, n) {
+                    if !ok(d, &out) {
+                        break;
+                    }
+                    out.push(d);
+                    n += interval as i32;
+                }
+            }
+            "absoluteYearly" => {
+                let mut n = 0;
+                while let Some(d) = add_months(start, n) {
+                    if !ok(d, &out) {
+                        break;
+                    }
+                    out.push(d);
+                    n += 12 * interval as i32;
+                }
+            }
+            other => {
+                return Err(bad_request(format!(
+                    "The mock does not expand '{other}' recurrences."
+                )));
+            }
+        }
+        Ok(out)
+    }
+
+    /// Replaces a master's occurrences (not its exceptions) with a fresh expansion.
+    fn expand(st: &mut MailboxState, master: &str) -> Result<(), GraphError> {
+        let m = st.events[master].ev.clone();
+        let Some(rec) = m.recurrence.clone() else {
+            return Ok(());
+        };
+        let old: Vec<String> = st
+            .events
+            .values()
+            .filter(|r| r.ev.series_master_id.as_deref() == Some(master))
+            .map(|r| r.ev.id.clone())
+            .collect();
+        for id in old {
+            st.delete_event(&id).map_err(|_| GraphError::not_found())?;
+        }
+        let tz = if m.is_all_day {
+            Tz::UTC
+        } else {
+            zone(m.time_zone.as_deref().unwrap_or("UTC"))?
+        };
+        let local = m.start.with_timezone(&tz);
+        let length = m.end - m.start;
+        for d in dates(&rec, local.date_naive())? {
+            let start = local_to_utc(d.and_time(local.time()), tz);
+            let mut occ = m.clone();
+            occ.id = String::new();
+            occ.event_type = "occurrence".into();
+            occ.series_master_id = Some(master.to_string());
+            occ.recurrence = None;
+            occ.transaction_id = None;
+            occ.start = start;
+            occ.end = start + length;
+            st.insert_event(occ).map_err(|_| GraphError::not_found())?;
+        }
+        Ok(())
+    }
+
+    fn reply(st: &MailboxState, id: &str, prefer: &Prefer) -> Value {
+        render::event(&st.user, &st.events[id], prefer)
+    }
+
+    pub(super) fn create(st: &mut MailboxState, cal: &str, body: &Value, prefer: &Prefer) -> R {
+        let cal = st.resolve_calendar(cal).ok_or_else(GraphError::not_found)?;
+        let tid = body["transactionId"].as_str().map(str::to_string);
+        if let Some(t) = &tid {
+            // A retried POST: the event it made already.
+            if let Some(r) = st
+                .events
+                .values()
+                .find(|r| r.ev.transaction_id.as_deref() == Some(t))
+            {
+                let id = r.ev.id.clone();
+                return Ok(created(reply(st, &id, prefer)));
+            }
+        }
+        if body.get("start").is_none() || body.get("end").is_none() {
+            return Err(bad_request("An event needs a start and an end."));
+        }
+        let now = Utc::now();
+        let mut ev = Event::new("", now, now);
+        ev.calendar_id = cal;
+        ev.transaction_id = tid;
+        ev.reminder_minutes = Some(15);
+        apply(st, &mut ev, body)?;
+        let recurring = ev.recurrence.is_some();
+        if recurring {
+            ev.event_type = "seriesMaster".into();
+        }
+        let id = st.insert_event(ev).map_err(|_| GraphError::not_found())?;
+        if recurring {
+            expand(st, &id)?;
+        }
+        Ok(created(reply(st, &id, prefer)))
+    }
+
+    const ORGANIZER_ONLY: [&str; 6] = [
+        "subject",
+        "start",
+        "end",
+        "location",
+        "attendees",
+        "recurrence",
+    ];
+
+    pub(super) fn update(st: &mut MailboxState, id: &str, body: &Value, prefer: &Prefer) -> R {
+        let ev = st
+            .events
+            .get(id)
+            .ok_or_else(GraphError::not_found)?
+            .ev
+            .clone();
+        if !is_me(st, &ev) && ORGANIZER_ONLY.iter().any(|k| body.get(*k).is_some()) {
+            return Err(GraphError::new(
+                400,
+                "ErrorInvalidRequest",
+                "Your request can't be completed. Only the organizer can change this property.",
+            ));
+        }
+        let mut next = ev.clone();
+        apply(st, &mut next, body)?;
+        let retime =
+            next.start != ev.start || next.end != ev.end || next.recurrence != ev.recurrence;
+        if ev.event_type == "occurrence" && (retime || body.get("subject").is_some()) {
+            next.event_type = "exception".into();
+        }
+        st.update_event(id, |e| *e = next.clone())
+            .map_err(|_| GraphError::not_found())?;
+        if ev.event_type == "seriesMaster" {
+            if retime {
+                expand(st, id)?;
+            } else {
+                let occs: Vec<String> = st
+                    .events
+                    .values()
+                    .filter(|r| {
+                        r.ev.series_master_id.as_deref() == Some(id)
+                            && r.ev.event_type == "occurrence"
+                    })
+                    .map(|r| r.ev.id.clone())
+                    .collect();
+                for o in occs {
+                    st.update_event(&o, |e| {
+                        let (s, en) = (e.start, e.end);
+                        let mut copy = next.clone();
+                        copy.start = s;
+                        copy.end = en;
+                        copy.event_type = "occurrence".into();
+                        copy.series_master_id = Some(id.to_string());
+                        copy.recurrence = None;
+                        copy.transaction_id = None;
+                        *e = copy;
+                    })
+                    .map_err(|_| GraphError::not_found())?;
+                }
+            }
+        }
+        Ok(super::Reply::ok(reply(st, id, prefer)))
+    }
+
+    /// Deletes an event, or a series master with all its instances.
+    pub(super) fn delete(st: &mut MailboxState, id: &str) -> Result<(), GraphError> {
+        if !st.events.contains_key(id) {
+            return Err(GraphError::not_found());
+        }
+        let kids: Vec<String> = st
+            .events
+            .values()
+            .filter(|r| r.ev.series_master_id.as_deref() == Some(id))
+            .map(|r| r.ev.id.clone())
+            .collect();
+        for k in kids {
+            st.delete_event(&k).map_err(|_| GraphError::not_found())?;
+        }
+        st.delete_event(id).map_err(|_| GraphError::not_found())
+    }
+
+    pub(super) fn respond(st: &mut MailboxState, id: &str, response: &str) -> R {
+        let ev = st
+            .events
+            .get(id)
+            .ok_or_else(GraphError::not_found)?
+            .ev
+            .clone();
+        if is_me(st, &ev) {
+            return Err(GraphError::new(
+                400,
+                "ErrorInvalidRequest",
+                "Your request can't be completed. You can't respond to this meeting because you're the meeting organizer.",
+            ));
+        }
+        if response == "declined" {
+            // Declining takes the meeting off the calendar.
+            delete(st, id)?;
+            return Ok(accepted());
+        }
+        let ids: Vec<String> = st
+            .events
+            .values()
+            .filter(|r| r.ev.id == id || r.ev.series_master_id.as_deref() == Some(id))
+            .map(|r| r.ev.id.clone())
+            .collect();
+        for i in ids {
+            st.update_event(&i, |e| e.response = Some(response.to_string()))
+                .map_err(|_| GraphError::not_found())?;
+        }
+        Ok(accepted())
+    }
+
+    pub(super) fn cancel(st: &mut MailboxState, id: &str) -> R {
+        let ev = st
+            .events
+            .get(id)
+            .ok_or_else(GraphError::not_found)?
+            .ev
+            .clone();
+        if !is_me(st, &ev) {
+            return Err(GraphError::new(
+                400,
+                "ErrorInvalidRequest",
+                "Your request can't be completed. Only the meeting organizer can cancel a meeting.",
+            ));
+        }
+        delete(st, id)?;
+        Ok(accepted())
+    }
 }

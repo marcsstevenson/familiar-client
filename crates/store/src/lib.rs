@@ -52,7 +52,8 @@ pub use model::{
     Account, AccountId, Address, AuditEntry, BodyRef, BodyStats, CalendarId, Cursor, EventId,
     EvictReport, Folder, FolderId, FolderThread, LOCAL_REMOTE_PREFIX, Message, MessageFilter,
     MessageId, NewAccount, NewAudit, NewFolder, NewMessage, NewOp, Op, OpId, OpState,
-    SearchQueueBatch, SyncState, ThreadId, folder_target, message_target,
+    SearchQueueBatch, SyncState, ThreadId, event_target, folder_target, message_target,
+    series_target,
 };
 pub use reader::Reader;
 pub use shared::{SharedWriter, StoreWriter};

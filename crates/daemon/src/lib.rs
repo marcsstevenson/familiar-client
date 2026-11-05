@@ -162,7 +162,8 @@ impl Daemon {
                     })
                 })
                 .map_err(StartError::Store)?;
-            let calendar = CalendarSync::new(CalendarApi::new(spec.client.clone()), id);
+            let cal_api = CalendarApi::new(spec.client.clone());
+            let calendar = CalendarSync::new(cal_api.clone(), id);
             let api = MailApi::new(spec.client);
             let mut sync = MailSync::new(api.clone(), id);
             if let Some(n) = opts.page_size {
@@ -174,6 +175,7 @@ impl Daemon {
                 key: spec.key.clone(),
                 account: id,
                 api: api.clone(),
+                cal: cal_api,
                 w: w.clone(),
                 policy: policy.clone(),
                 clock: opts.clock.clone(),

@@ -266,7 +266,12 @@ fn events_in(c: &Connection, calendars: &[CalendarId], range: EventRange) -> Res
     let mut s = c.prepare_cached(&format!(
         "SELECT {EVENT_COLS} FROM events WHERE calendar_id = ?1 AND (
            (is_all_day = 0 AND start_at < ?3 AND (end_at > ?2 OR (end_at = start_at AND start_at >= ?2)))
-           OR (is_all_day = 1 AND start_at < ?5 AND end_at > ?4))"
+           OR (is_all_day = 1 AND start_at < ?5 AND end_at > ?4))
+         AND NOT EXISTS (SELECT 1 FROM ops WHERE kind = 'delete_event'
+              AND state IN ('pending', 'in_flight')
+              AND (target = 'e:' || events.id
+                   OR (events.series_master_id IS NOT NULL
+                       AND target = 'es:' || events.series_master_id)))"
     ))?;
     let mut out = Vec::new();
     for cal in calendars {
@@ -359,11 +364,17 @@ impl WriteTx<'_> {
         )?)
     }
 
-    /// Ends a full round: removes the calendar's events it did not see.
-    /// Returns how many were removed.
+    /// Ends a full round: removes the calendar's events it did not see,
+    /// except ones made here that the server doesn't have yet and ones with
+    /// changes still queued. Returns how many were removed.
     pub fn finish_event_round(&self, calendar: CalendarId, round: i64) -> Result<usize> {
         Ok(self.tx.execute(
-            "DELETE FROM events WHERE calendar_id = ?1 AND round <> ?2",
+            "DELETE FROM events WHERE calendar_id = ?1 AND round <> ?2
+               AND remote_id NOT LIKE 'local:%'
+               AND NOT EXISTS (SELECT 1 FROM ops WHERE state IN ('pending', 'in_flight')
+                    AND (target = 'e:' || events.id
+                         OR (events.series_master_id IS NOT NULL
+                             AND target = 'es:' || events.series_master_id)))",
             params![calendar, round],
         )?)
     }
@@ -441,7 +452,12 @@ impl WriteTx<'_> {
         end: i64,
     ) -> Result<usize> {
         Ok(self.tx.execute(
-            "DELETE FROM events WHERE calendar_id = ?1 AND (end_at < ?2 OR start_at >= ?3)",
+            "DELETE FROM events WHERE calendar_id = ?1 AND (end_at < ?2 OR start_at >= ?3)
+               AND remote_id NOT LIKE 'local:%'
+               AND NOT EXISTS (SELECT 1 FROM ops WHERE state IN ('pending', 'in_flight')
+                    AND (target = 'e:' || events.id
+                         OR (events.series_master_id IS NOT NULL
+                             AND target = 'es:' || events.series_master_id)))",
             params![calendar, start, end],
         )?)
     }
@@ -449,6 +465,87 @@ impl WriteTx<'_> {
     /// An event by local ID.
     pub fn event(&self, id: EventId) -> Result<Option<Event>> {
         event_by_id(self.c(), id)
+    }
+
+    /// An event by calendar and server ID.
+    pub fn event_by_remote(&self, calendar: CalendarId, remote_id: &str) -> Result<Option<Event>> {
+        let mut s = self.c().prepare_cached(&format!(
+            "SELECT {EVENT_COLS} FROM events WHERE calendar_id = ?1 AND remote_id = ?2"
+        ))?;
+        Ok(s.query_row(params![calendar, remote_id], event)
+            .optional()?)
+    }
+
+    /// The stored occurrences and exceptions of a series, by start.
+    pub fn events_of_series(
+        &self,
+        account: AccountId,
+        master_remote_id: &str,
+    ) -> Result<Vec<Event>> {
+        let mut s = self.c().prepare_cached(&format!(
+            "SELECT {EVENT_COLS} FROM events WHERE account_id = ?1 AND series_master_id = ?2
+             ORDER BY start_at, id"
+        ))?;
+        Ok(s.query_map(params![account, master_remote_id], event)?
+            .collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// Rewrites an event's fields (server ID included), keeping its local ID
+    /// and round. A second row with the same server ID (sync stored the
+    /// server's copy first) is removed.
+    pub fn replace_event(&self, id: EventId, e: &EventData) -> Result<()> {
+        self.tx.execute(
+            "DELETE FROM events WHERE calendar_id = ?1 AND remote_id = ?2 AND id <> ?3",
+            params![e.calendar, e.remote_id, id],
+        )?;
+        let attendees = serde_json::to_string(&e.attendees).expect("attendees serialise");
+        let categories = serde_json::to_string(&e.categories).expect("categories serialise");
+        let n = self.tx.execute(
+            "UPDATE events SET calendar_id = ?2, remote_id = ?3, ical_uid = ?4,
+                series_master_id = ?5, kind = ?6, subject = ?7, location = ?8, start_at = ?9,
+                end_at = ?10, is_all_day = ?11, start_tz = ?12, end_tz = ?13, show_as = ?14,
+                is_cancelled = ?15, is_organizer = ?16, organizer_name = ?17,
+                organizer_addr = ?18, response = ?19, attendees_json = ?20,
+                categories_json = ?21, preview = ?22, web_link = ?23, reminder_minutes = ?24,
+                change_key = ?25
+             WHERE id = ?1",
+            params![
+                id,
+                e.calendar,
+                e.remote_id,
+                e.ical_uid,
+                e.series_master_id,
+                e.kind,
+                e.subject,
+                e.location,
+                e.start_at,
+                e.end_at,
+                e.is_all_day,
+                e.start_tz,
+                e.end_tz,
+                e.show_as,
+                e.is_cancelled,
+                e.is_organizer,
+                e.organizer.name,
+                e.organizer.addr,
+                e.response,
+                attendees,
+                categories,
+                e.preview,
+                e.web_link,
+                e.reminder_minutes,
+                e.change_key
+            ],
+        )?;
+        if n == 0 {
+            return Err(crate::Error::NotFound(format!("event {}", id.0)));
+        }
+        Ok(())
+    }
+
+    /// Deletes an event by local ID. Returns whether there was one.
+    pub fn delete_event(&self, id: EventId) -> Result<bool> {
+        Ok(self.tx.execute("DELETE FROM events WHERE id = ?1", [id])? > 0)
     }
 
     /// Events of the given calendars in a range, by start time.

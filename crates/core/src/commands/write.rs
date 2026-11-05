@@ -22,7 +22,7 @@ use serde::{Deserialize, Serialize};
 /// Default `--wait` limit.
 pub const DEFAULT_WAIT_SECS: u64 = 60;
 
-const WRITE_ERRORS: &[ErrorKind] = &[
+pub(crate) const WRITE_ERRORS: &[ErrorKind] = &[
     ErrorKind::NotFound,
     ErrorKind::Conflict,
     ErrorKind::PermissionDenied,
@@ -147,7 +147,7 @@ pub fn submit_at(
     }
 }
 
-fn flags(dry_run: bool, wait: bool, wait_secs: Option<u32>) -> WriteFlags {
+pub(crate) fn flags(dry_run: bool, wait: bool, wait_secs: Option<u32>) -> WriteFlags {
     WriteFlags {
         dry_run,
         wait,
@@ -169,7 +169,7 @@ fn run_write(
     )
 }
 
-fn need_yes(yes: bool, dry_run: bool, what: &str) -> Result<(), CommandError> {
+pub(crate) fn need_yes(yes: bool, dry_run: bool, what: &str) -> Result<(), CommandError> {
     if yes || dry_run {
         return Ok(());
     }

@@ -17,10 +17,12 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use familiar_core::compose::{AttachmentData, DraftOp, Recipient, ResponseKind};
+use familiar_core::events::{self, EventOp};
 use familiar_core::ops::{OpPayload, OpResult, finish_local, undo_local};
-use familiar_provider_graph::{Error as GraphError, MailApi, Priority};
+use familiar_provider_graph::{CalendarApi, Error as GraphError, GraphEvent, MailApi, Priority};
 use familiar_store::{
-    AccountId, FolderId, LOCAL_REMOTE_PREFIX, MessageId, NewAudit, Op, OpState, SharedWriter,
+    AccountId, Calendar, CalendarId, EventId, FolderId, LOCAL_REMOTE_PREFIX, MessageId, NewAudit,
+    Op, OpState, SharedWriter,
 };
 use serde_json::{Value, json};
 use tokio::sync::{Notify, watch};
@@ -53,6 +55,7 @@ pub struct OpRunner {
     pub(crate) key: String,
     pub(crate) account: AccountId,
     pub(crate) api: MailApi,
+    pub(crate) cal: CalendarApi,
     pub(crate) w: SharedWriter,
     pub(crate) policy: Arc<SyncPolicy>,
     pub(crate) clock: Clock,
@@ -187,15 +190,23 @@ impl OpRunner {
         ));
         let acc = self.account;
         let r = self.w.write(|tx| {
-            if let Some(OpPayload::CreateDraft(d)) = payload {
-                let target = familiar_store::message_target(MessageId(d.message));
+            let created = match payload {
+                Some(OpPayload::CreateDraft(d)) => {
+                    Some(familiar_store::message_target(MessageId(d.message)))
+                }
+                Some(OpPayload::CreateEvent(e)) => {
+                    Some(familiar_store::event_target(EventId(e.event)))
+                }
+                _ => None,
+            };
+            if let Some(target) = created {
                 for o in tx.open_ops()? {
                     if o.account == acc
                         && o.id > op.id
                         && o.state == OpState::Pending
                         && o.target == target
                     {
-                        tx.fail_op(o.id, "its draft couldn't be saved")?;
+                        tx.fail_op(o.id, "the item it changes couldn't be created")?;
                     }
                 }
             }
@@ -395,6 +406,53 @@ impl OpRunner {
                     r => r?,
                 }
             }
+            OpPayload::CreateEvent(e) => self.create_event(op, e).await?,
+            OpPayload::UpdateEvent(u) => {
+                let (row, cal) = self.event_row(u.event)?;
+                let target = match &u.series {
+                    Some(m) => m.clone(),
+                    None => remote_of(&row.data.remote_id)?,
+                };
+                let body = events::changes_json(&u.changes, &row.data);
+                let ge = self.cal.update_event(&target, &body, pr).await?;
+                if u.series.is_some() {
+                    self.refresh_series(&cal, &target, None).await?;
+                } else {
+                    self.store_event(&cal, row.id, &ge)?;
+                }
+            }
+            OpPayload::RespondEvent(r) => {
+                let (row, _) = self.event_row(r.event)?;
+                let target = match &r.series {
+                    Some(m) => m.clone(),
+                    None => remote_of(&row.data.remote_id)?,
+                };
+                self.cal
+                    .respond(
+                        &target,
+                        r.response.action(),
+                        r.comment.as_deref(),
+                        r.send_response,
+                        pr,
+                    )
+                    .await?;
+            }
+            OpPayload::DeleteEvent(d) => {
+                let (row, _) = self.event_row(d.event)?;
+                let target = match &d.series {
+                    Some(m) => m.clone(),
+                    None => remote_of(&row.data.remote_id)?,
+                };
+                let r = match &d.comment {
+                    Some(c) => self.cal.cancel_event(&target, c, pr).await,
+                    None => self.cal.delete_event(&target, pr).await,
+                };
+                match r {
+                    // Already gone: the retry of a delete that landed.
+                    Err(GraphError::NotFound(_)) => {}
+                    r => r?,
+                }
+            }
             OpPayload::SetRead { message, read, .. } => {
                 api.set_read(&self.message_remote(*message)?, *read, pr)
                     .await?
@@ -448,6 +506,167 @@ impl OpRunner {
             }
         }
         Ok(OpResult::default())
+    }
+}
+
+fn remote_of(id: &str) -> Result<String, GraphError> {
+    if id.starts_with(LOCAL_REMOTE_PREFIX) {
+        return Err(GraphError::NotFound(
+            "the event was never created on the server".into(),
+        ));
+    }
+    Ok(id.to_string())
+}
+
+impl OpRunner {
+    fn calendar(&self, id: CalendarId) -> Result<Calendar, GraphError> {
+        let acc = self.account;
+        self.w
+            .write(|tx| tx.calendars(acc))?
+            .into_iter()
+            .find(|c| c.id == id)
+            .ok_or_else(|| {
+                GraphError::NotFound(format!("calendar {} is no longer in the store", id.0))
+            })
+    }
+
+    fn event_row(&self, id: i64) -> Result<(familiar_store::Event, Calendar), GraphError> {
+        let e = self
+            .w
+            .write(|tx| tx.event(EventId(id)))?
+            .ok_or_else(|| GraphError::NotFound(format!("event {id} is no longer in the store")))?;
+        let cal = self.calendar(e.data.calendar)?;
+        Ok((e, cal))
+    }
+
+    /// Writes the server's copy of an event over its local row.
+    fn store_event(
+        &self,
+        cal: &Calendar,
+        local: EventId,
+        ge: &GraphEvent,
+    ) -> Result<(), GraphError> {
+        let Some(d) = ge.to_event_data(self.account, cal.id) else {
+            return Ok(());
+        };
+        self.w.write(|tx| match tx.replace_event(local, &d) {
+            // Gone locally meanwhile: keep the server's copy.
+            Err(familiar_store::Error::NotFound(_)) => tx.upsert_event(&d, cal.round).map(|_| ()),
+            r => r,
+        })?;
+        Ok(())
+    }
+
+    /// Re-reads a series' occurrences in the calendar's window, replacing
+    /// the local rows (and `placeholder`, the row a new series showed as).
+    async fn refresh_series(
+        &self,
+        cal: &Calendar,
+        master: &str,
+        placeholder: Option<EventId>,
+    ) -> Result<(), GraphError> {
+        let pr = Priority::User;
+        let now = (self.clock)();
+        let window = match (cal.window_start, cal.window_end) {
+            (Some(s), Some(e)) => (s, e),
+            _ => (now - 30 * 86_400, now + 365 * 86_400),
+        };
+        let mut items = self.cal.instances(master, window, pr).await?;
+        if items.iter().any(GraphEvent::is_sparse) {
+            if let Some(m) = self.cal.event(master, pr).await? {
+                for i in items.iter_mut().filter(|i| i.is_sparse()) {
+                    i.fill_from_master(&m);
+                }
+            }
+        }
+        let acc = self.account;
+        let rows: Vec<_> = items
+            .iter()
+            .filter_map(|g| g.to_event_data(acc, cal.id))
+            .collect();
+        self.w.write(|tx| {
+            if let Some(p) = placeholder {
+                tx.delete_event(p)?;
+            }
+            let keep: std::collections::HashSet<&str> =
+                rows.iter().map(|d| d.remote_id.as_str()).collect();
+            for old in tx.events_of_series(acc, master)? {
+                if !keep.contains(old.data.remote_id.as_str()) {
+                    tx.delete_event(old.id)?;
+                }
+            }
+            for d in &rows {
+                tx.upsert_event(d, cal.round)?;
+            }
+            Ok(())
+        })?;
+        Ok(())
+    }
+
+    /// The email an event is made from, as a line linking back to it.
+    async fn mail_link(&self, id: i64) -> Option<String> {
+        let m = self.w.write(|tx| tx.message(MessageId(id))).ok()??;
+        let link = match m.remote_id.starts_with(LOCAL_REMOTE_PREFIX) {
+            true => None,
+            false => self
+                .api
+                .raw(
+                    familiar_provider_graph::Method::GET,
+                    &format!("/messages/{}?$select=webLink", m.remote_id),
+                    None,
+                    Priority::User,
+                )
+                .await
+                .ok()
+                .and_then(|v| v["webLink"].as_str().map(str::to_string)),
+        };
+        let esc = familiar_core::compose::text_to_html;
+        let subject = if m.subject.is_empty() {
+            "(no subject)"
+        } else {
+            &m.subject
+        };
+        let title = match link {
+            Some(l) => format!("<a href=\"{}\">{}</a>", esc(&l), esc(subject)),
+            None => format!("\u{201c}{}\u{201d}", esc(subject)),
+        };
+        let from = if m.from.name.is_empty() {
+            &m.from.addr
+        } else {
+            &m.from.name
+        };
+        Some(format!(
+            "<p style=\"color:#666\">From the email {title} from {}.</p>",
+            esc(from)
+        ))
+    }
+
+    async fn create_event(&self, op: &Op, e: &mut EventOp) -> Result<(), GraphError> {
+        let pr = Priority::User;
+        let cal = self.calendar(CalendarId(e.calendar))?;
+        let local = EventId(e.event);
+        let ge = match e.remote_id.clone() {
+            Some(r) => match self.cal.event(&r, pr).await? {
+                Some(g) => g,
+                None => return Err(GraphError::NotFound("the new event has gone".into())),
+            },
+            None => {
+                let link = match e.from_mail {
+                    Some(m) => self.mail_link(m).await,
+                    None => None,
+                };
+                let body = events::event_json(&e.fields, &e.transaction_id, link.as_deref());
+                let g = self.cal.create_event(&cal.remote_id, &body, pr).await?;
+                e.remote_id = Some(g.id.clone());
+                self.save(op, &OpPayload::CreateEvent(e.clone()))?;
+                g
+            }
+        };
+        if e.fields.recurrence.is_some() {
+            self.refresh_series(&cal, &ge.id, Some(local)).await
+        } else {
+            self.store_event(&cal, local, &ge)
+        }
     }
 }
 

@@ -287,6 +287,29 @@ pub struct Event {
     /// Cancelled meeting.
     #[serde(default)]
     pub is_cancelled: bool,
+    /// Reminder minutes before the start; `None` is no reminder.
+    #[serde(default = "default_reminder")]
+    pub reminder_minutes: Option<i64>,
+    /// The mailbox user's response (`accepted`, `tentativelyAccepted`,
+    /// `declined`, `notResponded`); `None` gives `organizer` or `none`.
+    #[serde(default)]
+    pub response: Option<String>,
+    /// Outlook categories.
+    #[serde(default)]
+    pub categories: Vec<String>,
+    /// A series master's recurrence, as Graph's `patternedRecurrence`.
+    #[serde(default)]
+    pub recurrence: Option<serde_json::Value>,
+    /// The client's `transactionId` from the POST that made it.
+    #[serde(default)]
+    pub transaction_id: Option<String>,
+    /// The zone it was created in (Graph's `originalStartTimeZone`).
+    #[serde(default)]
+    pub time_zone: Option<String>,
+}
+
+fn default_reminder() -> Option<i64> {
+    Some(15)
 }
 
 fn default_show_as() -> String {
@@ -315,6 +338,12 @@ impl Event {
             series_master_id: None,
             event_type: default_event_type(),
             is_cancelled: false,
+            reminder_minutes: default_reminder(),
+            response: None,
+            categories: Vec::new(),
+            recurrence: None,
+            transaction_id: None,
+            time_zone: None,
         }
     }
 }

@@ -410,6 +410,130 @@ impl CalendarApi {
     }
 }
 
+// Writes ---------------------------------------------------------------------
+
+impl CalendarApi {
+    async fn send_utc(
+        &self,
+        method: reqwest::Method,
+        path: &str,
+        body: Option<&serde_json::Value>,
+        priority: Priority,
+    ) -> Result<serde_json::Value> {
+        self.client
+            .request(method, path, body, priority, &[PREFER_UTC])
+            .await
+    }
+
+    /// Creates an event in a calendar (a series master when `body` has a
+    /// recurrence). Give `body` a `transactionId`: Graph then answers a
+    /// repeated POST with the event the first one made.
+    pub async fn create_event(
+        &self,
+        calendar: &str,
+        body: &serde_json::Value,
+        priority: Priority,
+    ) -> Result<GraphEvent> {
+        let v = self
+            .send_utc(
+                reqwest::Method::POST,
+                &format!("{}/calendars/{calendar}/events", self.user),
+                Some(body),
+                priority,
+            )
+            .await?;
+        Ok(serde_json::from_value(v)?)
+    }
+
+    /// Changes an event (an occurrence becomes an exception; a series
+    /// master changes the whole series).
+    pub async fn update_event(
+        &self,
+        id: &str,
+        body: &serde_json::Value,
+        priority: Priority,
+    ) -> Result<GraphEvent> {
+        let v = self
+            .send_utc(
+                reqwest::Method::PATCH,
+                &format!("{}/events/{id}", self.user),
+                Some(body),
+                priority,
+            )
+            .await?;
+        Ok(serde_json::from_value(v)?)
+    }
+
+    /// Deletes an event (a series master takes its series with it). On the
+    /// organiser's calendar, Graph sends attendees a cancellation.
+    pub async fn delete_event(&self, id: &str, priority: Priority) -> Result<()> {
+        self.client
+            .delete(&format!("{}/events/{id}", self.user), priority)
+            .await
+    }
+
+    /// Answers a meeting invitation: `accept`, `tentativelyAccept` or
+    /// `decline`, telling the organiser when `send_response`.
+    pub async fn respond(
+        &self,
+        id: &str,
+        action: &str,
+        comment: Option<&str>,
+        send_response: bool,
+        priority: Priority,
+    ) -> Result<()> {
+        let body = serde_json::json!({
+            "comment": comment.unwrap_or(""),
+            "sendResponse": send_response,
+        });
+        self.client
+            .post(
+                &format!("{}/events/{id}/{action}", self.user),
+                &body,
+                priority,
+            )
+            .await
+            .map(|_| ())
+    }
+
+    /// Cancels a meeting the user organised, with a message to attendees.
+    pub async fn cancel_event(&self, id: &str, comment: &str, priority: Priority) -> Result<()> {
+        self.client
+            .post(
+                &format!("{}/events/{id}/cancel", self.user),
+                &serde_json::json!({ "comment": comment }),
+                priority,
+            )
+            .await
+            .map(|_| ())
+    }
+
+    /// A series master's occurrences and exceptions in `[start, end)`.
+    pub async fn instances(
+        &self,
+        master: &str,
+        (start, end): (i64, i64),
+        priority: Priority,
+    ) -> Result<Vec<GraphEvent>> {
+        let mut out = Vec::new();
+        let mut url = format!(
+            "{}/events/{master}/instances?startDateTime={}&endDateTime={}&$top=100",
+            self.user,
+            rfc3339(start),
+            rfc3339(end)
+        );
+        loop {
+            let page: Page<GraphEvent> =
+                decode_page(self.client.get(&url, priority, &[PREFER_UTC]).await?)?;
+            out.extend(page.items);
+            match page.next_link {
+                Some(n) => url = n,
+                None => return Ok(out),
+            }
+        }
+    }
+}
+
 // Sync -----------------------------------------------------------------------
 
 /// What a calendar-list sync changed.
@@ -639,12 +763,31 @@ impl CalendarSync {
             let at = now();
             let (up, rm) = w.write(|tx| {
                 let (mut up, mut rm) = (0, 0);
+                // Events with changes still queued keep their local state.
+                let busy = tx.open_op_targets(acc)?;
+                let held = |id: &str, master: Option<&str>| -> familiar_store::Result<bool> {
+                    if master.is_some_and(|m| busy.contains(&familiar_store::series_target(m))) {
+                        return Ok(true);
+                    }
+                    Ok(match tx.event_by_remote(cal.id, id)? {
+                        Some(e) => {
+                            busy.contains(&familiar_store::event_target(e.id))
+                                || e.data.series_master_id.as_deref().is_some_and(|m| {
+                                    busy.contains(&familiar_store::series_target(m))
+                                })
+                        }
+                        None => false,
+                    })
+                };
                 for item in &page.items {
                     match item {
                         DeltaItem::Removed(id) => {
-                            rm += usize::from(tx.delete_event_by_remote(cal.id, id)?);
+                            if !held(id, None)? {
+                                rm += usize::from(tx.delete_event_by_remote(cal.id, id)?);
+                            }
                         }
                         DeltaItem::Upsert(ev) if ev.is_series_master() => {}
+                        DeltaItem::Upsert(ev) if held(&ev.id, ev.series_master_id.as_deref())? => {}
                         DeltaItem::Upsert(ev) => match ev.to_event_data(acc, cal.id) {
                             Some(d) if overlaps(&d, start, end) => {
                                 tx.upsert_event(&d, round)?;

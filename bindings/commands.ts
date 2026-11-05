@@ -182,6 +182,65 @@ export type BodyFormat = "text" | "html";
 
 export type BodyType = "text" | "html";
 
+export type CalAddInput = {
+  /** Account (its name in config.toml), when --calendar doesn't settle it. */
+  account?: string | null;
+  /** All-day event (also when --start is a date alone). */
+  all_day?: boolean;
+  /** Invite someone ("Name <addr>" or an address); repeat or separate with commas. */
+  attendee?: Array<string>;
+  /** Notes (plain text). */
+  body?: string | null;
+  /** Calendar name ("Family Room") or a purpose from [calendar.purposes] ("family"). Default: the account's main calendar. */
+  calendar?: string | null;
+  /** Outlook category; repeat for more. */
+  category?: Array<string>;
+  /** Or: repeat this many times. */
+  count?: number | null;
+  /** All-day: how many days when there's no --end (default 1). */
+  days?: number | null;
+  /** Only show what would happen. */
+  dry_run?: boolean;
+  /** End: a date and time, or a time on the start's day. All-day: the last day. */
+  end?: string | null;
+  /** Repeat every this many days, weeks, months or years (default 1). */
+  every?: number | null;
+  /** Make it from this email (local message ID): suggests the subject, date, time and place, and links the email in the event. */
+  from_mail?: number | null;
+  /** Location. */
+  location?: string | null;
+  /** Length in minutes when there's no --end (default 60). */
+  minutes?: number | null;
+  /** No reminder. */
+  no_reminder?: boolean;
+  /** Weekly: the days, such as mon,wed (default the start's day). */
+  on?: Array<string>;
+  /** Invite someone as optional. */
+  optional?: Array<string>;
+  /** A purpose from [calendar.purposes], such as family. */
+  purpose?: string | null;
+  /** Reminder, minutes before the start (default 15). */
+  reminder?: number | null;
+  /** Repeat: daily, weekly, monthly or yearly. */
+  repeat?: string | null;
+  /** Show as free, tentative, busy (the default), oof or workingElsewhere. */
+  show_as?: string | null;
+  /** Start: "2026-11-21 18:00", "sat 6pm", "tomorrow 9:30am", or a date alone for an all-day event. With --from-mail, found in the email when left out. */
+  start?: string | null;
+  /** Subject. With --from-mail, the email's subject when left out. */
+  subject?: string | null;
+  /** Time zone for the times (IANA or Windows). Default: this computer's. */
+  tz?: string | null;
+  /** Repeat until this date. */
+  until?: string | null;
+  /** Wait until the server has it (needs famd). */
+  wait?: boolean;
+  /** Seconds --wait waits at most (default 60). */
+  wait_secs?: number | null;
+  /** Go ahead with more than 10 invitees. */
+  yes?: boolean;
+};
+
 export type CalCalendar = {
   /** Account name. */
   account: string;
@@ -215,6 +274,62 @@ export type CalCalendarsInput = {
 export type CalCalendarsOutput = {
   /** Calendars, by account, the default first. */
   calendars: Array<CalCalendar>;
+};
+
+export type CalDeleteInput = {
+  /** For a meeting you organised: a note in the cancellation attendees get. */
+  comment?: string | null;
+  /** Only show what would happen. */
+  dry_run?: boolean;
+  /** Local event ID (from fam cal list). */
+  event: number;
+  /** Delete the whole recurring series. */
+  series?: boolean;
+  /** Wait until the server has it (needs famd). */
+  wait?: boolean;
+  /** Seconds --wait waits at most (default 60). */
+  wait_secs?: number | null;
+  /** Go ahead with cancelling a meeting you organised (attendees are told). */
+  yes?: boolean;
+};
+
+export type CalEditInput = {
+  /** New attendee list (replaces it); repeat for more. */
+  attendee?: Array<string>;
+  /** New notes (plain text). */
+  body?: string | null;
+  /** New categories (replaces them); repeat for more. */
+  category?: Array<string>;
+  /** Only show what would change. */
+  dry_run?: boolean;
+  /** New end. */
+  end?: string | null;
+  /** Local event ID (from fam cal list). */
+  event: number;
+  /** New location. */
+  location?: string | null;
+  /** New length in minutes. */
+  minutes?: number | null;
+  /** Turn the reminder off. */
+  no_reminder?: boolean;
+  /** New reminder, minutes before the start. */
+  reminder?: number | null;
+  /** Change every event in its series, not just this one. */
+  series?: boolean;
+  /** Show as free, tentative, busy, oof or workingElsewhere. */
+  show_as?: string | null;
+  /** New start (as fam cal add takes it). The length stays unless --end or --minutes. */
+  start?: string | null;
+  /** New subject. */
+  subject?: string | null;
+  /** Time zone for the times (IANA or Windows). Default: this computer's. */
+  tz?: string | null;
+  /** Wait until the server has the change (needs famd). */
+  wait?: boolean;
+  /** Seconds --wait waits at most (default 60). */
+  wait_secs?: number | null;
+  /** Go ahead with more than 10 attendees. */
+  yes?: boolean;
 };
 
 export type CalEvent = {
@@ -274,6 +389,25 @@ export type CalListOutput = {
   to: string;
   /** Problems worth knowing, such as a calendar that has not synced yet or a range outside the synced window. */
   warnings?: Array<string>;
+};
+
+export type CalRsvpInput = {
+  /** A note to the organiser. */
+  comment?: string | null;
+  /** Only show what would happen. */
+  dry_run?: boolean;
+  /** Local event ID (from fam cal list). */
+  event: number;
+  /** Don't tell the organiser. */
+  no_reply?: boolean;
+  /** accept, tentative or decline. */
+  response: string;
+  /** Answer for the whole recurring series. */
+  series?: boolean;
+  /** Wait until the server has it (needs famd). */
+  wait?: boolean;
+  /** Seconds --wait waits at most (default 60). */
+  wait_secs?: number | null;
 };
 
 export type CheckReport = {
@@ -1039,7 +1173,7 @@ export type QueuedOp = {
   error?: string | null;
   /** Op ID, for `fam ops wait` and `fam ops list`; `None` on a dry run. */
   id?: number | null;
-  /** Local ID of the message or folder the op created, if any. */
+  /** Local ID of the message, folder or event the op created, if any. */
   item?: number | null;
   /** Op kind, e.g. `move_message`. */
   kind: string;
@@ -1245,10 +1379,18 @@ export interface Commands {
   "auth.logout": { input: AuthLogoutInput; output: AuthLogoutOutput };
   /** Show which accounts are signed in */
   "auth.status": { input: AuthStatusInput; output: AuthStatusOutput };
+  /** Add an event */
+  "cal.add": { input: CalAddInput; output: WriteOutput };
   /** List the calendars on this device */
   "cal.calendars": { input: CalCalendarsInput; output: CalCalendarsOutput };
+  /** Delete an event, or cancel a meeting you organised */
+  "cal.delete": { input: CalDeleteInput; output: WriteOutput };
+  /** Change an event */
+  "cal.edit": { input: CalEditInput; output: WriteOutput };
   /** List events in a date range */
   "cal.list": { input: CalListInput; output: CalListOutput };
+  /** Answer a meeting invitation */
+  "cal.rsvp": { input: CalRsvpInput; output: WriteOutput };
   /** Show which config file is used */
   "config.path": { input: ConfigPathInput; output: ConfigPathOutput };
   /** Check config.toml for errors */
@@ -1320,8 +1462,12 @@ export const COMMAND_NAMES = [
   "auth.login",
   "auth.logout",
   "auth.status",
+  "cal.add",
   "cal.calendars",
+  "cal.delete",
+  "cal.edit",
   "cal.list",
+  "cal.rsvp",
   "config.path",
   "config.validate",
   "draft.create",

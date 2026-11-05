@@ -493,6 +493,25 @@ impl MailboxHandle<'_> {
         self.with(|m| m.insert_event(event))
     }
 
+    /// An event by ID.
+    pub fn event(&self, id: &str) -> Option<Event> {
+        self.with(|m| m.events.get(id).map(|r| r.ev.clone()))
+    }
+
+    /// Every event (masters, occurrences and single events), by start.
+    pub fn events(&self) -> Vec<Event> {
+        self.with(|m| {
+            let mut v: Vec<Event> = m.events.values().map(|r| r.ev.clone()).collect();
+            v.sort_by(|a, b| (a.start, &a.id).cmp(&(b.start, &b.id)));
+            v
+        })
+    }
+
+    /// A calendar's ID by name.
+    pub fn calendar_id(&self, name: &str) -> Option<String> {
+        self.with(|m| m.resolve_calendar(name))
+    }
+
     /// Changes an event.
     pub fn update_event(&self, id: &str, f: impl FnOnce(&mut Event)) -> Result<(), MutationError> {
         self.with(|m| m.update_event(id, f))
@@ -1168,6 +1187,10 @@ fn route(c: &Ctx<'_>, method: &str) -> R {
         ["calendars", _, "events"] => list_events(c, segs[1], None),
         ["events", _] | ["calendar", "events", _] => get_event(c, segs[segs.len() - 1], ""),
         ["calendars", _, "events", _] => get_event(c, segs[3], segs[1]),
+        ["events", _, "instances"] => {
+            let w = window(c)?;
+            event_instances(c, segs[1], w)
+        }
         ["calendarview"] | ["calendar", "calendarview"] => {
             let w = window(c)?;
             list_events(c, "", Some(w))
@@ -1645,6 +1668,25 @@ fn list_events(c: &Ctx<'_>, raw: &str, window: Option<(DateTime<Utc>, DateTime<U
         .map(|r| render::event(&st.user, r, &c.prefer))
         .filter(|v| filter.as_ref().is_none_or(|f| f.matches(v)))
         .map(|v| c.select(v))
+        .collect();
+    paged(c, items, "users('me')/events", DEFAULT_PAGE)
+}
+
+/// A series master's occurrences and exceptions in a window.
+fn event_instances(c: &Ctx<'_>, master: &str, w: (DateTime<Utc>, DateTime<Utc>)) -> R {
+    let st = c.st;
+    if !st.events.contains_key(master) {
+        return Err(GraphError::not_found());
+    }
+    let mut evs: Vec<_> = st
+        .events
+        .values()
+        .filter(|r| r.ev.series_master_id.as_deref() == Some(master) && overlaps(&r.ev, w))
+        .collect();
+    evs.sort_by(|a, b| (a.ev.start, &a.ev.id).cmp(&(b.ev.start, &b.ev.id)));
+    let items: Vec<Value> = evs
+        .into_iter()
+        .map(|r| c.select(render::event(&st.user, r, &c.prefer)))
         .collect();
     paged(c, items, "users('me')/events", DEFAULT_PAGE)
 }

@@ -5,6 +5,7 @@ pub mod commands;
 pub mod compose;
 pub mod daemon;
 pub mod error;
+pub mod events;
 pub mod ops;
 pub mod parity;
 pub mod registry;

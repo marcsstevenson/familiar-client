@@ -454,6 +454,16 @@ pub fn folder_target(id: FolderId) -> String {
     format!("f:{}", id.0)
 }
 
+/// The op target for an event.
+pub fn event_target(id: crate::EventId) -> String {
+    format!("e:{}", id.0)
+}
+
+/// The op target for a whole recurring series, by its master's server ID.
+pub fn series_target(master_remote_id: &str) -> String {
+    format!("es:{master_remote_id}")
+}
+
 /// The server ID prefix of a folder created locally that the server hasn't
 /// made yet.
 pub const LOCAL_REMOTE_PREFIX: &str = "local:";
