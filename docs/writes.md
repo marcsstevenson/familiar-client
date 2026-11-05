@@ -24,7 +24,7 @@ until the server has them.
 | `fam draft create [--to ...] [--subject] [--body \| --body-file] [--html] [--attach f] [--inline img]` | Save a new draft with the account's `new` signature | draft |
 | `fam draft reply <id> [--all] [--body ...]` | Save a reply (threaded via Graph's `createReply`), your text and `reply` signature above the quoted original | draft |
 | `fam draft forward <id> --to ... [--body ...]` | Save a forward with the original's attachments | draft |
-| `fam draft update <draft> [--to/--cc/--bcc] [--subject] [--body] [--attach]` | Change a draft; a recipient flag replaces that line, `--body` the whole body | draft |
+| `fam draft update <draft> [--to/--cc/--bcc] [--subject] [--body] [--attach] [--remove-attachment]` | Change a draft; a recipient flag replaces that line (`--cc ""` empties it), `--body` the whole body. Images the body embeds become inline attachments with content IDs taken from their bytes, so saving the same body again adds nothing, and inline images the new body no longer shows are taken off. `--remove-attachment` takes a file off by name or Graph attachment ID | draft |
 | `fam draft send <draft> [--now] [--yes]` | Send after the undo-send delay | send |
 | `fam mail send --to ... --subject ... --body ... [--now] [--yes]` | Draft and send in one go | send |
 | `fam cal add <subject> --start <when> [--end \| --minutes] [--calendar \| --purpose] [--attendee ...] [--repeat ...] [--from-mail <id>]` | Add an event (invitations go to attendees) | write |

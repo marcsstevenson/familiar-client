@@ -117,6 +117,7 @@ async fn drafts_replies_and_sending() {
                 cc: None,
                 bcc: None,
                 attachments: vec![],
+                remove_attachments: vec![],
             },
             &waiting(),
         )
@@ -126,6 +127,48 @@ async fn drafts_replies_and_sending() {
     assert_eq!(
         mbox().message(&local.remote_id).unwrap().subject,
         "Familiar Test draft v2"
+    );
+
+    // A body with an image, saved twice as the app does: the image is
+    // attached once. Then a body without it, removing notes.txt by name:
+    // both go.
+    let body_update = |html: &str, remove: Vec<String>| {
+        let (html, images) = familiar_core::compose::embedded_images(html).unwrap();
+        WriteRequest::DraftUpdate {
+            message: draft,
+            subject: None,
+            html: Some(html),
+            to: None,
+            cc: None,
+            bcc: None,
+            attachments: images,
+            remove_attachments: remove,
+        }
+    };
+    let pic = "<p>See</p><img src=\"data:image/png;base64,iVBORw0KGgo=\">";
+    for _ in 0..2 {
+        let (p, req) = (env.paths.clone(), body_update(pic, vec![]));
+        blocking(move || submit_at(&p, req, &waiting()))
+            .await
+            .unwrap();
+        let atts = mbox().message(&local.remote_id).unwrap().attachments;
+        let names: Vec<&str> = atts.iter().map(|a| a.name.as_str()).collect();
+        assert_eq!(atts.len(), 2, "{names:?}");
+        assert!(atts.iter().any(|a| a.is_inline), "{names:?}");
+    }
+    let (p, req) = (
+        env.paths.clone(),
+        body_update("<p>No picture</p>", vec!["notes.txt".into()]),
+    );
+    blocking(move || submit_at(&p, req, &waiting()))
+        .await
+        .unwrap();
+    assert!(
+        mbox()
+            .message(&local.remote_id)
+            .unwrap()
+            .attachments
+            .is_empty()
     );
 
     // Send it now: it moves to Sent Items and, being to me, arrives in the Inbox.

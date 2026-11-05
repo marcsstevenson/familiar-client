@@ -1,0 +1,302 @@
+/* The compose window. Colours and sizes come from styles/tokens.css. */
+.app.compose {
+  grid-template-rows: var(--titlebar-h) 1fr var(--statusbar-h);
+}
+.compose-main {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  position: relative;
+  user-select: text;
+}
+.compose button {
+  border: 1px solid var(--border);
+  background: var(--bg);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-4);
+}
+.compose button:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+.compose button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--text-on-accent);
+  font-weight: 600;
+}
+.compose button.link {
+  border: 0;
+  background: transparent;
+  color: var(--accent);
+  padding: 0 var(--space-2);
+}
+.compose button:disabled {
+  opacity: 0.5;
+}
+.compose input,
+.compose select,
+.compose textarea {
+  font: inherit;
+  color: inherit;
+  background: var(--bg);
+}
+.compose-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-sidebar);
+}
+.compose-spacer {
+  flex: 1;
+}
+.compose-select {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+.compose-select select {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-2);
+}
+.compose-fields {
+  border-bottom: 1px solid var(--border);
+}
+.compose-field {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: 34px;
+  padding: 0 var(--space-4);
+  border-bottom: 1px solid var(--border);
+  position: relative;
+}
+.compose-field:last-child {
+  border-bottom: 0;
+}
+.compose-label {
+  width: 56px;
+  flex: none;
+  color: var(--text-muted);
+}
+.compose-from {
+  color: var(--text);
+}
+.compose-field select {
+  border: 0;
+  padding: var(--space-2) 0;
+  max-width: 60%;
+}
+.compose-subject {
+  flex: 1;
+  border: 0;
+  padding: var(--space-3) 0;
+  outline: none;
+}
+
+/* Recipient chips and suggestions */
+.chips {
+  flex: 1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) 0;
+  min-width: 0;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  background: var(--bg-selected-inactive);
+  border-radius: 999px;
+  padding: 1px var(--space-2) 1px var(--space-3);
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chip.invalid {
+  outline: 1px solid var(--danger);
+  color: var(--danger);
+}
+.compose .chip-remove {
+  border: 0;
+  background: transparent;
+  padding: 0 var(--space-1);
+  line-height: 1;
+  color: var(--text-muted);
+}
+.chip-input {
+  flex: 1;
+  min-width: 120px;
+  border: 0;
+  outline: none;
+  padding: var(--space-2) 0;
+}
+.suggestions {
+  position: absolute;
+  z-index: 10;
+  left: calc(56px + var(--space-4) + var(--space-3));
+  top: 100%;
+  min-width: 320px;
+  max-width: 70%;
+  margin: 0;
+  padding: var(--space-2) 0;
+  list-style: none;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 4px 16px rgb(0 0 0 / 18%);
+}
+.suggestions li {
+  display: flex;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+  cursor: default;
+}
+.suggestions li.active {
+  background: var(--bg-selected);
+}
+.suggestion-addr {
+  color: var(--text-muted);
+}
+
+/* Attachments */
+.attachments {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  margin: 0;
+  padding: var(--space-3) var(--space-4);
+  list-style: none;
+  border-bottom: 1px solid var(--border);
+}
+.attachment {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-2) var(--space-1) var(--space-3);
+}
+.attachment-size,
+.compose-note {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+.compose-note {
+  margin: var(--space-2) var(--space-4) 0;
+}
+
+/* Body */
+.compose-body {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+}
+.compose-body.hidden {
+  display: none;
+}
+.editor-wrap {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-2) var(--space-4);
+  border-bottom: 1px solid var(--border);
+}
+.compose .tool {
+  border: 0;
+  min-width: 28px;
+  padding: var(--space-1) var(--space-2);
+  background: transparent;
+}
+.tool-bold {
+  font-weight: 700;
+}
+.tool-italic {
+  font-style: italic;
+}
+.tool-underline {
+  text-decoration: underline;
+}
+.tool-strikeThrough {
+  text-decoration: line-through;
+}
+.link-input {
+  margin-left: var(--space-3);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-1) var(--space-2);
+  width: 280px;
+}
+.editor {
+  flex: 1;
+  overflow: auto;
+  padding: var(--space-5);
+  outline: none;
+  font: var(--text-lg) / 1.5 var(--font-ui);
+  color: var(--text);
+}
+.editor img {
+  max-width: 100%;
+}
+.editor.plain {
+  border: 0;
+  resize: none;
+  font-family: var(--font-mono);
+  font-size: var(--text-md);
+}
+
+/* Drop hint and the outside-recipients question */
+.drop-hint {
+  position: absolute;
+  inset: var(--space-3);
+  border: 2px dashed var(--accent);
+  border-radius: var(--radius-md);
+  display: grid;
+  place-items: end center;
+  padding-bottom: var(--space-6);
+  color: var(--accent);
+  font-weight: 600;
+  pointer-events: none;
+  background: color-mix(in srgb, var(--bg) 70%, transparent);
+}
+.compose-dialog {
+  position: absolute;
+  left: 50%;
+  top: 30%;
+  transform: translateX(-50%);
+  width: min(480px, 90%);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 32px rgb(0 0 0 / 25%);
+  padding: var(--space-5);
+  z-index: 20;
+}
+.compose-dialog p {
+  margin: 0 0 var(--space-4);
+}
+.compose-dialog-buttons {
+  display: flex;
+  gap: var(--space-3);
+  justify-content: flex-end;
+}
+.compose-fatal {
+  padding: var(--space-4);
+  color: var(--danger);
+}
+.compose .statusbar {
+  gap: var(--space-3);
+}

@@ -7,6 +7,7 @@
 //! running. This is the only crate allowed to depend on a GUI or webview library.
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
+mod compose;
 mod daemon;
 mod list;
 mod reading;
@@ -140,6 +141,7 @@ fn main() {
     tauri::Builder::default()
         .manage(std::sync::Arc::new(Registry::builtin()))
         .manage(daemon::Shared::default())
+        .plugin(tauri_plugin_dialog::init())
         .manage(reading::Reading::load())
         .register_asynchronous_uri_scheme_protocol("famimg", |_ctx, request, responder| {
             tauri::async_runtime::spawn(async move {
@@ -160,7 +162,11 @@ fn main() {
             list_open,
             list_rows,
             list_index_of,
-            bench_report
+            bench_report,
+            compose::compose_info,
+            compose::open_compose,
+            compose::file_info,
+            compose::pick_files
         ])
         .setup(|app| {
             let builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
