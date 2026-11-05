@@ -175,6 +175,8 @@ Tauri 2 + SolidJS was chosen in Phase 0 (WP 0.4).
 
 **WP 3.1 status (5 Nov 2026):** done. `crates/gui` is the Tauri 2 + SolidJS app (binary `familiar`), with its front end in `crates/gui/ui`. It opens to the empty three-pane layout, draws its own title bar (system traffic lights on macOS), has light, dark and system themes from design tokens, calls every command through the registry with types from `bindings/commands.ts`, and starts famd if it isn't running. See [docs/gui.md](../docs/gui.md).
 
+**WP 3.2 status (5 Nov 2026):** done in the cloud, Windows numbers to come. Folder pane with all inboxes and each account's tree; a virtualised list whose sorted IDs live in Rust (newest, oldest, from, subject; unread filter), refreshed when the store changes. On a synthetic 500k store (300k in the inboxes), Linux under Xvfb with software rendering: opening the unified view 44 ms median, scroll frame p95 19 ms (median 17 ms, the display's frame rate), no frames showing unloaded rows, jump anywhere in the list to rows in 34 ms.
+
 ## Phase 4: Calendar, rules, contacts and migration
 
 | WP | Work | Depends on | Done when |

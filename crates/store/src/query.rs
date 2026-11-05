@@ -475,3 +475,58 @@ pub(crate) fn ids_where(c: &Connection, flagged: bool) -> Result<Vec<MessageId>>
     let mut s = c.prepare_cached(sql)?;
     Ok(s.query_map([], |r| r.get(0))?.collect::<Result<_, _>>()?)
 }
+
+/// See [`crate::Reader::message_order`].
+pub(crate) fn message_order(
+    c: &Connection,
+    folders: &[FolderId],
+    unread_only: bool,
+) -> Result<Vec<(MessageId, i64)>> {
+    let mut out = Vec::new();
+    // One indexed scan per folder, merged by time, keeps each query on
+    // messages_folder_time and avoids a sort over the whole table.
+    for f in folders {
+        let mut s = c.prepare_cached(
+            "SELECT m.id, m.received_at FROM messages m
+              WHERE m.folder_id = ?1 AND (?2 = 0 OR m.is_read = 0)
+              ORDER BY m.received_at DESC, m.id DESC",
+        )?;
+        let rows = s.query_map(params![f, unread_only], |r| {
+            Ok((MessageId(r.get(0)?), r.get::<_, i64>(1)?))
+        })?;
+        for r in rows {
+            out.push(r?);
+        }
+    }
+    if folders.len() > 1 {
+        out.sort_unstable_by_key(|&(id, at)| std::cmp::Reverse((at, id)));
+    }
+    Ok(out)
+}
+
+/// See [`crate::Reader::message_sort_text`].
+pub(crate) fn message_sort_text(
+    c: &Connection,
+    folders: &[FolderId],
+    unread_only: bool,
+    column: SortText,
+) -> Result<Vec<(MessageId, String)>> {
+    let col = match column {
+        SortText::From => "CASE WHEN m.from_name = '' THEN m.from_addr ELSE m.from_name END",
+        SortText::Subject => "m.subject",
+    };
+    let mut out = Vec::new();
+    for f in folders {
+        let mut s = c.prepare_cached(&format!(
+            "SELECT m.id, {col} FROM messages m
+              WHERE m.folder_id = ?1 AND (?2 = 0 OR m.is_read = 0)"
+        ))?;
+        let rows = s.query_map(params![f, unread_only], |r| {
+            Ok((MessageId(r.get(0)?), r.get::<_, String>(1)?))
+        })?;
+        for r in rows {
+            out.push(r?);
+        }
+    }
+    Ok(out)
+}

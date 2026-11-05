@@ -1402,10 +1402,12 @@ version = "0.1.0"
 dependencies = [
  "familiar-config",
  "familiar-core",
+ "familiar-store",
  "serde",
  "serde_json",
  "tauri",
  "tauri-build",
+ "tempfile",
 ]
 
 [[package]]

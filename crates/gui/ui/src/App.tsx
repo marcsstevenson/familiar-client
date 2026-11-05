@@ -1,8 +1,9 @@
 // The three-pane window: folders, message list, reading pane, and a status bar.
-// WP 3.1 draws the empty layout; 3.2 fills the folders and list, 3.3 the
-// reading pane.
+// Each pane is its own component folder; they share selection through state.ts.
 import { Show, createSignal, onCleanup, onMount } from "solid-js";
 import { type DaemonState, type UiInfo, watchDaemon } from "./api";
+import { FolderTree } from "./folders/FolderTree";
+import { MessageList } from "./list/MessageList";
 import { TitleBar } from "./TitleBar";
 
 function daemonText(s: DaemonState): string {
@@ -27,10 +28,10 @@ export function App(props: { info: UiInfo }) {
       <TitleBar platform={props.info.platform} />
       <main class="panes">
         <nav class="pane folders" aria-label="Folders">
-          <div class="pane-empty">No folders yet</div>
+          <FolderTree />
         </nav>
         <section class="pane list" aria-label="Messages">
-          <div class="pane-empty">No messages</div>
+          <MessageList />
         </section>
         <section class="pane reading" aria-label="Reading pane">
           <div class="pane-empty">Select a message to read it</div>

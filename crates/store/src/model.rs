@@ -469,3 +469,12 @@ pub fn series_target(master_remote_id: &str) -> String {
 /// The server ID prefix of a folder created locally that the server hasn't
 /// made yet.
 pub const LOCAL_REMOTE_PREFIX: &str = "local:";
+
+/// A text column the message list can sort by.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SortText {
+    /// The sender's display name, or address when it has none.
+    From,
+    /// The subject.
+    Subject,
+}

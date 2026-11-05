@@ -25,7 +25,30 @@ const folders = await run("folder.list", {});
 
 Changes made from the app are recorded with the source `gui`, so they are never checked against the agent grants. `mcp.serve` is refused, since it needs a terminal.
 
-Two more IPC commands exist for the shell itself: `ui_info` (version, platform, the `[app] theme` from config.toml) and `daemon_state`.
+The shell has a few IPC commands of its own: `ui_info` (version, platform, the `[app] theme` from config.toml), `daemon_state`, the list commands below and `bench_report`.
+
+## Folders and the message list
+
+The folder pane shows "All inboxes" (every account's Inbox together), then each account's tree from `folder.list`, with the well-known folders first.
+
+The list is virtualised. Rust (`src/list.rs`) holds the sorted message IDs of the open view, and the front end asks for the rows on screen by position:
+
+- `list_open(spec)` reads and sorts the IDs for `{ folders, unread_only, sort }` (`sort` is `newest`, `oldest`, `from` or `subject`; empty `folders` means all inboxes) and returns the total.
+- `list_rows(start, count)` returns up to 500 rows of the open view.
+- `list_index_of(id)` finds a message's position, to keep the selection after a refresh.
+
+A background thread checks the store's `PRAGMA data_version` once a second and sends `store_changed` when another process (famd, `fam`) has committed. The list then reopens the view and swaps in the rows on screen before redrawing, so it doesn't flash while famd syncs. The folder pane refetches its counts on the same event.
+
+Keys in the list: `j`/`k` or the arrow keys, Page Up/Down, Home and End.
+
+## Timing
+
+`FAMILIAR_BENCH_OUT=<file> familiar` runs `ui/src/bench.ts`: it times opening the unified view, scrolls 600 frames at 40 px, jumps around the list, writes the numbers as JSON to the file and exits. For a large synthetic store:
+
+```sh
+cargo run --release -p familiar-store --example seed -- /tmp/fam-bench/store 500000
+FAMILIAR_DATA_DIR=/tmp/fam-bench FAMILIAR_BENCH_OUT=bench.json target/release/familiar
+```
 
 ## famd
 
