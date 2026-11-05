@@ -13,8 +13,12 @@
 //! link brings only changes.
 //!
 //! Recurring series come expanded by the server: each occurrence and
-//! exception is its own event; series masters are not kept. Graph may also
-//! report changed events just outside the window; those are not stored.
+//! exception is its own event; series masters are not kept. Graph's delta
+//! gives an occurrence only its ID, type, times and series master, so its
+//! subject, location, organiser, zone and the rest are filled in from the
+//! master (one GET per series per sync). Any other event that arrives that
+//! sparse is fetched in full by its own ID. Graph may also report changed
+//! events just outside the window; those are not stored.
 //!
 //! # Time zones
 //!
@@ -24,7 +28,7 @@
 //! zone (`originalStartTimeZone`, usually a Windows name) is stored as an
 //! IANA name.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use chrono::{DateTime, NaiveDate, Utc};
@@ -196,6 +200,35 @@ fn zone(name: &Option<String>) -> Option<String> {
 }
 
 impl GraphEvent {
+    /// Whether Graph sent only the ID, type and times (as calendarView delta
+    /// does for occurrences), so the details must come from elsewhere.
+    pub fn is_sparse(&self) -> bool {
+        self.subject.is_none()
+    }
+
+    /// Fills a sparse occurrence's details from its series master. The
+    /// occurrence keeps its own ID, type, times and master ID.
+    pub fn fill_from_master(&mut self, m: &GraphEvent) {
+        let keep = (
+            self.id.clone(),
+            self.kind.clone(),
+            self.start.clone(),
+            self.end.clone(),
+            self.series_master_id.clone(),
+            self.change_key.clone(),
+        );
+        *self = GraphEvent {
+            id: keep.0,
+            kind: keep.1.or_else(|| Some("occurrence".into())),
+            start: keep.2,
+            end: keep.3,
+            series_master_id: keep.4,
+            change_key: keep.5,
+            web_link: None,
+            ..m.clone()
+        };
+    }
+
     /// Whether this is a series master (not stored: its occurrences are).
     pub fn is_series_master(&self) -> bool {
         self.kind.as_deref() == Some("seriesMaster")
@@ -328,6 +361,23 @@ impl CalendarApi {
                 Some(n) => url = n,
                 None => return Ok(out),
             }
+        }
+    }
+
+    /// One event by ID, in full, with times in UTC. `None` if it's gone.
+    pub async fn event(&self, id: &str, priority: Priority) -> Result<Option<GraphEvent>> {
+        match self
+            .client
+            .get(
+                &format!("{}/events/{id}", self.user),
+                priority,
+                &[PREFER_UTC],
+            )
+            .await
+        {
+            Ok(v) => Ok(Some(serde_json::from_value(v)?)),
+            Err(Error::NotFound(_)) => Ok(None),
+            Err(e) => Err(e),
         }
     }
 
@@ -471,6 +521,7 @@ impl CalendarSync {
         let acc = self.account;
         let resource = events_resource(calendar_remote_id);
         let mut report = EventSyncReport::default();
+        let mut masters = HashMap::new();
         loop {
             match self
                 .round(
@@ -480,6 +531,7 @@ impl CalendarSync {
                     window,
                     priority,
                     &mut report,
+                    &mut masters,
                 )
                 .await
             {
@@ -492,6 +544,42 @@ impl CalendarSync {
         }
     }
 
+    /// Fills in sparse events: occurrences from their series master (each
+    /// master fetched once per sync), anything else by its own ID.
+    async fn complete(
+        &self,
+        items: &mut [DeltaItem<GraphEvent>],
+        priority: Priority,
+        masters: &mut HashMap<String, Option<GraphEvent>>,
+    ) -> Result<()> {
+        for item in items.iter_mut() {
+            let DeltaItem::Upsert(ev) = item else {
+                continue;
+            };
+            if !ev.is_sparse() || ev.is_series_master() {
+                continue;
+            }
+            match ev.series_master_id.clone() {
+                Some(mid) if ev.kind.as_deref() != Some("exception") => {
+                    if !masters.contains_key(&mid) {
+                        let m = self.api.event(&mid, priority).await?;
+                        masters.insert(mid.clone(), m);
+                    }
+                    if let Some(Some(m)) = masters.get(&mid) {
+                        ev.fill_from_master(m);
+                    }
+                }
+                _ => {
+                    if let Some(full) = self.api.event(&ev.id, priority).await? {
+                        *ev = full;
+                    }
+                }
+            }
+        }
+        Ok(())
+    }
+
+    #[allow(clippy::too_many_arguments)]
     async fn round<W: StoreWriter>(
         &self,
         w: &mut W,
@@ -500,6 +588,7 @@ impl CalendarSync {
         (start, end): (i64, i64),
         priority: Priority,
         report: &mut EventSyncReport,
+        masters: &mut HashMap<String, Option<GraphEvent>>,
     ) -> Result<()> {
         let acc = self.account;
         let (cal, saved): (Calendar, Option<String>) = w
@@ -533,7 +622,7 @@ impl CalendarSync {
         report.full_round |= full;
 
         loop {
-            let page = self
+            let mut page = self
                 .api
                 .event_delta_page(
                     remote,
@@ -543,6 +632,7 @@ impl CalendarSync {
                     priority,
                 )
                 .await?;
+            self.complete(&mut page.items, priority, masters).await?;
             report.pages += 1;
             let done = page.delta_link.is_some();
             let next = page.delta_link.clone().or(page.next_link.clone());
@@ -640,6 +730,38 @@ mod tests {
         let (s, en) = e.times().unwrap();
         assert_eq!(rfc3339(s), "2026-12-20T00:00:00Z");
         assert_eq!(en - s, 86_400);
+    }
+
+    #[test]
+    fn sparse_all_day_occurrence_takes_the_master() {
+        let mut occ: GraphEvent = serde_json::from_value(json!({
+            "id": "occ1", "type": "occurrence", "seriesMasterId": "m1",
+            "start": {"dateTime": "2026-11-10T00:00:00.0000000", "timeZone": "UTC"},
+            "end": {"dateTime": "2026-11-11T00:00:00.0000000", "timeZone": "UTC"}
+        }))
+        .unwrap();
+        assert!(occ.is_sparse());
+        let master: GraphEvent = serde_json::from_value(json!({
+            "id": "m1", "type": "seriesMaster", "subject": "Bin day", "isAllDay": true,
+            "location": {"displayName": "Kerb"}, "showAs": "free",
+            "originalStartTimeZone": "New Zealand Standard Time",
+            "start": {"dateTime": "2026-01-06T00:00:00.0000000", "timeZone": "UTC"},
+            "end": {"dateTime": "2026-01-07T00:00:00.0000000", "timeZone": "UTC"}
+        }))
+        .unwrap();
+        occ.fill_from_master(&master);
+        let d = occ
+            .to_event_data(AccountId(1), familiar_store::CalendarId(1))
+            .unwrap();
+        assert_eq!(d.remote_id, "occ1");
+        assert_eq!(d.kind, "occurrence");
+        assert_eq!(d.subject, "Bin day");
+        assert_eq!(d.location, "Kerb");
+        assert!(d.is_all_day);
+        assert_eq!(rfc3339(d.start_at), "2026-11-10T00:00:00Z");
+        assert_eq!(d.end_at - d.start_at, 86_400);
+        assert_eq!(d.start_tz.as_deref(), Some("Pacific/Auckland"));
+        assert_eq!(d.series_master_id.as_deref(), Some("m1"));
     }
 
     #[test]

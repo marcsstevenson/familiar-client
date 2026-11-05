@@ -1588,7 +1588,8 @@ fn list_events(c: &Ctx<'_>, raw: &str, window: Option<(DateTime<Utc>, DateTime<U
         .events
         .values()
         .filter(|r| r.ev.calendar_id == cal)
-        .filter(|r| window.is_none_or(|w| overlaps(&r.ev, w)))
+        // calendarView lists occurrences, never series masters.
+        .filter(|r| window.is_none_or(|w| overlaps(&r.ev, w) && r.ev.event_type != "seriesMaster"))
         .collect();
     evs.sort_by(|a, b| (a.ev.start, &a.ev.id).cmp(&(b.ev.start, &b.ev.id)));
     let items: Vec<Value> = evs
@@ -1620,12 +1621,20 @@ fn event_delta(c: &Ctx<'_>, raw: &str) -> R {
     );
     let limit = page_size(c)?;
     let (entries, more) = delta_slice(st.event_log.get(&cal), &ds, limit, |key| {
-        key.strip_prefix("u|")
-            .is_none_or(|id| st.events.get(id).is_some_and(|r| overlaps(&r.ev, w)))
+        key.strip_prefix("u|").is_none_or(|id| {
+            st.events
+                .get(id)
+                .is_some_and(|r| overlaps(&r.ev, w) && r.ev.event_type != "seriesMaster")
+        })
     });
     let items = entries
         .iter()
         .map(|(_, key)| match key.strip_prefix("u|") {
+            // Like Graph, delta gives occurrences only their ID, type,
+            // times and series master; the rest is on the master.
+            Some(id) if st.events[id].ev.event_type == "occurrence" => {
+                render::sparse_occurrence(&st.events[id])
+            }
             Some(id) => c.select(render::event(&st.user, &st.events[id], &c.prefer)),
             None => {
                 let id = key[2..].split('|').next().unwrap_or_default();

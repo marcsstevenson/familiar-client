@@ -343,7 +343,7 @@ fn list_in(
     let ids: Vec<CalendarId> = cals.iter().map(|(_, c)| c.id).collect();
     let events = r.events_in(&ids, range).map_err(store_err)?;
     let lookup = |id: CalendarId| cals.iter().find(|(_, c)| c.id == id);
-    let events = events
+    let mut events: Vec<CalEvent> = events
         .into_iter()
         .filter_map(|e| {
             let (a, c) = lookup(e.data.calendar)?;
@@ -371,6 +371,21 @@ fn list_in(
             })
         })
         .collect();
+    // By day in the output zone, all-day events first, then by start time.
+    events.sort_by(|a, b| {
+        (
+            &a.start[..10.min(a.start.len())],
+            !a.all_day,
+            &a.start,
+            a.id,
+        )
+            .cmp(&(
+                &b.start[..10.min(b.start.len())],
+                !b.all_day,
+                &b.start,
+                b.id,
+            ))
+    });
     Ok(CalListOutput {
         time_zone: zone.name().to_string(),
         from: in_zone(range.start, zone),
@@ -474,50 +489,94 @@ impl Command for CalList {
     }
 
     fn render_text(&self, o: &CalListOutput) -> String {
-        let mut s = String::new();
-        let mut day = String::new();
+        let day_of = |t: &str| NaiveDate::parse_from_str(t.get(..10).unwrap_or(t), "%Y-%m-%d").ok();
+        let (Some(first), Some(to)) = (day_of(&o.from), day_of(&o.to)) else {
+            return serde_json::to_string_pretty(o).unwrap_or_default();
+        };
         let many = {
             let mut c: Vec<&str> = o.events.iter().map(|e| e.calendar.as_str()).collect();
             c.sort();
             c.dedup();
             c.len() > 1
         };
-        for e in &o.events {
-            let d = e.start.get(..10).unwrap_or(&e.start).to_string();
-            if d != day {
-                if !day.is_empty() {
+        // The days each event is listed on: every day of an all-day event,
+        // and the start day of a timed one.
+        let spans: Vec<(NaiveDate, NaiveDate)> = o
+            .events
+            .iter()
+            .filter_map(|e| {
+                let s = day_of(&e.start)?;
+                let last = if e.all_day {
+                    day_of(&e.end).map_or(s, |end| (end - Duration::days(1)).max(s))
+                } else {
+                    s
+                };
+                Some((s, last))
+            })
+            .collect();
+        let mut s = String::new();
+        let mut day = first;
+        while day < to {
+            let mut lines = Vec::new();
+            for (e, (from, last)) in o.events.iter().zip(&spans) {
+                if day < *from || day > *last {
+                    continue;
+                }
+                let when = if e.all_day {
+                    "all day    ".to_string()
+                } else {
+                    let extra = match (day_of(&e.start), day_of(&e.end)) {
+                        (Some(a), Some(b)) if b > a && hm(&e.end) != "00:00" => {
+                            format!(" (+{}d)", (b - a).num_days())
+                        }
+                        (Some(a), Some(b)) if (b - a).num_days() > 1 => {
+                            format!(" (+{}d)", (b - a).num_days() - 1)
+                        }
+                        _ => String::new(),
+                    };
+                    format!("{}-{}{extra}", hm(&e.start), hm(&e.end))
+                };
+                let mut line = format!("  {when}  {}", e.subject.trim());
+                if e.subject.trim().is_empty() {
+                    line.push_str("(no subject)");
+                }
+                if !e.location.is_empty() {
+                    line.push_str(&format!(" @ {}", e.location));
+                }
+                let length = (*last - *from).num_days() + 1;
+                if length > 1 {
+                    line.push_str(&format!(
+                        " (day {} of {length})",
+                        (day - *from).num_days() + 1
+                    ));
+                }
+                if many {
+                    line.push_str(&format!(" [{}]", e.calendar));
+                }
+                if e.cancelled {
+                    line.push_str(" (cancelled)");
+                }
+                lines.push(line);
+            }
+            if !lines.is_empty() {
+                if !s.is_empty() {
                     s.push('\n');
                 }
-                let label = NaiveDate::parse_from_str(&d, "%Y-%m-%d")
-                    .map(|n| format!("{} {} {}", n.format("%a"), n.day(), n.format("%b %Y")))
-                    .unwrap_or_else(|_| d.clone());
-                s.push_str(&label);
-                s.push('\n');
-                day = d;
+                s.push_str(&format!(
+                    "{} {} {}\n",
+                    day.format("%a"),
+                    day.day(),
+                    day.format("%b %Y")
+                ));
+                for l in lines {
+                    s.push_str(&l);
+                    s.push('\n');
+                }
             }
-            let when = if e.all_day {
-                "all day    ".to_string()
-            } else {
-                format!("{}-{}", hm(&e.start), hm(&e.end))
-            };
-            s.push_str(&format!("  {when}  {}", e.subject));
-            if !e.location.is_empty() {
-                s.push_str(&format!(" @ {}", e.location));
-            }
-            if many {
-                s.push_str(&format!(" [{}]", e.calendar));
-            }
-            if e.cancelled {
-                s.push_str(" (cancelled)");
-            }
-            s.push('\n');
+            day += Duration::days(1);
         }
-        if o.events.is_empty() {
-            s.push_str(&format!(
-                "No events from {} to {}.\n",
-                o.from.get(..10).unwrap_or(&o.from),
-                o.to.get(..10).unwrap_or(&o.to)
-            ));
+        if s.is_empty() {
+            s.push_str(&format!("No events from {first} to {to}.\n"));
         }
         s.push_str(&format!("\nTimes in {}.", o.time_zone));
         for w in &o.warnings {

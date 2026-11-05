@@ -18,7 +18,11 @@ they work without the daemon and offline.
   ```
 
 - Recurring series as the server expands them: each occurrence and exception
-  is its own event. Series masters are not stored.
+  is its own event. Series masters are not stored. calendarView delta gives
+  an occurrence only its ID, type, times and series master, so its subject,
+  location, organiser, all-day flag and zone are copied from the master
+  (fetched once per series per sync). Any other event that arrives without
+  a subject is fetched in full by its ID.
 
 ## How it syncs
 
@@ -65,7 +69,10 @@ fam cal calendars [--account <name>]
 `[calendar.purposes]` (`--calendar family`). `--tz` takes an IANA or Windows
 name; the default is this computer's zone. `--json` gives RFC 3339 times in
 that zone, and dates for all-day events (end exclusive). A range outside the
-synced window, or a calendar that hasn't synced yet, adds a note.
+synced window, or a calendar that hasn't synced yet, adds a note. In the
+text output, all-day events come first each day and a multi-day all-day event
+is listed on every day it covers (`(day 2 of 4)`); a timed event that ends on
+a later day shows `(+1d)`.
 
 ```text
 $ fam cal list --calendar family --days 14

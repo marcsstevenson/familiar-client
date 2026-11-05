@@ -31,4 +31,5 @@ serde.workspace = true
 familiar-mock-graph.workspace = true
 familiar-provider-graph.workspace = true
 tempfile = "3"
+chrono = { version = "0.4", default-features = false, features = ["std"] }
 tokio = { version = "1", features = ["rt-multi-thread"] }

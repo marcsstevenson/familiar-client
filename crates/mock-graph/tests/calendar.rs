@@ -20,7 +20,7 @@ async fn calendars_and_events() {
     assert_eq!(c.get("/me/calendar").await.body["id"], "cal-default");
 
     let family = c.get_all("/me/calendars/cal-family/events").await;
-    assert_eq!(family.len(), 3);
+    assert_eq!(family.len(), 4, "three events and the series master");
     assert_eq!(family[0]["type"], "occurrence");
     assert_eq!(family[0]["seriesMasterId"], "evt-small-series");
     assert_eq!(family[0]["start"]["timeZone"], "UTC");
@@ -79,8 +79,12 @@ async fn calendar_view_delta_rounds() {
         "the window travels in the token"
     );
 
-    mbx.update_event("evt-small-02", |e| e.location = "Indoor nets".into())
-        .unwrap();
+    // Moving one occurrence's place makes it an exception, which delta gives in full.
+    mbx.update_event("evt-small-02", |e| {
+        e.location = "Indoor nets".into();
+        e.event_type = "exception".into();
+    })
+    .unwrap();
     mbx.delete_event("evt-small-03").unwrap();
     let mut added = Event::new(
         "Parent evening",

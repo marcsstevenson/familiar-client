@@ -302,6 +302,20 @@ pub(crate) fn event(user: &User, rec: &EventRecord, prefer: &Prefer) -> Value {
     })
 }
 
+/// An occurrence as calendarView delta gives it: ID, type, times and series master only.
+pub(crate) fn sparse_occurrence(rec: &EventRecord) -> Value {
+    let e = &rec.ev;
+    json!({
+        "@odata.type": "#microsoft.graph.event",
+        "@odata.etag": etag(rec.change_key, &e.id),
+        "id": e.id,
+        "type": e.event_type,
+        "seriesMasterId": e.series_master_id,
+        "start": dt_tz(&e.start),
+        "end": dt_tz(&e.end),
+    })
+}
+
 pub(crate) fn user(u: &User) -> Value {
     json!({
         "id": u.id,

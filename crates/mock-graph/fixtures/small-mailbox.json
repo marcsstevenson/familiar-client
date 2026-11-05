@@ -87,6 +87,12 @@
       "attendees": [{ "name": "Pat Example", "address": "pat@example.com" }]
     },
     {
+      "id": "evt-small-series", "calendarId": "cal-family",
+      "subject": "Junior practice",
+      "start": "2026-11-05T04:00:00Z", "end": "2026-11-05T05:00:00Z",
+      "location": "Club grounds", "type": "seriesMaster"
+    },
+    {
       "id": "evt-small-02", "calendarId": "cal-family",
       "subject": "Junior practice",
       "start": "2026-11-05T04:00:00Z", "end": "2026-11-05T05:00:00Z",

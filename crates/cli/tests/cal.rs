@@ -44,6 +44,14 @@ fn sync_store(data: &Path) {
     let rt = tokio::runtime::Runtime::new().unwrap();
     rt.block_on(async {
         let mock = MockGraph::start().await.unwrap();
+        // A four-day all-day event: 9 to 12 November.
+        let day = |d: u32| {
+            chrono::TimeZone::with_ymd_and_hms(&chrono::Utc, 2026, 11, d, 0, 0, 0).unwrap()
+        };
+        let mut camp = familiar_mock_graph::Event::new("School camp", day(9), day(13));
+        camp.calendar_id = "cal-family".into();
+        camp.is_all_day = true;
+        mock.mailbox("default").add_event(camp).unwrap();
         let client = GraphClient::new(
             ClientOptions::with_base(mock.base_url()),
             Arc::new(StaticToken("test-token".into())),
@@ -106,13 +114,43 @@ fn family_room_lists_in_auckland_time() {
     assert_eq!(v["calendars"], serde_json::json!(["hotmail/Family Room"]));
     assert_eq!(v["from"], "2026-11-05T00:00:00+13:00");
     let evs = v["events"].as_array().unwrap();
-    assert_eq!(evs.len(), 2, "{out}");
-    // 04:00 UTC is 17:00 NZDT.
+    assert_eq!(evs.len(), 3, "{out}");
+    // 04:00 UTC is 17:00 NZDT. The occurrences' subject and location come
+    // from their series master: delta gives occurrences only their times.
     assert_eq!(evs[0]["subject"], "Junior practice");
+    assert_eq!(evs[0]["location"], "Club grounds");
     assert_eq!(evs[0]["start"], "2026-11-05T17:00:00+13:00");
     assert_eq!(evs[0]["end"], "2026-11-05T18:00:00+13:00");
     assert_eq!(evs[0]["recurring"], true);
-    assert_eq!(evs[1]["start"], "2026-11-12T17:00:00+13:00");
+    assert_eq!(evs[1]["subject"], "School camp");
+    assert_eq!(evs[1]["start"], "2026-11-09");
+    assert_eq!(evs[1]["end"], "2026-11-13");
+    assert_eq!(evs[2]["start"], "2026-11-12T17:00:00+13:00");
+
+    // As text, the camp shows on each of its days, before timed events.
+    let (_, out, _) = fam(
+        data,
+        &[
+            "cal",
+            "list",
+            "--calendar",
+            "family",
+            "--from",
+            "2026-11-05",
+            "--days",
+            "14",
+            "--tz",
+            "Pacific/Auckland",
+        ],
+    );
+    for d in ["Mon 9 Nov", "Tue 10 Nov", "Wed 11 Nov"] {
+        assert!(out.contains(d), "{d}: {out}");
+    }
+    assert!(
+        out.contains("Thu 12 Nov 2026\n  all day      School camp (day 4 of 4)\n  17:00-18:00  Junior practice @ Club grounds\n"),
+        "{out}"
+    );
+    assert!(!out.contains("Fri 13 Nov"), "{out}");
     assert!(v.get("warnings").is_none(), "{out}");
 
     // By name, case-insensitive; the all-day holiday keeps its date.
@@ -220,6 +258,6 @@ fn family_room_lists_in_auckland_time() {
     assert_eq!(cals[0]["is_default"], true);
     assert_eq!(cals[1]["name"], "Family Room");
     assert_eq!(cals[1]["purposes"], serde_json::json!(["family"]));
-    assert_eq!(cals[1]["events"], 3);
+    assert_eq!(cals[1]["events"], 4);
     assert_eq!(cals[1]["synced_from"], "2026-11-01");
 }

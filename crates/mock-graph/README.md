@@ -33,7 +33,7 @@ each gets the token `<key>-token`.
 | Messages | `/messages`, `/mailFolders/{id}/messages`, `/messages/{id}` with `$top`, `$skip`, `$select`, `$filter` (`and` of `eq/ne/gt/ge/lt/le`), `$orderby=receivedDateTime`, `$count` |
 | Delta | `/mailFolders/{id}/messages/delta` with `nextLink`/`deltaLink`, `Prefer: odata.maxpagesize`, `$select` kept across pages, `@removed` for deletes and moves out |
 | Search | `$search` on `/messages` and folder messages: words, phrases, `from:`, `to:`, `cc:`, `subject:`, `body:`, `participants:`; at most 1,000 results; 400 with `$filter`, `$orderby` or `$skip` |
-| Calendars | `/calendars`, `/calendar`, `/events`, `/calendars/{id}/events`, `/calendarView`, `/calendars/{id}/calendarView` (window required), and both `.../calendarView/delta` |
+| Calendars | `/calendars`, `/calendar`, `/events`, `/calendars/{id}/events`, `/calendarView`, `/calendars/{id}/calendarView` (window required; series masters left out), and both `.../calendarView/delta` (occurrences carry only `id`, `type`, `start`, `end` and `seriesMasterId`, as on Graph) |
 
 Graph behaviour it copies, because the provider has to handle it:
 

@@ -218,6 +218,12 @@ impl Mailbox {
         let master = "evt-series-001".to_string();
         let first =
             around.date_naive().and_hms_opt(17, 0, 0).unwrap().and_utc() - Duration::weeks(4);
+        let mut m = Event::new("Junior cricket practice", first, first + Duration::hours(1));
+        m.id = master.clone();
+        m.calendar_id = "cal-family".into();
+        m.location = "Club grounds".into();
+        m.event_type = "seriesMaster".into();
+        events.push(m);
         for w in 0..12 {
             let start = first + Duration::weeks(w);
             let mut e = Event::new("Junior cricket practice", start, start + Duration::hours(1));

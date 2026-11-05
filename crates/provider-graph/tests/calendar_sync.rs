@@ -136,8 +136,11 @@ async fn calendars_then_events_by_delta() {
 
     // Changes: one edited, one deleted, one added, one outside the window.
     let mbx = env.mock.mailbox("default");
-    mbx.update_event("evt-small-02", |e| e.location = "Indoor nets".into())
-        .unwrap();
+    mbx.update_event("evt-small-02", |e| {
+        e.location = "Indoor nets".into();
+        e.event_type = "exception".into();
+    })
+    .unwrap();
     mbx.delete_event("evt-small-03").unwrap();
     let mut added = Event::new(
         "Parent evening",

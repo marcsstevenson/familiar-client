@@ -80,5 +80,6 @@ async fn full_sync_of_twenty_thousand_messages() {
     assert!(folders_per_conv.values().any(|f| f.len() > 1));
 
     let events: Vec<Value> = c.get_all("/me/calendars/cal-family/events").await;
-    assert_eq!(events.len(), 12);
+    // Twelve occurrences and their series master.
+    assert_eq!(events.len(), 13);
 }
