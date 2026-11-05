@@ -1097,7 +1097,18 @@ fn find_when(all: &str, today: NaiveDate) -> Option<(NaiveDate, Option<chrono::N
         // A few words after the date, else a few before (`6pm tonight`).
         let time = (0..6)
             .find_map(|k| time_at(i + n + k))
-            .or_else(|| (1..=3).filter_map(|k| i.checked_sub(k)).find_map(time_at));
+            .or_else(|| (1..=3).filter_map(|k| i.checked_sub(k)).find_map(time_at))
+            // Else the next sentence or so (`tonight ... The session will
+            // begin at 6:00pm`), unless another date comes first.
+            .or_else(|| {
+                (6..24)
+                    .take_while(|k| {
+                        words
+                            .get(i + n + k)
+                            .is_some_and(|_| parse_date(&words[i + n + k..], today).is_none())
+                    })
+                    .find_map(|k| time_at(i + n + k))
+            });
         if !strong && time.is_none() {
             continue;
         }
@@ -1206,6 +1217,15 @@ mod tests {
         assert_eq!(
             suggest("Hi", "6pm tonight at the club", today).time,
             chrono::NaiveTime::from_hms_opt(18, 0, 0)
+        );
+        let s = suggest(
+            "Masterclass",
+            "Hi there, Thanks again for registering for the Masterclass tonight with Ish Sodhi. The session will begin at 6:00pm sharp. Please wear appropriate activewear",
+            today,
+        );
+        assert_eq!(
+            (s.date, s.time),
+            (Some(today), chrono::NaiveTime::from_hms_opt(18, 0, 0))
         );
         // Sent on a Thursday: "tomorrow" is the Friday.
         let thu = d(2026, 11, 5);
