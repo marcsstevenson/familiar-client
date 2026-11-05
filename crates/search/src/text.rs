@@ -9,6 +9,43 @@ pub const MAX_BODY_CHARS: usize = 100_000;
 /// and `<head>` dropped, common entities decoded, whitespace collapsed. Not a
 /// full HTML parser; it only needs to find the words.
 pub fn html_to_text(html: &str) -> String {
+    collapse(&strip(html, false))
+}
+
+/// Like [`html_to_text`], but keeps the lines: block elements and `<br>`
+/// end a line, spaces are collapsed within each line and empty lines are
+/// dropped. For reading structure such as reply headers.
+pub fn html_to_lines(html: &str) -> String {
+    strip(html, true)
+        .lines()
+        .map(collapse)
+        .filter(|l| !l.is_empty())
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// Tags that end a line.
+const BLOCK_TAGS: &[&str] = &[
+    "br",
+    "p",
+    "div",
+    "tr",
+    "li",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "h5",
+    "h6",
+    "hr",
+    "blockquote",
+    "table",
+    "ul",
+    "ol",
+    "pre",
+];
+
+fn strip(html: &str, lines: bool) -> String {
     let mut out = String::with_capacity(html.len() / 2);
     let lower = html.to_ascii_lowercase();
     let bytes = html.as_bytes();
@@ -44,8 +81,23 @@ pub fn html_to_text(html: &str) -> String {
                 out.push(' ');
                 continue;
             }
+            let name: String = rest[1..]
+                .trim_start_matches('/')
+                .chars()
+                .take_while(|c| c.is_ascii_alphanumeric())
+                .collect();
             i = rest.find('>').map_or(bytes.len(), |e| i + e + 1);
+            out.push(if lines && BLOCK_TAGS.contains(&name.as_str()) {
+                '\n'
+            } else {
+                ' '
+            });
+            continue;
+        }
+        // In HTML a line break in the source is only a space.
+        if lines && (c == b'\n' || c == b'\r') {
             out.push(' ');
+            i += 1;
             continue;
         }
         if c == b'&' {
@@ -60,7 +112,7 @@ pub fn html_to_text(html: &str) -> String {
         out.push_str(&html[i..(i + len).min(html.len())]);
         i += len;
     }
-    collapse(&out)
+    out
 }
 
 /// The text to index for a body.
@@ -138,6 +190,20 @@ fn collapse(s: &str) -> String {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn lines_follow_block_tags() {
+        let html = "<div>Reminder: tonight\n at 6pm</div><p>From: Coach<br>Sent: Monday, 19 October 2026</p><blockquote>old</blockquote>";
+        assert_eq!(
+            super::html_to_lines(html),
+            "Reminder: tonight at 6pm\nFrom: Coach\nSent: Monday, 19 October 2026\nold"
+        );
+        assert_eq!(
+            super::html_to_text(html),
+            "Reminder: tonight at 6pm From: Coach Sent: Monday, 19 October 2026 old"
+        );
+    }
+
     use super::*;
 
     #[test]

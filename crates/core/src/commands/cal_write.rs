@@ -294,7 +294,7 @@ fn mail_text(r: &Reader, id: i64) -> Result<(String, String, i64), CommandError>
             Ok(raw) => {
                 let t = String::from_utf8_lossy(&raw).into_owned();
                 if b.is_html {
-                    familiar_search::text::html_to_text(&t)
+                    familiar_search::text::html_to_lines(&t)
                 } else {
                     t
                 }

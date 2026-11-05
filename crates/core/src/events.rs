@@ -1047,10 +1047,19 @@ fn split_quoted(text: &str) -> (String, String) {
 /// The first date in `all` that comes with a time or is clearly a date,
 /// and the time near it.
 fn find_when(all: &str, today: NaiveDate) -> Option<(NaiveDate, Option<chrono::NaiveTime>)> {
-    let clean: String = all
-        .chars()
-        .map(|c| {
-            if c.is_alphanumeric() || "/:-.".contains(c) {
+    let chars: Vec<char> = all.chars().collect();
+    let clean: String = chars
+        .iter()
+        .enumerate()
+        .map(|(i, &c)| {
+            // `Tomorrow/Friday` is two words; `21/11` is a date.
+            let letter = |j: Option<usize>| {
+                j.and_then(|j| chars.get(j))
+                    .is_some_and(|c| c.is_alphabetic())
+            };
+            if c == '/' && (letter(i.checked_sub(1)) || letter(Some(i + 1))) {
+                ' '
+            } else if c.is_alphanumeric() || "/:-.".contains(c) {
                 c
             } else {
                 ' '
@@ -1086,7 +1095,7 @@ fn find_when(all: &str, today: NaiveDate) -> Option<(NaiveDate, Option<chrono::N
             None
         };
         // A few words after the date, else a few before (`6pm tonight`).
-        let time = (0..4)
+        let time = (0..6)
             .find_map(|k| time_at(i + n + k))
             .or_else(|| (1..=3).filter_map(|k| i.checked_sub(k)).find_map(time_at));
         if !strong && time.is_none() {
@@ -1197,6 +1206,20 @@ mod tests {
         assert_eq!(
             suggest("Hi", "6pm tonight at the club", today).time,
             chrono::NaiveTime::from_hms_opt(18, 0, 0)
+        );
+        // Sent on a Thursday: "tomorrow" is the Friday.
+        let thu = d(2026, 11, 5);
+        let s = suggest("P.E. Tomorrow/Friday", "Please bring your P.E. gear.", thu);
+        assert_eq!(s.date, Some(d(2026, 11, 6)));
+        // An Outlook reply flattened from HTML keeps its lines now, so the
+        // quoted header is skipped.
+        let text = familiar_search::text::html_to_lines(
+            "<div>The masterclass is tonight, starting at the nets at 6:00pm.</div><hr><div><b>From:</b> Coach<br><b>Sent:</b> Monday, 19 October 2026 2:09 pm</div>",
+        );
+        let s = suggest("RE: Masterclass", &text, today);
+        assert_eq!(
+            (s.date, s.time),
+            (Some(today), chrono::NaiveTime::from_hms_opt(18, 0, 0))
         );
     }
 
