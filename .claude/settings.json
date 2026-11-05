@@ -4,7 +4,13 @@
       "Bash(git:*)", "Bash(gh:*)", "Bash(cargo:*)", "Bash(rustup:*)",
       "Bash(bash scripts/*)", "Bash(curl:*)", "Bash(python3:*)",
       "Bash(ls:*)", "Bash(cat:*)", "Bash(grep:*)", "Bash(sed:*)",
-      "Bash(find:*)", "Bash(mkdir:*)", "Bash(timeout:*)"
+      "Bash(find:*)", "Bash(mkdir:*)", "Bash(timeout:*)",
+      "Bash(cd:*)", "Bash(env:*)", "Bash(head:*)", "Bash(tail:*)", "Bash(wc:*)",
+      "Bash(sort:*)", "Bash(uniq:*)", "Bash(chmod:*)", "Bash(printf:*)", "Bash(echo:*)",
+      "Bash(rg:*)", "Bash(diff:*)", "Bash(jq:*)", "Bash(cut:*)", "Bash(tr:*)", "Bash(awk:*)",
+      "Bash(pwd)", "Bash(which:*)", "Bash(stat:*)", "Bash(file:*)", "Bash(du:*)",
+      "Bash(tree:*)", "Bash(test:*)", "Bash(sqlite3 -readonly:*)",
+      "WebSearch"
     ]
   }
 }
