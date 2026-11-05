@@ -11,6 +11,7 @@
       "Bash(rg:*)", "Bash(diff:*)", "Bash(jq:*)", "Bash(cut:*)", "Bash(tr:*)", "Bash(awk:*)",
       "Bash(pwd)", "Bash(which:*)", "Bash(stat:*)", "Bash(file:*)", "Bash(du:*)",
       "Bash(tree:*)", "Bash(test:*)", "Bash(sqlite3 -readonly:*)",
+      "mcp__github__*", "mcp__claude-code-remote__subscribe_pr_activity",
       "PowerShell(git:*)", "PowerShell(cargo:*)",
       "PowerShell(target\\release\\fam.exe:*)", "PowerShell(target\\release\\famd.exe:*)",
       "PowerShell(.\\target\\release\\fam.exe:*)",
