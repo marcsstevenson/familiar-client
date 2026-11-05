@@ -21,6 +21,7 @@ mod mail;
 mod model;
 mod scheduler;
 mod sync;
+mod write;
 
 pub use calendar::{
     CalendarApi, CalendarListReport, CalendarSync, EVENT_PAGE_SIZE, EventSyncReport, GraphAttendee,
@@ -34,6 +35,7 @@ pub use model::{
     DeltaItem, FOLDER_FIELDS, GraphBody, GraphFolder, GraphMessage, GraphRecipient, HEADER_FIELDS,
     Page, WELL_KNOWN_FOLDERS, importance, parse_time,
 };
+pub use reqwest::Method;
 pub use scheduler::{MAILBOX_CONCURRENCY, Permit, Priority, Scheduler, SchedulerStats};
 pub use sync::{
     FOLDERS_RESOURCE, FolderTreeReport, MailSync, MessageSyncReport, messages_resource,

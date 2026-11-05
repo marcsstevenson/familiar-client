@@ -11,14 +11,17 @@ use std::sync::Arc;
 
 use familiar_core::daemon::{
     AccountFailure, CheckParams, CheckReport, DaemonStatus, FetchBodyParams, FetchBodyResult,
-    GraphGetParams, METHOD_CHECK, METHOD_FETCH_BODY, METHOD_GRAPH_GET, METHOD_PIN,
-    METHOD_SEARCH_ONLINE, METHOD_STATUS, METHOD_STOP, METHOD_SYNC_NOW, PinParams, PinResult,
-    SearchOnlineParams, SearchOnlineResult, SyncNowParams,
+    GraphGetParams, METHOD_CHECK, METHOD_FETCH_BODY, METHOD_GRAPH_GET, METHOD_OPS_CANCEL,
+    METHOD_OPS_LIST, METHOD_OPS_RETRY, METHOD_OPS_SUBMIT, METHOD_OPS_WAIT, METHOD_PIN,
+    METHOD_SEARCH_ONLINE, METHOD_STATUS, METHOD_STOP, METHOD_SYNC_NOW, OpIdParams, OpsListParams,
+    PinParams, PinResult, SearchOnlineParams, SearchOnlineResult, SyncNowParams,
 };
+use familiar_core::ops::{OpView, SubmitParams, WaitParams, WriteOutput};
 use familiar_core::{CommandError, ErrorKind};
 use familiar_provider_graph::{Error as GraphError, MailApi, Priority};
 use familiar_search::OnlineHit;
 use familiar_store::{AccountId, BodyRef, FolderId, Message, MessageId, Reader, SharedWriter};
+use familiar_store::{OpId, OpState};
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 use tokio::sync::watch;
@@ -34,6 +37,8 @@ pub struct AccountHandle {
     pub api: MailApi,
     /// Live status and wake-up.
     pub shared: Arc<AccountShared>,
+    /// Wakes the account's op runner.
+    pub ops_wake: Arc<tokio::sync::Notify>,
 }
 
 /// Everything a request can touch.
@@ -44,6 +49,7 @@ pub struct Service {
     pub(crate) clock: Clock,
     pub(crate) started_at: i64,
     pub(crate) shutdown: watch::Sender<bool>,
+    pub(crate) signals: Arc<crate::ops::OpSignals>,
 }
 
 /// Maps a provider error to the command error kind (and exit code) it means.
@@ -79,6 +85,82 @@ fn to_value<T: serde::Serialize>(v: &T) -> Result<Value, CommandError> {
 }
 
 impl Service {
+    /// Runs `f` in one store transaction, keeping its command error.
+    fn write<T>(
+        &self,
+        f: impl FnOnce(&familiar_store::WriteTx<'_>) -> Result<T, CommandError>,
+    ) -> Result<T, CommandError> {
+        familiar_core::ops::with_tx(&mut self.w.clone(), f)
+    }
+
+    fn wake_runners(&self) {
+        for a in self.accounts.values() {
+            a.ops_wake.notify_one();
+        }
+    }
+
+    fn key_of(&self, id: AccountId) -> String {
+        self.accounts
+            .get(&id)
+            .map(|a| a.key.clone())
+            .unwrap_or_else(|| format!("account {}", id.0))
+    }
+
+    /// `ops.submit`.
+    pub fn ops_submit(&self, p: SubmitParams) -> Result<WriteOutput, CommandError> {
+        let out = self.write(|tx| familiar_core::ops::submit(tx, &p))?;
+        if !out.dry_run {
+            self.wake_runners();
+        }
+        Ok(out)
+    }
+
+    /// `ops.wait`: until every op is done, failed or gone, or the timeout.
+    pub async fn ops_wait(&self, p: WaitParams) -> Result<Vec<OpView>, CommandError> {
+        let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(p.timeout_secs);
+        let mut rx = self.signals.changed.subscribe();
+        loop {
+            rx.borrow_and_update();
+            let r = Reader::open(&self.w.paths().root).map_err(store_error)?;
+            let mut views = Vec::new();
+            let mut open = false;
+            for id in &p.ops {
+                if let Some(op) = r.op(OpId(*id)).map_err(store_error)? {
+                    open |= matches!(op.state, OpState::Pending | OpState::InFlight);
+                    views.push(familiar_core::ops::view(&op, &self.key_of(op.account)));
+                }
+            }
+            if !open {
+                return Ok(views);
+            }
+            tokio::select! {
+                _ = tokio::time::sleep_until(deadline) => {
+                    return Err(CommandError::new(
+                        ErrorKind::Offline,
+                        format!("ops still queued after {}s; they will be sent when the server can be reached (fam ops list)", p.timeout_secs),
+                    ));
+                }
+                r = rx.changed() => {
+                    if r.is_err() {
+                        return Ok(views);
+                    }
+                }
+            }
+        }
+    }
+
+    /// `ops.list`.
+    pub fn ops_list(&self, p: OpsListParams) -> Result<Vec<OpView>, CommandError> {
+        let r = Reader::open(&self.w.paths().root).map_err(store_error)?;
+        let since = (self.clock)() - p.done_within_secs.max(0);
+        let limit = if p.limit == 0 { 100 } else { p.limit };
+        Ok(r.recent_ops(since, limit)
+            .map_err(store_error)?
+            .iter()
+            .map(|o| familiar_core::ops::view(o, &self.key_of(o.account)))
+            .collect())
+    }
+
     /// Runs one request.
     pub async fn handle(&self, method: &str, p: Value) -> Result<Value, CommandError> {
         match method {
@@ -104,6 +186,21 @@ impl Service {
                 Ok(json!({}))
             }
             METHOD_CHECK => to_value(&self.check(params(p)?).await?),
+            METHOD_OPS_SUBMIT => to_value(&self.ops_submit(params(p)?)?),
+            METHOD_OPS_WAIT => to_value(&self.ops_wait(params(p)?).await?),
+            METHOD_OPS_LIST => to_value(&self.ops_list(params(p)?)?),
+            METHOD_OPS_RETRY => {
+                let p: OpIdParams = params(p)?;
+                let done = self.write(|tx| familiar_core::ops::retry(tx, OpId(p.id)))?;
+                self.wake_runners();
+                to_value(&done)
+            }
+            METHOD_OPS_CANCEL => {
+                let p: OpIdParams = params(p)?;
+                let done = self.write(|tx| familiar_core::ops::cancel(tx, OpId(p.id)))?;
+                self.signals.changed.send_modify(|n| *n += 1);
+                to_value(&done)
+            }
             METHOD_GRAPH_GET => self.graph_get(params(p)?).await,
             METHOD_STOP => {
                 let _ = self.shutdown.send(true);

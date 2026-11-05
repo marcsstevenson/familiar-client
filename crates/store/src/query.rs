@@ -269,7 +269,7 @@ pub(crate) fn sync_states(c: &Connection, account: AccountId) -> Result<Vec<Sync
 }
 
 pub(crate) const OP_COLS: &str = "id, account_id, kind, target, payload, idempotency_key, state,
-    attempts, not_before, last_error, created_at, updated_at";
+    attempts, not_before, last_error, created_at, updated_at, source, summary";
 
 pub(crate) fn op(r: &Row<'_>) -> rusqlite::Result<Op> {
     let state: String = r.get(6)?;
@@ -286,7 +286,44 @@ pub(crate) fn op(r: &Row<'_>) -> rusqlite::Result<Op> {
         last_error: r.get(9)?,
         created_at: r.get(10)?,
         updated_at: r.get(11)?,
+        source: r.get(12)?,
+        summary: r.get(13)?,
     })
+}
+
+/// Recent ops, newest first: open ones plus done ones changed at or after
+/// `done_since`.
+pub(crate) fn recent_ops(c: &Connection, done_since: i64, limit: usize) -> Result<Vec<Op>> {
+    let mut s = c.prepare_cached(&format!(
+        "SELECT {OP_COLS} FROM ops WHERE state != 'done' OR updated_at >= ?1
+          ORDER BY id DESC LIMIT ?2"
+    ))?;
+    Ok(s.query_map(params![done_since, limit as i64], op)?
+        .collect::<Result<_, _>>()?)
+}
+
+pub(crate) const AUDIT_COLS: &str = "id, at, account_id, source, command, outcome, op_id, detail";
+
+pub(crate) fn audit(r: &Row<'_>) -> rusqlite::Result<AuditEntry> {
+    Ok(AuditEntry {
+        id: r.get(0)?,
+        at: r.get(1)?,
+        account: r.get(2)?,
+        source: r.get(3)?,
+        command: r.get(4)?,
+        outcome: r.get(5)?,
+        op: r.get(6)?,
+        detail: r.get(7)?,
+    })
+}
+
+/// Audit rows at or after `since`, newest first.
+pub(crate) fn audit_log(c: &Connection, since: i64, limit: usize) -> Result<Vec<AuditEntry>> {
+    let mut s = c.prepare_cached(&format!(
+        "SELECT {AUDIT_COLS} FROM audit WHERE at >= ?1 ORDER BY id DESC LIMIT ?2"
+    ))?;
+    Ok(s.query_map(params![since, limit as i64], audit)?
+        .collect::<Result<_, _>>()?)
 }
 
 pub(crate) fn op_by_id(c: &Connection, id: OpId) -> Result<Option<Op>> {

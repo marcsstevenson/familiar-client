@@ -18,6 +18,7 @@ pub mod check;
 pub mod engine;
 pub mod indexer;
 pub mod ipc;
+pub mod ops;
 pub mod policy;
 pub mod service;
 
@@ -135,6 +136,16 @@ impl Daemon {
             Err(e) => return Err(StartError::Store(e)),
         };
         let w = SharedWriter::new(writer);
+        // Ops claimed when famd last stopped go back to the front of the queue.
+        match w.write(|t| t.requeue_in_flight()) {
+            Ok(0) => {}
+            Ok(n) => log(&format!(
+                "{n} op(s) left in flight last time are queued again"
+            )),
+            Err(e) => return Err(StartError::Store(e)),
+        }
+        let signals = Arc::new(ops::OpSignals::default());
+        let mut runners = Vec::new();
         let (tx, rx) = watch::channel(false);
         let policy = Arc::new(opts.policy);
         let mut accounts = HashMap::new();
@@ -158,6 +169,18 @@ impl Daemon {
                 sync = sync.with_page_size(n);
             }
             let shared = Arc::new(AccountShared::new(&spec.key));
+            let ops_wake = Arc::new(tokio::sync::Notify::new());
+            runners.push(ops::OpRunner {
+                key: spec.key.clone(),
+                account: id,
+                api: api.clone(),
+                w: w.clone(),
+                policy: policy.clone(),
+                clock: opts.clock.clone(),
+                wake: ops_wake.clone(),
+                signals: signals.clone(),
+                shutdown: rx.clone(),
+            });
             engines.push(Engine::new(
                 spec.key.clone(),
                 id,
@@ -175,6 +198,7 @@ impl Daemon {
                     key: spec.key,
                     api,
                     shared,
+                    ops_wake,
                 },
             );
         }
@@ -185,9 +209,11 @@ impl Daemon {
             clock: opts.clock.clone(),
             started_at: (opts.clock)(),
             shutdown: tx.clone(),
+            signals,
         });
         let mut tasks: Vec<JoinHandle<()>> =
             engines.into_iter().map(|e| tokio::spawn(e.run())).collect();
+        tasks.extend(runners.into_iter().map(|r| tokio::spawn(r.run())));
         if let Some(t) = indexer::spawn(&opts.paths.index, w.clone(), rx.clone()) {
             tasks.push(t);
         }

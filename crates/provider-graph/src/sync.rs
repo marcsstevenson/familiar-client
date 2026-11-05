@@ -226,8 +226,25 @@ impl MailSync {
             ..Default::default()
         };
         w.write(|tx| {
-            report.upserted = apply_folders(tx, acc, &upserts, &well_known)?;
+            // Folders with queued local changes keep them until they land.
+            let busy = tx.open_op_targets(acc)?;
+            let keep = |id: &str| -> familiar_store::Result<bool> {
+                Ok(match tx.folder_by_remote(acc, id)? {
+                    Some(f) => !busy.contains(&familiar_store::folder_target(f.id)),
+                    None => true,
+                })
+            };
+            let mut ready = Vec::with_capacity(upserts.len());
+            for f in &upserts {
+                if keep(&f.id)? {
+                    ready.push(f.clone());
+                }
+            }
+            report.upserted = apply_folders(tx, acc, &ready, &well_known)?;
             for id in &removed {
+                if id.starts_with(familiar_store::LOCAL_REMOTE_PREFIX) || !keep(id)? {
+                    continue;
+                }
                 if let Some(f) = tx.folder_by_remote(acc, id)? {
                     tx.delete_folder(f.id)?;
                     report.removed += 1;
@@ -401,6 +418,11 @@ impl MailSync {
                 // Already moved: it arrived in another synced folder this round.
                 continue;
             }
+            let busy = familiar_store::message_target(local.id);
+            if w.write(|tx| Ok(tx.open_op_targets(acc)?.contains(&busy)))? {
+                // A queued local change (a move, say) will settle it.
+                continue;
+            }
             let now_at = self.api.message(&id, priority).await?;
             let dest = match &now_at {
                 Some(m) => match m.parent_folder_id.as_deref() {
@@ -548,6 +570,16 @@ fn upsert_header(
     m: &GraphMessage,
     stash: &mut HashMap<String, Stashed>,
 ) -> familiar_store::Result<MessageId> {
+    // A message with local changes still on their way to the server keeps
+    // them; the round after they land brings the server's view.
+    if let Some(local) = tx.message_by_remote(acc, &m.id)? {
+        if tx
+            .open_op_targets(acc)?
+            .contains(&familiar_store::message_target(local.id))
+        {
+            return Ok(local.id);
+        }
+    }
     let mut row = m.to_new_message(acc, folder);
     let mut pin = false;
     if let Some(imid) = row.internet_message_id.as_deref() {

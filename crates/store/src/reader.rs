@@ -243,6 +243,22 @@ impl Reader {
         query::open_ops(&self.conn)
     }
 
+    /// An op by ID.
+    pub fn op(&self, id: OpId) -> Result<Option<Op>> {
+        query::op_by_id(&self.conn, id)
+    }
+
+    /// Recent ops, newest first: every op not yet done, and done ops that
+    /// changed at or after `done_since`.
+    pub fn recent_ops(&self, done_since: i64, limit: usize) -> Result<Vec<Op>> {
+        query::recent_ops(&self.conn, done_since, limit)
+    }
+
+    /// Audit log rows at or after `since`, newest first.
+    pub fn audit_log(&self, since: i64, limit: usize) -> Result<Vec<AuditEntry>> {
+        query::audit_log(&self.conn, since, limit)
+    }
+
     /// Messages with these IDs, in no particular order; missing IDs are
     /// left out.
     pub fn messages_by_ids(&self, ids: &[MessageId]) -> Result<Vec<Message>> {

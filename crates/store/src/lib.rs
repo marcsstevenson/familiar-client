@@ -49,9 +49,10 @@ pub use conversation::{
 pub use error::{Error, Result};
 pub use migrate::{MIGRATIONS, Migration, SCHEMA_VERSION};
 pub use model::{
-    Account, AccountId, Address, BodyRef, BodyStats, CalendarId, Cursor, EventId, EvictReport,
-    Folder, FolderId, FolderThread, Message, MessageFilter, MessageId, NewAccount, NewFolder,
-    NewMessage, NewOp, Op, OpId, OpState, SearchQueueBatch, SyncState, ThreadId,
+    Account, AccountId, Address, AuditEntry, BodyRef, BodyStats, CalendarId, Cursor, EventId,
+    EvictReport, Folder, FolderId, FolderThread, LOCAL_REMOTE_PREFIX, Message, MessageFilter,
+    MessageId, NewAccount, NewAudit, NewFolder, NewMessage, NewOp, Op, OpId, OpState,
+    SearchQueueBatch, SyncState, ThreadId, folder_target, message_target,
 };
 pub use reader::Reader;
 pub use shared::{SharedWriter, StoreWriter};

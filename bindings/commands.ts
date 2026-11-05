@@ -397,6 +397,38 @@ export type ExitCodeDoc = {
   kind?: ErrorKind | null;
 };
 
+export type FolderCreateInput = {
+  /** The account (config name or address); needed with more than one. */
+  account?: string | null;
+  /** Only show what would change. */
+  dry_run?: boolean;
+  /** The new folder's name. */
+  name: string;
+  /** Parent folder (path, well-known name or name). Default: the top level. */
+  parent?: string | null;
+  /** Wait until the server has the change (needs famd). */
+  wait?: boolean;
+  /** Seconds --wait waits at most (default 60). */
+  wait_secs?: number | null;
+};
+
+export type FolderDeleteInput = {
+  /** The account; needed with more than one. */
+  account?: string | null;
+  /** Only show what would change. */
+  dry_run?: boolean;
+  /** The folder (path, or name). */
+  folder: string;
+  /** Delete for good. Only for a folder already in Deleted Items; needs --yes. */
+  permanent?: boolean;
+  /** Wait until the server has the change (needs famd). */
+  wait?: boolean;
+  /** Seconds --wait waits at most (default 60). */
+  wait_secs?: number | null;
+  /** Confirm a permanent delete when not interactive. */
+  yes?: boolean;
+};
+
 export type FolderListInput = {
   /** Only this account (its name in config.toml). */
   account?: string | null;
@@ -405,6 +437,38 @@ export type FolderListInput = {
 export type FolderListOutput = {
   /** Folders by account, each account's tree depth first, siblings by name. */
   folders: Array<FolderRow>;
+};
+
+export type FolderMoveInput = {
+  /** The account; needed with more than one. */
+  account?: string | null;
+  /** Only show what would change. */
+  dry_run?: boolean;
+  /** The folder (path, or name). */
+  folder: string;
+  /** The new parent folder. */
+  to?: string | null;
+  /** Move it to the top level instead. */
+  top?: boolean;
+  /** Wait until the server has the change (needs famd). */
+  wait?: boolean;
+  /** Seconds --wait waits at most (default 60). */
+  wait_secs?: number | null;
+};
+
+export type FolderRenameInput = {
+  /** The account; needed with more than one. */
+  account?: string | null;
+  /** Only show what would change. */
+  dry_run?: boolean;
+  /** The folder (path, or name). */
+  folder: string;
+  /** Its new name. */
+  name: string;
+  /** Wait until the server has the change (needs famd). */
+  wait?: boolean;
+  /** Seconds --wait waits at most (default 60). */
+  wait_secs?: number | null;
 };
 
 export type FolderRow = {
@@ -452,6 +516,32 @@ export type MailAddress = {
   addr: string;
   /** Display name, possibly empty. */
   name: string;
+};
+
+export type MailArchiveInput = {
+  /** Only show what would change. */
+  dry_run?: boolean;
+  /** Local message IDs. */
+  messages: Array<number>;
+  /** Wait until the server has the change (needs famd). */
+  wait?: boolean;
+  /** Seconds --wait waits at most (default 60). */
+  wait_secs?: number | null;
+};
+
+export type MailDeleteInput = {
+  /** Only show what would change. */
+  dry_run?: boolean;
+  /** Local message IDs. */
+  messages: Array<number>;
+  /** Delete for good. Only for messages already in Deleted Items; needs --yes. */
+  permanent?: boolean;
+  /** Wait until the server has the change (needs famd). */
+  wait?: boolean;
+  /** Seconds --wait waits at most (default 60). */
+  wait_secs?: number | null;
+  /** Confirm a permanent delete when not interactive. */
+  yes?: boolean;
 };
 
 export type MailFetchInput = {
@@ -514,6 +604,19 @@ export type MailFetchOutput = {
   to: Array<MailAddress>;
 };
 
+export type MailFlagInput = {
+  /** Clear the flag instead. */
+  clear?: boolean;
+  /** Only show what would change. */
+  dry_run?: boolean;
+  /** Local message IDs. */
+  messages: Array<number>;
+  /** Wait until the server has the change (needs famd). */
+  wait?: boolean;
+  /** Seconds --wait waits at most (default 60). */
+  wait_secs?: number | null;
+};
+
 export type MailListInput = {
   /** Only this account (its name in config.toml, or its address). Default: every account. */
   account?: string | null;
@@ -538,11 +641,37 @@ export type MailListOutput = {
   next?: string | null;
 };
 
+export type MailMoveInput = {
+  /** Only show what would change. */
+  dry_run?: boolean;
+  /** Local message IDs. */
+  messages: Array<number>;
+  /** Destination folder: path (Inbox/Club), well-known name or name, in each message's own account. */
+  to: string;
+  /** Wait until the server has the change (needs famd). */
+  wait?: boolean;
+  /** Seconds --wait waits at most (default 60). */
+  wait_secs?: number | null;
+};
+
 export type MailPinInput = {
   /** The message's local ID. */
   message: number;
   /** Unpin instead: the body becomes an ordinary cached body again. */
   unpin?: boolean;
+};
+
+export type MailReadInput = {
+  /** Only show what would change. */
+  dry_run?: boolean;
+  /** Local message IDs (from fam mail list). */
+  messages: Array<number>;
+  /** Mark unread instead. */
+  unread?: boolean;
+  /** Wait until the server has the change (needs famd). */
+  wait?: boolean;
+  /** Seconds --wait waits at most (default 60). */
+  wait_secs?: number | null;
 };
 
 export type MailSearchInput = {
@@ -673,6 +802,53 @@ export type MessageHeader = {
 
 export type OnlineStatus = "not_requested" | "not_needed" | "searched" | "offline" | "daemon_unavailable" | "failed";
 
+export type OpIdInput = {
+  /** The op's ID (from fam ops list). */
+  id: number;
+};
+
+export type OpIdOutput = {
+  /** Whether anything changed (false: it was not in a state that allows it). */
+  changed: boolean;
+  /** The op. */
+  id: number;
+};
+
+export type OpView = {
+  /** Account key. */
+  account: string;
+  /** Times tried. */
+  attempts: number;
+  /** Last error. */
+  error?: string | null;
+  /** Op ID. */
+  id: number;
+  /** Kind. */
+  kind: string;
+  /** When it was queued (RFC 3339). */
+  queued_at: string;
+  /** Earliest next try (RFC 3339), for a pending op waiting out a retry. */
+  retry_at?: string | null;
+  /** Who asked. */
+  source: string;
+  /** `pending`, `in_flight`, `done` or `failed`. */
+  state: string;
+  /** What it does. */
+  summary: string;
+};
+
+export type OpsListInput = {
+  /** Also show changes the server got in the last hour. */
+  all?: boolean;
+  /** Most rows (default 100). */
+  limit?: number | null;
+};
+
+export type OpsListOutput = {
+  /** Ops, newest first. */
+  ops: Array<OpView>;
+};
+
 export type PinResult = {
   /** Whether the body was downloaded to pin it. */
   fetched: boolean;
@@ -682,6 +858,21 @@ export type PinResult = {
   message: number;
   /** Whether the body is now pinned. */
   pinned: boolean;
+};
+
+export type QueuedOp = {
+  /** Account key. */
+  account: string;
+  /** Why it failed, or the last retry's error. */
+  error?: string | null;
+  /** Op ID, for `fam ops wait` and `fam ops list`; `None` on a dry run. */
+  id?: number | null;
+  /** Op kind, e.g. `move_message`. */
+  kind: string;
+  /** `planned` (dry run), `pending`, `in_flight`, `done` or `failed`. */
+  state: string;
+  /** What it does, in words. */
+  summary: string;
 };
 
 export type SchemaDocument = {
@@ -859,6 +1050,15 @@ export type VersionOutput = {
   version: string;
 };
 
+export type WriteOutput = {
+  /** True when nothing was changed (`--dry-run`). */
+  dry_run: boolean;
+  /** The ops, in queue order. */
+  ops: Array<QueuedOp>;
+  /** True when the command waited for the server (`--wait`). */
+  waited: boolean;
+};
+
 /** Every command, by dotted name, with its input and output types. */
 export interface Commands {
   /** Call Microsoft Graph directly (GET only) */
@@ -877,18 +1077,42 @@ export interface Commands {
   "config.path": { input: ConfigPathInput; output: ConfigPathOutput };
   /** Check config.toml for errors */
   "config.validate": { input: ConfigPathInput; output: ConfigValidateOutput };
+  /** Create a mail folder */
+  "folder.create": { input: FolderCreateInput; output: WriteOutput };
+  /** Delete a mail folder (to Deleted Items) */
+  "folder.delete": { input: FolderDeleteInput; output: WriteOutput };
   /** List mail folders */
   "folder.list": { input: FolderListInput; output: FolderListOutput };
+  /** Move a mail folder under another, or to the top level */
+  "folder.move": { input: FolderMoveInput; output: WriteOutput };
+  /** Rename a mail folder */
+  "folder.rename": { input: FolderRenameInput; output: WriteOutput };
+  /** Move messages to Archive */
+  "mail.archive": { input: MailArchiveInput; output: WriteOutput };
+  /** Move messages to Deleted Items */
+  "mail.delete": { input: MailDeleteInput; output: WriteOutput };
   /** Show a message with its text */
   "mail.fetch": { input: MailFetchInput; output: MailFetchOutput };
+  /** Flag messages for follow-up, or clear the flag */
+  "mail.flag": { input: MailFlagInput; output: WriteOutput };
   /** List messages in a folder */
   "mail.list": { input: MailListInput; output: MailListOutput };
+  /** Move messages to another folder */
+  "mail.move": { input: MailMoveInput; output: WriteOutput };
   /** Keep a message's body on this device */
   "mail.pin": { input: MailPinInput; output: PinResult };
+  /** Mark messages read or unread */
+  "mail.read": { input: MailReadInput; output: WriteOutput };
   /** Search mail across all accounts */
   "mail.search": { input: MailSearchInput; output: MailSearchOutput };
   /** Show a whole conversation */
   "mail.thread": { input: MailThreadInput; output: MailThreadOutput };
+  /** Cancel a change that hasn't reached the server */
+  "ops.cancel": { input: OpIdInput; output: OpIdOutput };
+  /** List changes waiting for the server */
+  "ops.list": { input: OpsListInput; output: OpsListOutput };
+  /** Try a failed change again */
+  "ops.retry": { input: OpIdInput; output: OpIdOutput };
   /** Describe every command, its input, output and errors */
   "schema": { input: SchemaInput; output: SchemaOutput };
   /** Compare the store with the server and report drift */
@@ -912,12 +1136,24 @@ export const COMMAND_NAMES = [
   "cal.list",
   "config.path",
   "config.validate",
+  "folder.create",
+  "folder.delete",
   "folder.list",
+  "folder.move",
+  "folder.rename",
+  "mail.archive",
+  "mail.delete",
   "mail.fetch",
+  "mail.flag",
   "mail.list",
+  "mail.move",
   "mail.pin",
+  "mail.read",
   "mail.search",
   "mail.thread",
+  "ops.cancel",
+  "ops.list",
+  "ops.retry",
   "schema",
   "sync.check",
   "sync.status",

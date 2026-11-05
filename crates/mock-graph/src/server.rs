@@ -44,6 +44,8 @@ pub struct LoggedRequest {
     pub mailbox: Option<String>,
     /// Response status.
     pub status: u16,
+    /// Request body as text (empty for reads).
+    pub body: String,
 }
 
 struct TokenInfo {
@@ -677,16 +679,22 @@ async fn dispatch(AxState(shared): AxState<Arc<Shared>>, req: Request) -> Respon
             query,
             mailbox: None,
             status,
+            body: String::new(),
         });
         return resp;
     }
-    let (status, mailbox, resp) = serve(&shared, &method, &path, &params, req.headers()).await;
+    let headers = req.headers().clone();
+    let body = axum::body::to_bytes(req.into_body(), 32 << 20)
+        .await
+        .unwrap_or_default();
+    let (status, mailbox, resp) = serve(&shared, &method, &path, &params, &headers, &body).await;
     shared.lock().log.push(LoggedRequest {
         method,
         path,
         query,
         mailbox,
         status,
+        body: String::from_utf8_lossy(&body).into_owned(),
     });
     resp
 }
@@ -890,6 +898,7 @@ async fn serve(
     path: &str,
     params: &[(String, String)],
     headers: &HeaderMap,
+    body: &[u8],
 ) -> (u16, Option<String>, Response) {
     let (request_id, delay, mailbox, guard) = match admit(shared, method, path, headers) {
         Admit::Ok(r, d, m, g) => (r, d, m, g),
@@ -914,7 +923,7 @@ async fn serve(
         .collect();
     let prefer = Prefer::parse(&prefer_values);
     let result = {
-        let st = shared.lock();
+        let mut st = shared.lock();
         if let Some(rec) = st.recording.find(method, path, params, &mailbox) {
             let body = serde_json::to_string(&rec.body)
                 .unwrap_or_default()
@@ -924,6 +933,27 @@ async fn serve(
                 body: serde_json::from_str(&body).unwrap_or(Value::Null),
                 headers: rec.headers.clone().into_iter().collect(),
             })
+        } else if method != "GET" {
+            let base = st.base_url.clone();
+            let body: Value = if body.is_empty() {
+                Value::Null
+            } else {
+                match serde_json::from_slice(body) {
+                    Ok(v) => v,
+                    Err(e) => {
+                        drop(st);
+                        drop(guard);
+                        let e = GraphError::new(
+                            400,
+                            "RequestBodyRead",
+                            format!("The request body is not valid JSON: {e}"),
+                        );
+                        return (e.status, Some(mailbox), error_response(&e, &request_id));
+                    }
+                }
+            };
+            let mbox = st.mailboxes.get_mut(&mailbox).expect("admitted");
+            writes::route(mbox, &base, method, path, &body, &prefer)
         } else {
             let ctx = Ctx {
                 st: &st.mailboxes[&mailbox],
@@ -955,6 +985,9 @@ async fn serve(
 
 // ---------------------------------------------------------------------------
 // Routes
+
+#[path = "writes.rs"]
+mod writes;
 
 struct Q<'a>(&'a [(String, String)]);
 
@@ -1066,13 +1099,7 @@ fn route(c: &Ctx<'_>, method: &str) -> R {
             "Invalid version: the mock serves /v1.0 only.",
         ));
     };
-    if method != "GET" {
-        return Err(GraphError::new(
-            405,
-            "ErrorInvalidRequest",
-            "The mock serves reads only; writes arrive with Phase 2.",
-        ));
-    }
+    debug_assert_eq!(method, "GET");
     let segs: Vec<&str> = rest.split('/').filter(|s| !s.is_empty()).collect();
     let segs = match segs.as_slice() {
         ["me", tail @ ..] => tail.to_vec(),

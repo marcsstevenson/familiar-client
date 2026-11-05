@@ -53,6 +53,11 @@ pub struct SyncPolicy {
     pub calendar_future_days: u32,
     /// How often calendars and their events are polled.
     pub calendar_interval: Duration,
+    /// First wait before an op that failed for a passing reason (offline,
+    /// throttled, server trouble) is tried again; doubles up to `op_retry_max`.
+    pub op_retry_min: Duration,
+    /// Longest wait between tries of an op.
+    pub op_retry_max: Duration,
 }
 
 impl Default for SyncPolicy {
@@ -72,6 +77,8 @@ impl Default for SyncPolicy {
             calendar_past_days: 90,
             calendar_future_days: 365,
             calendar_interval: Duration::from_secs(300),
+            op_retry_min: Duration::from_secs(2),
+            op_retry_max: Duration::from_secs(300),
         }
     }
 }
@@ -125,6 +132,14 @@ impl SyncPolicy {
     /// The oldest `received_at` whose header is kept, if headers are limited.
     pub fn headers_start(&self, now: i64) -> Option<i64> {
         self.headers_days.map(|d| now - i64::from(d) * DAY)
+    }
+
+    /// The wait before an op's next try, after `attempts` tries.
+    pub fn op_retry(&self, attempts: u32) -> Duration {
+        let shift = attempts.saturating_sub(1).min(16);
+        self.op_retry_min
+            .saturating_mul(1 << shift)
+            .min(self.op_retry_max)
     }
 
     /// The wait after `failures` failed rounds in a row.

@@ -59,6 +59,33 @@ pub const METHOD_CHECK: &str = "sync.check";
 /// `graph.get`: GET a Microsoft Graph path with an account's token (`fam api`).
 pub const METHOD_GRAPH_GET: &str = "graph.get";
 
+/// Plans, applies and queues a write: [`crate::ops::SubmitParams`] → [`crate::ops::WriteOutput`].
+pub const METHOD_OPS_SUBMIT: &str = "ops.submit";
+/// Waits for ops to land: [`crate::ops::WaitParams`] → `Vec<OpView>`.
+pub const METHOD_OPS_WAIT: &str = "ops.wait";
+/// Recent ops: [`OpsListParams`] → `Vec<OpView>`.
+pub const METHOD_OPS_LIST: &str = "ops.list";
+/// Retries a failed op: [`OpIdParams`] → `bool`.
+pub const METHOD_OPS_RETRY: &str = "ops.retry";
+/// Cancels a pending or failed op: [`OpIdParams`] → `bool`.
+pub const METHOD_OPS_CANCEL: &str = "ops.cancel";
+
+/// `ops.list` parameters.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct OpsListParams {
+    /// Include ops done in the last this many seconds.
+    pub done_within_secs: i64,
+    /// Most rows.
+    pub limit: usize,
+}
+
+/// One op by ID.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct OpIdParams {
+    /// Op ID.
+    pub id: i64,
+}
+
 /// The `sync_state` resource the engine sets once an account's first sync of
 /// headers has finished.
 pub const FIRST_SYNC_RESOURCE: &str = "engine:first-sync";

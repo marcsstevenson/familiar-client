@@ -65,6 +65,10 @@ pub enum Error {
     #[error("{0} not found")]
     NotFound(String),
 
+    /// The caller rolled its transaction back on purpose.
+    #[error("transaction rolled back")]
+    Aborted,
+
     /// A JSON column could not be encoded or decoded.
     #[error("JSON column: {0}")]
     Json(#[from] serde_json::Error),

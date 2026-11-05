@@ -42,7 +42,7 @@ impl MailApi {
         &self.client
     }
 
-    fn path(&self, rest: &str) -> String {
+    pub(crate) fn path(&self, rest: &str) -> String {
         format!("{}{rest}", self.user)
     }
 
@@ -237,7 +237,7 @@ impl MailApi {
 }
 
 /// Percent-encodes a query parameter value.
-fn encode_query_value(s: &str) -> String {
+pub(crate) fn encode_query_value(s: &str) -> String {
     let mut out = String::with_capacity(s.len() * 3);
     for b in s.bytes() {
         match b {

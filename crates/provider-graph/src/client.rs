@@ -4,7 +4,7 @@
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use reqwest::StatusCode;
+use reqwest::{Method, StatusCode};
 use serde_json::Value;
 
 use crate::error::{Error, Result};
@@ -232,7 +232,42 @@ impl GraphClient {
         priority: Priority,
         prefer: &[&str],
     ) -> Result<Value> {
+        self.request(Method::GET, path_or_link, None, priority, prefer)
+            .await
+    }
+
+    /// POSTs `body` as JSON and returns the answer (`Value::Null` for 204).
+    pub async fn post(&self, path: &str, body: &Value, priority: Priority) -> Result<Value> {
+        self.request(Method::POST, path, Some(body), priority, &[])
+            .await
+    }
+
+    /// PATCHes `body` as JSON and returns the answer.
+    pub async fn patch(&self, path: &str, body: &Value, priority: Priority) -> Result<Value> {
+        self.request(Method::PATCH, path, Some(body), priority, &[])
+            .await
+    }
+
+    /// DELETEs `path`.
+    pub async fn delete(&self, path: &str, priority: Priority) -> Result<()> {
+        self.request(Method::DELETE, path, None, priority, &[])
+            .await
+            .map(|_| ())
+    }
+
+    /// One request with retries, as [`GraphClient::get`] describes. A write
+    /// is retried only on answers that mean Graph did not act on it (429,
+    /// 503 with `Retry-After`, 401 before the refresh).
+    pub async fn request(
+        &self,
+        method: Method,
+        path_or_link: &str,
+        body: Option<&Value>,
+        priority: Priority,
+        prefer: &[&str],
+    ) -> Result<Value> {
         let url = self.url(path_or_link)?;
+        let json_body = body;
         let mut prefer_header = PREFER_IMMUTABLE.to_string();
         for p in prefer {
             prefer_header.push_str(", ");
@@ -244,15 +279,17 @@ impl GraphClient {
             attempt += 1;
             let token = self.token(false).await?;
             let permit = self.inner.scheduler.acquire(priority).await;
-            let resp = self
+            let mut req = self
                 .inner
                 .http
-                .get(&url)
+                .request(method.clone(), &url)
                 .bearer_auth(&token)
                 .header("Prefer", &prefer_header)
-                .header("Accept", "application/json")
-                .send()
-                .await?;
+                .header("Accept", "application/json");
+            if let Some(b) = json_body {
+                req = req.json(b);
+            }
+            let resp = req.send().await?;
             let status = resp.status();
             let retry_after = resp
                 .headers()
@@ -269,6 +306,9 @@ impl GraphClient {
             drop(permit);
 
             if status.is_success() {
+                if status == StatusCode::NO_CONTENT || body.is_empty() {
+                    return Ok(Value::Null);
+                }
                 return Ok(serde_json::from_slice(&body)?);
             }
             let (code, message) = graph_error(&body);

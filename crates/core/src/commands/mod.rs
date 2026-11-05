@@ -11,3 +11,4 @@ pub mod schema;
 pub mod search;
 pub mod sync;
 pub mod version;
+pub mod write;

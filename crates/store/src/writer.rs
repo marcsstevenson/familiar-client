@@ -348,6 +348,38 @@ impl WriteTx<'_> {
         Ok(())
     }
 
+    /// Gives a folder its server ID (once the server has created it).
+    pub fn set_folder_remote_id(&self, id: FolderId, remote_id: &str) -> Result<()> {
+        let n = self.tx.execute(
+            "UPDATE folders SET remote_id = ?2 WHERE id = ?1",
+            params![id, remote_id],
+        )?;
+        found(n, || format!("folder {}", id.0))
+    }
+
+    /// Renames a folder locally.
+    pub fn rename_folder(&self, id: FolderId, name: &str) -> Result<()> {
+        let n = self.tx.execute(
+            "UPDATE folders SET name = ?2 WHERE id = ?1",
+            params![id, name],
+        )?;
+        found(n, || format!("folder {}", id.0))
+    }
+
+    /// Moves a folder under another (or to the top level) locally.
+    pub fn set_folder_parent(&self, id: FolderId, parent: Option<FolderId>) -> Result<()> {
+        let n = self.tx.execute(
+            "UPDATE folders SET parent_id = ?2 WHERE id = ?1",
+            params![id, parent],
+        )?;
+        found(n, || format!("folder {}", id.0))
+    }
+
+    /// An account's folders.
+    pub fn folders(&self, account: AccountId) -> Result<Vec<Folder>> {
+        query::folders(self.c(), account)
+    }
+
     /// A folder by ID.
     pub fn folder(&self, id: FolderId) -> Result<Option<Folder>> {
         query::folder_by_id(self.c(), id)
@@ -700,10 +732,120 @@ impl WriteTx<'_> {
             &op.payload
         };
         let t = now();
+        let source = if op.source.is_empty() {
+            "cli"
+        } else {
+            &op.source
+        };
         Ok(self.tx.query_row(
-            "INSERT INTO ops (account_id, kind, target, payload, idempotency_key, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6) RETURNING id",
-            params![op.account, op.kind, op.target, payload, key, t],
+            "INSERT INTO ops (account_id, kind, target, payload, idempotency_key, created_at,
+                              updated_at, source, summary)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?6, ?7, ?8) RETURNING id",
+            params![
+                op.account, op.kind, op.target, payload, key, t, source, op.summary
+            ],
+            |r| r.get(0),
+        )?)
+    }
+
+    /// Like [`WriteTx::claim_op`], for one account only. Each account's ops
+    /// run one at a time, in queue order, so an op can rely on every earlier
+    /// op of its account (a move into a folder created just before it).
+    /// A failed op does not hold up later ones.
+    pub fn claim_op_for(&self, account: AccountId, now: i64) -> Result<Option<Op>> {
+        let mut s = self.tx.prepare_cached(&format!(
+            "UPDATE ops SET state = 'in_flight', attempts = attempts + 1, updated_at = ?2
+              WHERE id = (
+                SELECT o.id FROM ops o
+                 WHERE o.account_id = ?1 AND o.state = 'pending' AND o.not_before <= ?2
+                   AND NOT EXISTS (SELECT 1 FROM ops e WHERE e.account_id = ?1
+                                     AND e.state = 'in_flight')
+                   AND NOT EXISTS (SELECT 1 FROM ops e WHERE e.account_id = ?1
+                                     AND e.state = 'pending' AND e.id < o.id)
+                 ORDER BY o.id LIMIT 1)
+             RETURNING {}",
+            query::OP_COLS
+        ))?;
+        use rusqlite::OptionalExtension;
+        Ok(s.query_row(params![account, now], query::op).optional()?)
+    }
+
+    /// The earliest `not_before` of the account's pending ops, if any.
+    pub fn next_op_due(&self, account: AccountId) -> Result<Option<i64>> {
+        Ok(self.tx.query_row(
+            "SELECT min(not_before) FROM ops WHERE account_id = ?1 AND state = 'pending'",
+            [account],
+            |r| r.get(0),
+        )?)
+    }
+
+    /// Puts ops left in flight (by a crash or kill) back in the queue, at
+    /// the front. Returns how many. Run at start, before claiming.
+    pub fn requeue_in_flight(&self) -> Result<usize> {
+        Ok(self.tx.execute(
+            "UPDATE ops SET state = 'pending', not_before = 0, updated_at = ?1
+              WHERE state = 'in_flight'",
+            [now()],
+        )?)
+    }
+
+    /// Targets of the account's ops that are pending or in flight. Sync
+    /// leaves these items alone until their ops have reached the server.
+    pub fn open_op_targets(&self, account: AccountId) -> Result<HashSet<String>> {
+        let mut s = self.tx.prepare_cached(
+            "SELECT DISTINCT target FROM ops
+              WHERE account_id = ?1 AND state IN ('pending', 'in_flight') AND target != ''",
+        )?;
+        let rows = s.query_map([account], |r| r.get::<_, String>(0))?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
+    /// Removes a pending or failed op from the queue and returns it, so the
+    /// caller can undo its local change. An op in flight or done can't be
+    /// cancelled ([`Error::NotFound`] if there is no such op, `None` if it
+    /// is past cancelling).
+    pub fn cancel_op(&self, id: OpId) -> Result<Option<Op>> {
+        let op = query::require(self.op(id)?, || format!("op {}", id.0))?;
+        if !matches!(op.state, OpState::Pending | OpState::Failed) {
+            return Ok(None);
+        }
+        self.tx.execute("DELETE FROM ops WHERE id = ?1", [id])?;
+        Ok(Some(op))
+    }
+
+    /// Queues a failed op again, to run as soon as its turn comes.
+    pub fn requeue_failed(&self, id: OpId) -> Result<bool> {
+        let n = self.tx.execute(
+            "UPDATE ops SET state = 'pending', not_before = 0, updated_at = ?2
+              WHERE id = ?1 AND state = 'failed'",
+            params![id, now()],
+        )?;
+        Ok(n > 0)
+    }
+
+    /// Replaces an op's payload (to record what the server returned).
+    pub fn set_op_payload(&self, id: OpId, payload: &str) -> Result<()> {
+        let n = self.tx.execute(
+            "UPDATE ops SET payload = ?2 WHERE id = ?1",
+            params![id, payload],
+        )?;
+        found(n, || format!("op {}", id.0))
+    }
+
+    /// Adds a row to the audit log.
+    pub fn add_audit(&self, a: &NewAudit) -> Result<i64> {
+        Ok(self.tx.query_row(
+            "INSERT INTO audit (at, account_id, source, command, outcome, op_id, detail)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7) RETURNING id",
+            params![
+                now(),
+                a.account,
+                a.source,
+                a.command,
+                a.outcome,
+                a.op,
+                a.detail
+            ],
             |r| r.get(0),
         )?)
     }

@@ -190,6 +190,18 @@ impl Registry {
         r.register(crate::commands::search::MailSearch);
         r.register(crate::commands::cal::CalList);
         r.register(crate::commands::cal::CalCalendars);
+        r.register(crate::commands::write::MailRead);
+        r.register(crate::commands::write::MailFlag);
+        r.register(crate::commands::write::MailMove);
+        r.register(crate::commands::write::MailArchive);
+        r.register(crate::commands::write::MailDelete);
+        r.register(crate::commands::write::FolderCreate);
+        r.register(crate::commands::write::FolderRename);
+        r.register(crate::commands::write::FolderMove);
+        r.register(crate::commands::write::FolderDelete);
+        r.register(crate::commands::write::OpsList);
+        r.register(crate::commands::write::OpsRetry);
+        r.register(crate::commands::write::OpsCancel);
         r
     }
 

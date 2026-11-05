@@ -324,6 +324,10 @@ pub struct NewOp {
     pub payload: String,
     /// Idempotency key; generated if `None`.
     pub idempotency_key: Option<String>,
+    /// Who asked: `cli`, `gui`, `mcp` or an agent name. Empty means `cli`.
+    pub source: String,
+    /// One line for `fam ops list` and the audit log.
+    pub summary: String,
 }
 
 /// A queued op.
@@ -353,6 +357,48 @@ pub struct Op {
     pub created_at: i64,
     /// When it last changed (Unix seconds).
     pub updated_at: i64,
+    /// Who asked for it.
+    pub source: String,
+    /// One line describing it.
+    pub summary: String,
+}
+
+/// One row of the audit log.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct AuditEntry {
+    /// Row ID; also the order.
+    pub id: i64,
+    /// When (Unix seconds).
+    pub at: i64,
+    /// Account, if the action had one.
+    pub account: Option<AccountId>,
+    /// Who asked.
+    pub source: String,
+    /// The command, e.g. `mail.move`.
+    pub command: String,
+    /// `queued`, `denied`, `done` or `failed`.
+    pub outcome: String,
+    /// The op it queued, if any.
+    pub op: Option<OpId>,
+    /// Free text: the summary, or why it was refused or failed.
+    pub detail: String,
+}
+
+/// An audit row to add.
+#[derive(Debug, Clone, Default)]
+pub struct NewAudit {
+    /// Account, if any.
+    pub account: Option<AccountId>,
+    /// Who asked.
+    pub source: String,
+    /// The command.
+    pub command: String,
+    /// `queued`, `denied`, `done` or `failed`.
+    pub outcome: String,
+    /// The op, if any.
+    pub op: Option<OpId>,
+    /// Detail.
+    pub detail: String,
 }
 
 /// How much of an account's mail has a local body. See [`crate::Reader::body_stats`].
@@ -394,3 +440,18 @@ pub struct SearchQueueBatch {
     /// exist), each once.
     pub ids: Vec<MessageId>,
 }
+
+/// The op target for a message: ops on one message run in order, and sync
+/// leaves the message alone while any is open.
+pub fn message_target(id: MessageId) -> String {
+    format!("m:{}", id.0)
+}
+
+/// The op target for a folder.
+pub fn folder_target(id: FolderId) -> String {
+    format!("f:{}", id.0)
+}
+
+/// The server ID prefix of a folder created locally that the server hasn't
+/// made yet.
+pub const LOCAL_REMOTE_PREFIX: &str = "local:";

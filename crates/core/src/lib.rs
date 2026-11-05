@@ -4,6 +4,7 @@
 pub mod commands;
 pub mod daemon;
 pub mod error;
+pub mod ops;
 pub mod parity;
 pub mod registry;
 pub mod surfaces;
