@@ -234,11 +234,39 @@ export type ExitCodeDoc = {
   kind?: ErrorKind | null;
 };
 
+export type HitSource = "local" | "online";
+
 export type MailPinInput = {
   /** The message's local ID. */
   message: number;
   /** Unpin instead: the body becomes an ordinary cached body again. */
   unpin?: boolean;
+};
+
+export type MailSearchInput = {
+  /** The next-page token from a previous search. */
+  after?: string | null;
+  /** Most results per page (default 50, at most 500). */
+  limit?: number | null;
+  /** The query, for example 'from:club subject:"AGM" has:attachment after:2026-01-01'. Operators: from: to: subject: body: has:attachment before: after: folder: account: is:unread is:read is:flagged, "phrases" and -exclusions. */
+  query: string;
+  /** local (default) searches this device; all also searches message text on the server. */
+  scope?: SearchScope;
+};
+
+export type MailSearchOutput = {
+  /** Results, newest first. Server-only results are labelled `online`. */
+  hits: Array<SearchHit>;
+  /** Pass as `--after` for the next page of local results. */
+  next?: string | null;
+  /** Things to know about these results, such as text that wasn't searched. */
+  notices: Array<string>;
+  /** What happened to the server search. */
+  online: OnlineStatus;
+  /** How many results are `online`. */
+  online_hits: number;
+  /** The query as given. */
+  query: string;
 };
 
 export type McpAnnotations = {
@@ -267,6 +295,8 @@ export type McpToolList = {
   /** One tool per command. */
   tools: Array<McpTool>;
 };
+
+export type OnlineStatus = "not_requested" | "not_needed" | "searched" | "offline" | "daemon_unavailable" | "failed";
 
 export type PinResult = {
   /** Whether the body was downloaded to pin it. */
@@ -301,6 +331,39 @@ export type SchemaOutput = SchemaDocument | McpToolList | {
   /** The TypeScript source. */
   typescript: string;
 };
+
+export type SearchHit = {
+  /** Account name. */
+  account: string;
+  /** Whether the body is on this device. */
+  body_local: boolean;
+  /** Folder name, when known. */
+  folder?: string | null;
+  /** Sender address. */
+  from_addr: string;
+  /** Sender name. */
+  from_name: string;
+  /** Has file attachments. */
+  has_attachments: boolean;
+  /** Local message ID, when its header is on this device. */
+  id?: number | null;
+  /** Flagged state. */
+  is_flagged: boolean;
+  /** Read state. */
+  is_read: boolean;
+  /** Short text preview. */
+  preview: string;
+  /** Received time (RFC 3339, UTC). */
+  received_at: string;
+  /** Graph immutable ID. */
+  remote_id: string;
+  /** `local`, or `online` for a result only the server found. */
+  source: HitSource;
+  /** Subject. */
+  subject: string;
+};
+
+export type SearchScope = "local" | "all";
 
 export type SignInState = "signed_in" | "signed_out" | "ok" | "auth_required" | "offline" | "error";
 
@@ -368,6 +431,8 @@ export interface Commands {
   "config.validate": { input: ConfigPathInput; output: ConfigValidateOutput };
   /** Keep a message's body on this device */
   "mail.pin": { input: MailPinInput; output: PinResult };
+  /** Search mail across all accounts */
+  "mail.search": { input: MailSearchInput; output: MailSearchOutput };
   /** Describe every command, its input, output and errors */
   "schema": { input: SchemaInput; output: SchemaOutput };
   /** Show how far each account's sync has got */
@@ -387,6 +452,7 @@ export const COMMAND_NAMES = [
   "config.path",
   "config.validate",
   "mail.pin",
+  "mail.search",
   "schema",
   "sync.status",
   "version",

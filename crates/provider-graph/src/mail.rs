@@ -162,6 +162,28 @@ impl MailApi {
         decode_delta_page(self.client.get(&url, priority, &[&size]).await?)
     }
 
+    /// One page of a server search across the whole mailbox. `kql` is the
+    /// `$search` value including its surrounding double quotes. Graph returns
+    /// at most 1,000 results in all, in its own order, and refuses `$filter`
+    /// and `$orderby` alongside; follow `next_link` for more.
+    pub async fn search_page(
+        &self,
+        kql: &str,
+        page_size: usize,
+        link: Option<&str>,
+        priority: Priority,
+    ) -> Result<Page<GraphMessage>> {
+        let url = match link {
+            Some(l) => l.to_string(),
+            None => self.path(&format!(
+                "/messages?$search={}&$top={}&$select={HEADER_FIELDS}",
+                encode_query_value(kql),
+                page_size.clamp(1, 1000)
+            )),
+        };
+        decode_page(self.client.get(&url, priority, &[]).await?)
+    }
+
     /// One message's headers, wherever it is now. `None` if it no longer exists.
     pub async fn message(&self, id: &str, priority: Priority) -> Result<Option<GraphMessage>> {
         match self
@@ -191,4 +213,18 @@ impl MailApi {
             .await?;
         Ok(serde_json::from_value(v["body"].clone())?)
     }
+}
+
+/// Percent-encodes a query parameter value.
+fn encode_query_value(s: &str) -> String {
+    let mut out = String::with_capacity(s.len() * 3);
+    for b in s.bytes() {
+        match b {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(b as char)
+            }
+            _ => out.push_str(&format!("%{b:02X}")),
+        }
+    }
+    out
 }

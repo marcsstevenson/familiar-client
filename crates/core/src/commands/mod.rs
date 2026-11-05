@@ -5,5 +5,6 @@ pub mod auth;
 pub mod config;
 pub mod mail;
 pub mod schema;
+pub mod search;
 pub mod sync;
 pub mod version;

@@ -10,12 +10,14 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use familiar_core::daemon::{
-    DaemonStatus, FetchBodyParams, FetchBodyResult, METHOD_FETCH_BODY, METHOD_PIN, METHOD_STATUS,
-    METHOD_STOP, METHOD_SYNC_NOW, PinParams, PinResult, SyncNowParams,
+    AccountFailure, DaemonStatus, FetchBodyParams, FetchBodyResult, METHOD_FETCH_BODY, METHOD_PIN,
+    METHOD_SEARCH_ONLINE, METHOD_STATUS, METHOD_STOP, METHOD_SYNC_NOW, PinParams, PinResult,
+    SearchOnlineParams, SearchOnlineResult, SyncNowParams,
 };
 use familiar_core::{CommandError, ErrorKind};
 use familiar_provider_graph::{Error as GraphError, MailApi, Priority};
-use familiar_store::{AccountId, BodyRef, Message, MessageId, Reader, SharedWriter};
+use familiar_search::OnlineHit;
+use familiar_store::{AccountId, BodyRef, FolderId, Message, MessageId, Reader, SharedWriter};
 use serde::de::DeserializeOwned;
 use serde_json::{Value, json};
 use tokio::sync::watch;
@@ -82,6 +84,7 @@ impl Service {
             METHOD_STATUS => to_value(&self.status()),
             METHOD_PIN => to_value(&self.pin(params(p)?).await?),
             METHOD_FETCH_BODY => to_value(&self.fetch_body(params(p)?).await?),
+            METHOD_SEARCH_ONLINE => to_value(&self.search_online(params(p)?).await?),
             METHOD_SYNC_NOW => {
                 let p: SyncNowParams = params(p)?;
                 let mut found = false;
@@ -246,4 +249,109 @@ impl Service {
             .map_err(store_error)?;
         Ok(())
     }
+
+    /// `mail.search_online`: Graph `$search` on each account (or those
+    /// named), at user priority. Results are matched to local headers where
+    /// they exist; nothing is written. A failure in one account is reported
+    /// for that account and the others still answer.
+    pub async fn search_online(
+        &self,
+        p: SearchOnlineParams,
+    ) -> Result<SearchOnlineResult, CommandError> {
+        let r = Reader::open(&self.w.paths().root).map_err(store_error)?;
+        let mut targets: Vec<(AccountId, &AccountHandle, String)> = Vec::new();
+        for acc in r.accounts().map_err(store_error)? {
+            let Some(h) = self.accounts.get(&acc.id) else {
+                continue;
+            };
+            let named = p.accounts.is_empty()
+                || p.accounts.iter().any(|n| {
+                    n.eq_ignore_ascii_case(&acc.key) || n.eq_ignore_ascii_case(&acc.email)
+                });
+            if named {
+                targets.push((acc.id, h, acc.key));
+            }
+        }
+        targets.sort_by(|a, b| a.2.cmp(&b.2));
+        let limit = p.limit.clamp(1, familiar_search::online::MAX_ONLINE);
+        // One account after another: there are only a few, and each search
+        // is one or two requests.
+        let mut answers = Vec::new();
+        for (id, h, key) in &targets {
+            answers.push(
+                search_account(&h.api, &p.kql, limit)
+                    .await
+                    .map(|found| (*id, key.clone(), found)),
+            );
+        }
+        let mut out = SearchOnlineResult::default();
+        for (i, a) in answers.into_iter().enumerate() {
+            let key = targets[i].2.clone();
+            match a {
+                Ok((account, key, msgs)) => {
+                    out.searched.push(key.clone());
+                    for g in msgs {
+                        let n = g.to_new_message(account, FolderId(0));
+                        let local = r.message_by_remote(account, &g.id).map_err(store_error)?;
+                        let folder = match &g.parent_folder_id {
+                            Some(f) => r
+                                .folder_by_remote(account, f)
+                                .map_err(store_error)?
+                                .map(|f| f.id.0),
+                            None => None,
+                        }
+                        .or(local.as_ref().map(|m| m.folder.0));
+                        out.hits.push(OnlineHit {
+                            account: key.clone(),
+                            remote_id: g.id.clone(),
+                            local_id: local.as_ref().map(|m| m.id.0),
+                            folder_id: folder,
+                            subject: n.subject,
+                            from_name: n.from.name,
+                            from_addr: n.from.addr,
+                            received_at: n.received_at,
+                            is_read: n.is_read,
+                            is_flagged: n.is_flagged,
+                            has_attachments: n.has_attachments,
+                            preview: n.preview,
+                            body_local: local.as_ref().is_some_and(|m| m.body.is_some()),
+                        });
+                    }
+                }
+                Err(e) => {
+                    let e = command_error(e);
+                    out.failures.push(AccountFailure {
+                        account: key,
+                        kind: e.kind,
+                        message: e.message,
+                    });
+                }
+            }
+        }
+        out.hits
+            .sort_by(|a, b| (b.received_at, &b.remote_id).cmp(&(a.received_at, &a.remote_id)));
+        Ok(out)
+    }
+}
+
+/// Up to `limit` server results for one mailbox, following next links.
+async fn search_account(
+    api: &MailApi,
+    kql: &str,
+    limit: usize,
+) -> Result<Vec<familiar_provider_graph::GraphMessage>, GraphError> {
+    let mut found = Vec::new();
+    let mut link: Option<String> = None;
+    loop {
+        let page = api
+            .search_page(kql, limit.min(250), link.as_deref(), Priority::User)
+            .await?;
+        found.extend(page.items);
+        match page.next_link {
+            Some(n) if found.len() < limit => link = Some(n),
+            _ => break,
+        }
+    }
+    found.truncate(limit);
+    Ok(found)
 }

@@ -5,7 +5,8 @@
 //! - [`engine`]: one task per account: first sync, polling, body backfill
 //!   for the window, ageing and the body cache.
 //! - [`service`]: requests from `fam` and the GUI (status, pin, on-demand
-//!   body fetch, sync now, stop).
+//!   body fetch, server search, sync now, stop).
+//! - [`indexer`]: keeps the search index beside the store up to date.
 //! - [`ipc`]: the per-user socket or named pipe those requests arrive on.
 //!
 //! [`Daemon::start`] runs all of it on the current Tokio runtime; the
@@ -13,6 +14,7 @@
 //! sign-in store, and tests build one against the mock Graph.
 
 pub mod engine;
+pub mod indexer;
 pub mod ipc;
 pub mod policy;
 pub mod service;
@@ -180,7 +182,11 @@ impl Daemon {
             started_at: (opts.clock)(),
             shutdown: tx.clone(),
         });
-        let tasks = engines.into_iter().map(|e| tokio::spawn(e.run())).collect();
+        let mut tasks: Vec<JoinHandle<()>> =
+            engines.into_iter().map(|e| tokio::spawn(e.run())).collect();
+        if let Some(t) = indexer::spawn(&opts.paths.index, w.clone(), rx.clone()) {
+            tasks.push(t);
+        }
         let socket = opts.paths.socket.clone();
         let svc = service.clone();
         let listener = tokio::spawn(async move {

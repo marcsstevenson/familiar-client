@@ -32,6 +32,11 @@ pub const MIGRATIONS: &[Migration] = &[
         name: "body cache",
         sql: include_str!("../migrations/0002_body_cache.sql"),
     },
+    Migration {
+        version: 3,
+        name: "search queue",
+        sql: include_str!("../migrations/0003_search_queue.sql"),
+    },
 ];
 
 /// The schema version this build reads and writes.
@@ -95,7 +100,7 @@ mod tests {
     #[test]
     fn fresh_store_gets_every_table() {
         let mut c = mem();
-        assert_eq!(migrate(&mut c, MIGRATIONS).unwrap(), vec![1, 2]);
+        assert_eq!(migrate(&mut c, MIGRATIONS).unwrap(), vec![1, 2, 3]);
         assert_eq!(version(&c).unwrap(), SCHEMA_VERSION);
         assert_eq!(
             tables(&c),
@@ -106,6 +111,8 @@ mod tests {
                 "folders",
                 "messages",
                 "ops",
+                "search_queue",
+                "sqlite_sequence",
                 "sync_state",
                 "threads"
             ]
@@ -117,7 +124,7 @@ mod tests {
                 |r| r.get(0),
             )
             .unwrap();
-        assert_eq!(triggers, 3);
+        assert_eq!(triggers, 6);
     }
 
     #[test]

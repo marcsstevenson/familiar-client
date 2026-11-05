@@ -19,13 +19,14 @@
 //! | [`METHOD_PIN`] | [`PinParams`] | [`PinResult`] |
 //! | [`METHOD_FETCH_BODY`] | [`FetchBodyParams`] | [`FetchBodyResult`] |
 //! | [`METHOD_SYNC_NOW`] | [`SyncNowParams`] | `{}` |
+//! | [`METHOD_SEARCH_ONLINE`] | [`SearchOnlineParams`] | [`SearchOnlineResult`] |
 //! | [`METHOD_STOP`] | none | `{}`, then the daemon exits |
 //!
 //! # Where
 //!
 //! Everything is under the data directory (`FAMILIAR_DATA_DIR`, or the
-//! platform's local data directory plus `Familiar`): the store in `store/`
-//! and, on Unix, the socket `famd.sock` (mode 0600). On Windows the pipe is
+//! platform's local data directory plus `Familiar`): the store in `store/`,
+//! the search index in `search/` and, on Unix, the socket `famd.sock` (mode 0600). On Windows the pipe is
 //! `\\.\pipe\familiar-famd-<hash of the data directory>`, so each data
 //! directory (and each test) gets its own daemon.
 
@@ -46,6 +47,8 @@ pub const METHOD_PIN: &str = "mail.pin";
 pub const METHOD_FETCH_BODY: &str = "mail.fetch_body";
 /// `sync.now`: poll every folder of an account (or all accounts) now.
 pub const METHOD_SYNC_NOW: &str = "sync.now";
+/// `mail.search_online`: search message text on the server (Graph `$search`).
+pub const METHOD_SEARCH_ONLINE: &str = "mail.search_online";
 /// `daemon.stop`: shut down cleanly.
 pub const METHOD_STOP: &str = "daemon.stop";
 
@@ -66,6 +69,8 @@ pub struct DaemonPaths {
     pub data_dir: PathBuf,
     /// The store directory.
     pub store: PathBuf,
+    /// The search index directory, kept by famd.
+    pub index: PathBuf,
     /// The socket path (Unix) or pipe name (Windows).
     pub socket: PathBuf,
 }
@@ -76,6 +81,7 @@ impl DaemonPaths {
         Self {
             data_dir: data_dir.to_path_buf(),
             store: data_dir.join("store"),
+            index: data_dir.join("search"),
             socket: socket_for(data_dir),
         }
     }
@@ -332,6 +338,43 @@ pub struct SyncNowParams {
     /// Account key; all accounts when absent.
     #[serde(default)]
     pub account: Option<String>,
+}
+
+/// `mail.search_online` params.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SearchOnlineParams {
+    /// The `$search` value, with its surrounding quotes
+    /// (see [`familiar_search::to_kql`]).
+    pub kql: String,
+    /// Only these accounts (config name or address); all when empty.
+    #[serde(default)]
+    pub accounts: Vec<String>,
+    /// Most results per account (Graph's cap is 1,000).
+    pub limit: usize,
+}
+
+/// One account the server search failed for.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+pub struct AccountFailure {
+    /// The account name.
+    pub account: String,
+    /// What went wrong, as a command error kind.
+    pub kind: ErrorKind,
+    /// The error.
+    pub message: String,
+}
+
+/// `mail.search_online` result.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct SearchOnlineResult {
+    /// What the server found, newest first within each account.
+    pub hits: Vec<familiar_search::OnlineHit>,
+    /// Accounts searched successfully.
+    #[serde(default)]
+    pub searched: Vec<String>,
+    /// Accounts whose search failed.
+    #[serde(default)]
+    pub failures: Vec<AccountFailure>,
 }
 
 // ---------------------------------------------------------------------------

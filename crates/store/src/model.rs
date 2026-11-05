@@ -369,3 +369,15 @@ pub struct EvictReport {
     /// Stored bytes of the dropped bodies.
     pub evicted_bytes: i64,
 }
+
+/// A batch read from the search queue. See [`crate::Reader::search_queue`].
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct SearchQueueBatch {
+    /// The highest queue position read; pass it to
+    /// [`crate::WriteTx::clear_search_queue`] once the batch is indexed.
+    /// 0 when the queue is empty.
+    pub upto: i64,
+    /// Messages to re-index (or drop from the index if they no longer
+    /// exist), each once.
+    pub ids: Vec<MessageId>,
+}

@@ -44,7 +44,7 @@ pub use migrate::{MIGRATIONS, Migration, SCHEMA_VERSION};
 pub use model::{
     Account, AccountId, Address, BodyRef, BodyStats, Cursor, EvictReport, Folder, FolderId,
     FolderThread, Message, MessageId, NewAccount, NewFolder, NewMessage, NewOp, Op, OpId, OpState,
-    SyncState, ThreadId,
+    SearchQueueBatch, SyncState, ThreadId,
 };
 pub use reader::Reader;
 pub use shared::{SharedWriter, StoreWriter};

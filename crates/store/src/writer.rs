@@ -588,6 +588,36 @@ impl WriteTx<'_> {
         found(n, || format!("message {}", id.0))
     }
 
+    /// Messages with these IDs, in no particular order.
+    pub fn messages_by_ids(&self, ids: &[MessageId]) -> Result<Vec<Message>> {
+        query::messages_by_ids(self.c(), ids)
+    }
+
+    // Search queue -----------------------------------------------------------
+
+    /// The oldest `limit` entries of the search index queue.
+    pub fn search_queue(&self, limit: usize) -> Result<SearchQueueBatch> {
+        query::search_queue(self.c(), limit)
+    }
+
+    /// Removes queue entries up to and including `upto`, once the index has
+    /// committed them. Returns how many were removed.
+    pub fn clear_search_queue(&self, upto: i64) -> Result<usize> {
+        Ok(self
+            .tx
+            .execute("DELETE FROM search_queue WHERE seq <= ?1", [upto])?)
+    }
+
+    /// Queues every message for indexing, as when the index is rebuilt.
+    /// Returns how many were queued.
+    pub fn requeue_all_for_search(&self) -> Result<usize> {
+        self.tx.execute("DELETE FROM search_queue", [])?;
+        Ok(self.tx.execute(
+            "INSERT INTO search_queue (message_id) SELECT id FROM messages ORDER BY received_at DESC",
+            [],
+        )?)
+    }
+
     /// A message by ID.
     pub fn message(&self, id: MessageId) -> Result<Option<Message>> {
         query::message_by_id(self.c(), id)

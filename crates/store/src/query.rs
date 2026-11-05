@@ -329,3 +329,53 @@ pub(crate) fn stored_body_bytes(c: &Connection) -> Result<i64> {
 pub(crate) fn require<T>(v: Option<T>, what: impl FnOnce() -> String) -> Result<T> {
     v.ok_or_else(|| Error::NotFound(what()))
 }
+
+/// Messages with these IDs, in no particular order. IDs with no row are
+/// left out.
+pub(crate) fn messages_by_ids(c: &Connection, ids: &[MessageId]) -> Result<Vec<Message>> {
+    if ids.is_empty() {
+        return Ok(Vec::new());
+    }
+    let list = serde_json::to_string(&ids.iter().map(|i| i.0).collect::<Vec<_>>())?;
+    let mut s = c.prepare_cached(&format!(
+        "SELECT {MESSAGE_COLS} FROM messages m
+          WHERE m.id IN (SELECT value FROM json_each(?1))"
+    ))?;
+    Ok(s.query_map([list], message)?.collect::<Result<_, _>>()?)
+}
+
+/// The oldest `limit` rows of the search queue: the distinct message IDs in
+/// them and the highest `seq` read.
+pub(crate) fn search_queue(c: &Connection, limit: usize) -> Result<SearchQueueBatch> {
+    let mut s =
+        c.prepare_cached("SELECT seq, message_id FROM search_queue ORDER BY seq LIMIT ?1")?;
+    let mut upto = 0;
+    let mut seen = std::collections::HashSet::new();
+    let mut ids = Vec::new();
+    let rows = s.query_map([limit as i64], |r| {
+        Ok((r.get::<_, i64>(0)?, MessageId(r.get(1)?)))
+    })?;
+    for row in rows {
+        let (seq, id) = row?;
+        upto = upto.max(seq);
+        if seen.insert(id) {
+            ids.push(id);
+        }
+    }
+    Ok(SearchQueueBatch { upto, ids })
+}
+
+pub(crate) fn search_queue_len(c: &Connection) -> Result<i64> {
+    Ok(c.query_row("SELECT count(*) FROM search_queue", [], |r| r.get(0))?)
+}
+
+/// IDs of unread (`unread`) or flagged messages, from the partial indexes.
+pub(crate) fn ids_where(c: &Connection, flagged: bool) -> Result<Vec<MessageId>> {
+    let sql = if flagged {
+        "SELECT id FROM messages WHERE is_flagged = 1"
+    } else {
+        "SELECT id FROM messages WHERE is_read = 0"
+    };
+    let mut s = c.prepare_cached(sql)?;
+    Ok(s.query_map([], |r| r.get(0))?.collect::<Result<_, _>>()?)
+}

@@ -512,6 +512,17 @@ impl Search {
             let mut tok = String::new();
             let mut quoted = false;
             while let Some(&c) = chars.peek() {
+                // KQL phrases inside the quoted value are written \"like this\".
+                if c == '\\' {
+                    chars.next();
+                    if chars.peek() == Some(&'"') {
+                        quoted = !quoted;
+                        chars.next();
+                    } else {
+                        tok.push(c);
+                    }
+                    continue;
+                }
                 if c == '"' || c == '\'' {
                     quoted = !quoted;
                     chars.next();
@@ -601,6 +612,19 @@ mod tests {
         ]);
         assert_eq!(p.max_page, Some(50));
         assert!(p.immutable_ids && p.text_body);
+    }
+
+    #[test]
+    fn search_accepts_escaped_phrases() {
+        let s = Search::parse(r#""from:club subject:\"annual meeting\" agm""#);
+        assert_eq!(
+            s.0,
+            vec![
+                (Some("from".to_string()), "club".to_string()),
+                (Some("subject".to_string()), "annual meeting".to_string()),
+                (None, "agm".to_string()),
+            ]
+        );
     }
 
     #[test]

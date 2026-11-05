@@ -8,13 +8,14 @@
 famd                 # foreground; Ctrl-C stops it
 fam sync status      # what it is doing, per account
 fam mail pin 1234    # keep message 1234's body on this device
+fam mail search 'from:club has:attachment'   # see docs/search.md
 ```
 
 `famd` reads `config.toml` (`FAMILIAR_CONFIG` or the default path from `fam config path`) and takes tokens from the sign-in store (`fam auth login`). An account that isn't signed in shows `auth_required` in `fam sync status` and is retried every few minutes. A second `famd` on the same data directory refuses to start.
 
 | Variable | Meaning |
 | --- | --- |
-| `FAMILIAR_DATA_DIR` | Store (`store/`), socket (`famd.sock`) and token file. Default: the platform's local data directory plus `Familiar`. |
+| `FAMILIAR_DATA_DIR` | Store (`store/`), search index (`search/`), socket (`famd.sock`) and token file. Default: the platform's local data directory plus `Familiar`. |
 | `FAMILIAR_CONFIG` | The config file. |
 | `FAMILIAR_GRAPH_URL` | Another Graph, such as the mock (`cargo run -p familiar-mock-graph`). |
 

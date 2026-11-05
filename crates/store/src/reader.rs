@@ -187,4 +187,30 @@ impl Reader {
     pub fn open_ops(&self) -> Result<Vec<Op>> {
         query::open_ops(&self.conn)
     }
+
+    /// Messages with these IDs, in no particular order; missing IDs are
+    /// left out.
+    pub fn messages_by_ids(&self, ids: &[MessageId]) -> Result<Vec<Message>> {
+        query::messages_by_ids(&self.conn, ids)
+    }
+
+    /// The oldest `limit` entries of the search index queue (WP 1.9).
+    pub fn search_queue(&self, limit: usize) -> Result<SearchQueueBatch> {
+        query::search_queue(&self.conn, limit)
+    }
+
+    /// Entries waiting in the search index queue.
+    pub fn search_queue_len(&self) -> Result<i64> {
+        query::search_queue_len(&self.conn)
+    }
+
+    /// IDs of every unread message.
+    pub fn unread_ids(&self) -> Result<Vec<MessageId>> {
+        query::ids_where(&self.conn, false)
+    }
+
+    /// IDs of every flagged message.
+    pub fn flagged_ids(&self) -> Result<Vec<MessageId>> {
+        query::ids_where(&self.conn, true)
+    }
 }
