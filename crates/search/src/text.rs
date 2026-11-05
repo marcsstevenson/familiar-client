@@ -92,7 +92,13 @@ fn utf8_len(first: u8) -> usize {
 }
 
 fn entity(s: &str) -> Option<(char, usize)> {
-    let end = s[..s.len().min(12)].find(';')?;
+    // Entities are ASCII; look at no more than 12 bytes, cut back to a char
+    // boundary so text such as "&x\u{ad}" can't split a character.
+    let mut limit = s.len().min(12);
+    while !s.is_char_boundary(limit) {
+        limit -= 1;
+    }
+    let end = s[..limit].find(';')?;
     let name = &s[1..end];
     let ch = match name {
         "amp" => '&',
@@ -156,6 +162,10 @@ mod tests {
             "<script>",
             "<!--",
             "a < b > c",
+            // Multi-byte character straddling the 12-byte entity lookahead.
+            "&abcdefghij\u{ad}x;",
+            "&nbsp\u{ad}\u{ad}\u{ad}\u{ad}\u{ad};",
+            "&#1234567\u{1F600};",
         ] {
             let _ = html_to_text(junk);
         }
