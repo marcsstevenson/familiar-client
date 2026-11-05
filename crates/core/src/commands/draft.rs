@@ -8,7 +8,7 @@
 //! queue first (cancel it with `fam ops cancel <id>`), unless `--now`.
 
 use crate::commands::mail::open_store;
-use crate::commands::write::{WriteFlags, submit_at};
+use crate::commands::write::{WriteFlags, flags, submit_at};
 use crate::compose::{
     AttachmentData, ComposeRequest, Recipient, ResponseKind, check_outside, text_to_html,
 };
@@ -188,15 +188,6 @@ fn account_of(
         .find(|a| a.id == m.account)
         .ok_or_else(|| CommandError::internal("message without an account"))?;
     Ok((a, m))
-}
-
-fn flags(dry_run: bool, wait: bool, wait_secs: Option<u32>) -> WriteFlags {
-    WriteFlags {
-        dry_run,
-        wait,
-        wait_secs: wait_secs.map(u64::from),
-        source: String::new(),
-    }
 }
 
 /// Everything a compose command can be given.

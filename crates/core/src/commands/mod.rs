@@ -11,6 +11,7 @@ pub mod contacts;
 pub mod draft;
 pub mod folder;
 pub mod mail;
+pub mod mcp;
 pub mod schema;
 pub mod search;
 pub mod sync;

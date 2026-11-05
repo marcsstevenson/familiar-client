@@ -948,6 +948,7 @@ dependencies = [
  "chrono",
  "clap",
  "familiar-core",
+ "familiar-daemon",
  "familiar-mock-graph",
  "familiar-provider-graph",
  "familiar-search",

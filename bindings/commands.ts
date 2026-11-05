@@ -1110,6 +1110,16 @@ export type McpAnnotations = {
   readOnlyHint: boolean;
 };
 
+export type McpServeInput = {
+  /** Access levels whose commands are offered, comma-separated or repeated: read, draft, write, send, delete, rules. Default read,draft. famd still checks each write against [agent] in config.toml. */
+  allow?: Array<string>;
+};
+
+export type McpServeOutput = {
+  /** Requests answered. */
+  requests: number;
+};
+
 export type McpTool = {
   /** Behaviour hints for the client. */
   annotations: McpAnnotations;
@@ -1531,6 +1541,8 @@ export interface Commands {
   "mail.send": { input: MailSendInput; output: WriteOutput };
   /** Show a whole conversation */
   "mail.thread": { input: MailThreadInput; output: MailThreadOutput };
+  /** Serve the commands to an MCP client over stdio */
+  "mcp.serve": { input: McpServeInput; output: McpServeOutput };
   /** Cancel a change that hasn't reached the server */
   "ops.cancel": { input: OpIdInput; output: OpIdOutput };
   /** List changes waiting for the server */
@@ -1588,6 +1600,7 @@ export const COMMAND_NAMES = [
   "mail.search",
   "mail.send",
   "mail.thread",
+  "mcp.serve",
   "ops.cancel",
   "ops.list",
   "ops.retry",

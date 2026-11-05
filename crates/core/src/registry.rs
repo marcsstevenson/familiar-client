@@ -197,6 +197,7 @@ impl Registry {
         r.register(crate::commands::contacts::ContactsSearch);
         r.register(crate::commands::agent::AgentStatus);
         r.register(crate::commands::agent::AuditList);
+        r.register(crate::commands::mcp::McpServe);
         r.register(crate::commands::write::MailRead);
         r.register(crate::commands::write::MailFlag);
         r.register(crate::commands::write::MailMove);

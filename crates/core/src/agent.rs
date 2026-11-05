@@ -32,10 +32,32 @@ pub const AGENT_PREFIX: &str = "agent:";
 /// `FAMILIAR_AGENT` names an agent, `agent:claude-code` inside Claude Code
 /// (which sets `CLAUDECODE=1`), otherwise empty (a person, `cli`).
 pub fn session_source() -> String {
+    if let Some(s) = SOURCE.with(|s| s.borrow().clone()) {
+        return s;
+    }
     source_from(
         std::env::var("FAMILIAR_AGENT").ok().as_deref(),
         std::env::var("CLAUDECODE").ok().as_deref(),
     )
+}
+
+thread_local! {
+    static SOURCE: std::cell::RefCell<Option<String>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Runs `f` with [`session_source`] giving `source` on this thread (the MCP
+/// server runs each tool call this way, as `mcp`).
+pub fn with_source<T>(source: &str, f: impl FnOnce() -> T) -> T {
+    let before = SOURCE.with(|s| s.replace(Some(source.to_string())));
+    struct Restore(Option<String>);
+    impl Drop for Restore {
+        fn drop(&mut self) {
+            let v = self.0.take();
+            SOURCE.with(|s| *s.borrow_mut() = v);
+        }
+    }
+    let _restore = Restore(before);
+    f()
 }
 
 fn source_from(familiar_agent: Option<&str>, claudecode: Option<&str>) -> String {
@@ -269,6 +291,7 @@ mod tests {
         assert_eq!(source_from(Some("triage"), Some("1")), "agent:triage");
         assert!(is_agent("agent:x") && is_agent("mcp"));
         assert!(!is_agent("cli") && !is_agent("gui") && !is_agent(""));
+        assert_eq!(with_source("mcp", session_source), "mcp");
     }
 
     #[test]
