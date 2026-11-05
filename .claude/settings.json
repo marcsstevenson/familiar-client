@@ -12,6 +12,8 @@
       "Bash(tree:*)", "Bash(test:*)", "Bash(sqlite3 -readonly:*)",
       "PowerShell(git:*)", "PowerShell(cargo:*)",
       "PowerShell(target\\release\\fam.exe:*)", "PowerShell(target\\release\\famd.exe:*)",
+      "PowerShell(.\\target\\release\\fam.exe:*)",
+      "PowerShell(pwsh -File scripts/cal-check.ps1:*)", "PowerShell(pwsh -File scripts\\cal-check.ps1:*)",
       "PowerShell(Get-Process:*)", "PowerShell(Stop-Process -Name famd:*)",
       "PowerShell(Start-Process -FilePath target\\release\\famd.exe:*)",
       "PowerShell(Get-Content:*)", "PowerShell(Select-String:*)", "PowerShell(Get-ChildItem:*)",
