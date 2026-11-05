@@ -2,6 +2,7 @@
 //! Read-only access for the GUI and CLI.
 
 use crate::bodies::{self, BodyHash};
+use crate::conversation::{self, Conversation, ConversationSummary};
 use crate::migrate::{self, SCHEMA_VERSION};
 use crate::model::*;
 use crate::query;
@@ -131,6 +132,42 @@ impl Reader {
     /// Every message of a conversation, in all folders, oldest first.
     pub fn thread(&self, thread: ThreadId) -> Result<Vec<Message>> {
         query::thread_messages(&self.conn, thread)
+    }
+
+    /// The conversation `thread`, assembled from every folder of its
+    /// account, oldest message first. `None` if there is no such thread.
+    pub fn conversation(&self, thread: ThreadId) -> Result<Option<Conversation>> {
+        conversation::conversation(&self.conn, thread)
+    }
+
+    /// The conversation that message `id` belongs to.
+    pub fn conversation_of(&self, id: MessageId) -> Result<Option<Conversation>> {
+        match conversation::thread_of_message(&self.conn, id)? {
+            Some(thread) => conversation::conversation(&self.conn, thread),
+            None => Ok(None),
+        }
+    }
+
+    /// The local thread for a Graph conversation ID.
+    pub fn thread_by_conversation(
+        &self,
+        account: AccountId,
+        conversation_id: &str,
+    ) -> Result<Option<ThreadId>> {
+        query::thread_id(&self.conn, account, conversation_id)
+    }
+
+    /// A page of a folder's conversations for a threaded list, newest first,
+    /// each with its totals across all folders and its newest message
+    /// anywhere (a reply in Sent Items shows on the Inbox row). Pass the
+    /// previous page's last [`ConversationSummary::cursor`] as `after`.
+    pub fn conversations(
+        &self,
+        folder: FolderId,
+        after: Option<Cursor>,
+        limit: usize,
+    ) -> Result<Vec<ConversationSummary>> {
+        conversation::folder_conversations(&self.conn, folder, after, limit)
     }
 
     /// A message by ID.

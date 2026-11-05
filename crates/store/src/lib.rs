@@ -31,6 +31,7 @@
 
 mod bodies;
 mod calendar;
+mod conversation;
 mod error;
 mod migrate;
 mod model;
@@ -41,6 +42,10 @@ mod writer;
 
 pub use bodies::{BodyHash, INLINE_BODY_MAX};
 pub use calendar::{Attendee, Calendar, Event, EventData, EventRange, NewCalendar};
+pub use conversation::{
+    Conversation, ConversationFolder, ConversationMessage, ConversationSummary, DRAFTS,
+    LatestMessage, MessageCopy, SENT_ITEMS, TRASH_FOLDERS, normalize_subject,
+};
 pub use error::{Error, Result};
 pub use migrate::{MIGRATIONS, Migration, SCHEMA_VERSION};
 pub use model::{

@@ -79,6 +79,15 @@ On Unix the socket is `<data dir>/famd.sock`, mode 0600. On Windows the pipe is 
 
 Headers older than `sync.headers` are pruned on purpose and not compared. Before an account's first sync has finished the check runs without waiting for a round and says that differences are expected. `--limit` caps the list (default 50); the counts by kind are always complete.
 
+## Conversations
+
+Threads are built locally, not by asking Graph per folder. Every message row points at a `threads` row keyed by the account and Graph's `conversationId`, so a conversation is every message of that account sharing the ID, in whatever folder: Inbox, Sent Items, Drafts, custom folders and the trash. A move (local or reported by delta) changes only the folder, so the thread stays whole. Messages without a `conversationId` are their own thread.
+
+`familiar_store::Reader` gives two views (WP 1.8, `crates/store/src/conversation.rs`):
+
+- `conversation(thread)` and `conversation_of(message)`: the whole conversation oldest first, with each message's folder, `from_me` (sent from the account's address), `in_trash` (Deleted Items or Junk Email; `without_trash()` leaves those out), the subject without `RE:`/`FW:` prefixes, the participants and per-folder counts. Copies of one message (same Internet Message-ID, such as mail to yourself in both Inbox and Sent Items) are shown once: the copy outside the trash, then one with a body, then the oldest; it is unread if any copy is, and the others are listed under `copies`.
+- `conversations(folder, after, limit)`: a threaded folder list, newest first by the folder's own newest message and keyset paged with `row.cursor()`. Each row has the folder's counts and the totals across all folders, plus the newest message anywhere, so an Inbox row shows a reply that is in Sent Items.
+
 ## Tests
 
 `crates/daemon/tests/` runs the daemon against the mock Graph with poll intervals in milliseconds and a clock the test moves:
