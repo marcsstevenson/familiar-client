@@ -71,8 +71,8 @@ Actions and their default keys (`ui/src/actions/builtin.ts`):
 | `delete` | `#` | `fam mail delete` |
 | `flag` | `s` | `fam mail flag` (or `--clear`) |
 | `toggle_read` | `u` | `fam mail read` (or `--unread`) |
-| `reply`, `reply_all`, `forward` | `r`, `a`, `f` | Draft a reply or forward (the command form until the compose window lands) |
-| `compose` | `c` | New message |
+| `reply`, `reply_all`, `forward` | `r`, `a`, `f` | Open a compose window replying to or forwarding the selected message |
+| `compose` | `c` | New message (Ctrl+N also works) |
 | `search` | `/` | Go to the search box |
 | `theme` | | Cycle the theme |
 
