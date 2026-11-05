@@ -173,6 +173,8 @@ Tauri 2 + SolidJS was chosen in Phase 0 (WP 0.4).
 
 **Phase 3 gate:** Marc uses Familiar for mail on one account for a week.
 
+**WP 3.1 status (5 Nov 2026):** done. `crates/gui` is the Tauri 2 + SolidJS app (binary `familiar`), with its front end in `crates/gui/ui`. It opens to the empty three-pane layout, draws its own title bar (system traffic lights on macOS), has light, dark and system themes from design tokens, calls every command through the registry with types from `bindings/commands.ts`, and starts famd if it isn't running. See [docs/gui.md](../docs/gui.md).
+
 ## Phase 4: Calendar, rules, contacts and migration
 
 | WP | Work | Depends on | Done when |

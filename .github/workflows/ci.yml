@@ -31,6 +31,11 @@ jobs:
         with:
           components: clippy
       - uses: Swatinem/rust-cache@v2
+      - name: Install webview libraries (Linux, for familiar-gui)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev
       - name: Clippy
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
       - name: Test
@@ -71,6 +76,11 @@ jobs:
         run: bash scripts/check-licence-headers.sh
       - name: Type-check generated TypeScript bindings
         run: npx --yes -p typescript@5.9.3 tsc --strict --noEmit --target es2022 bindings/commands.ts
+      - name: Type-check and build the desktop app's front end
+        working-directory: crates/gui/ui
+        run: |
+          npm ci
+          npm run build
 
   secrets:
     name: Secret scanning

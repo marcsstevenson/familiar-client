@@ -25,3 +25,8 @@ rustc-ice-*.txt
 
 # Personal Claude Code settings (machine-specific permissions)
 .claude/settings.local.json
+
+# Desktop app front end (built by npm in crates/gui/ui)
+node_modules/
+crates/gui/ui/dist/
+crates/gui/gen/

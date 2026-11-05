@@ -1,6 +1,6 @@
 [package]
 name = "familiar-gui"
-description = "Familiar desktop app (Tauri 2, stub until Phase 3)."
+description = "Familiar desktop app (Tauri 2 + SolidJS)."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -12,8 +12,19 @@ publish.workspace = true
 name = "familiar"
 path = "src/main.rs"
 
+[build-dependencies]
+tauri-build = { version = "2.5", features = [] }
+
 [dependencies]
 familiar-core.workspace = true
+familiar-config.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tauri = { version = "2.12", features = [] }
+
+[features]
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
 
 [lints]
 workspace = true
