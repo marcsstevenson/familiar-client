@@ -9,3 +9,4 @@ const info = await uiInfo();
 setTheme(info.theme);
 document.documentElement.dataset.platform = info.platform;
 render(() => <App info={info} />, document.getElementById("root")!);
+if (info.bench) void import("./bench").then((b) => b.runBench());
