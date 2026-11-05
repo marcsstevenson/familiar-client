@@ -2,6 +2,7 @@
 // `fam`, on the selected message.
 import { isCommandError, run } from "../api";
 import { listNav, notify, selectedMessage, selectedRow } from "../state";
+import { searchFocus } from "../list/SearchBar";
 import { cycleTheme } from "../theme";
 import { registerAction } from "./registry";
 
@@ -99,5 +100,6 @@ export function registerBuiltinActions(openPalette: (prefill?: string, values?: 
     cli: () => "fam draft create",
     run: () => openPalette("draft.create"),
   });
+  registerAction({ id: "search", title: "Search mail", key: "/", cli: () => "fam mail search", run: () => searchFocus.focus() });
   registerAction({ id: "theme", title: "Change theme (system, light, dark)", run: cycleTheme });
 }

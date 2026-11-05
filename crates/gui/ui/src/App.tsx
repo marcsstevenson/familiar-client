@@ -7,7 +7,7 @@ import { onGlobalKey, setKeyOverrides } from "./actions/registry";
 import { type DaemonState, type UiInfo, watchDaemon } from "./api";
 import { ReadingPane } from "./reading/ReadingPane";
 import { Palette } from "./palette/Palette";
-import { notice, setSelectedFolder, setSelectedMessage } from "./state";
+import { notice, setSearchQuery, setSelectedFolder, setSelectedMessage } from "./state";
 import { FolderTree } from "./folders/FolderTree";
 import { MessageList } from "./list/MessageList";
 import { TitleBar } from "./TitleBar";
@@ -40,6 +40,7 @@ export function App(props: { info: UiInfo }) {
     const stopUi = await listen<UiCommand>("ui_command", (e) => {
       const c = e.payload;
       setPalette(null);
+      setSearchQuery(null);
       setSelectedFolder(c.folder);
       setSelectedMessage(c.kind === "open" ? c.message : null);
     });
@@ -54,7 +55,7 @@ export function App(props: { info: UiInfo }) {
       <TitleBar platform={props.info.platform} />
       <main class="panes">
         <nav class="pane folders" aria-label="Folders">
-          <FolderTree />
+          <FolderTree views={props.info.views} />
         </nav>
         <section class="pane list" aria-label="Messages">
           <MessageList />

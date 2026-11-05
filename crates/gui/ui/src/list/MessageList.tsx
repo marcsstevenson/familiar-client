@@ -2,7 +2,8 @@
 // component asks for the rows on screen a page at a time and draws only those.
 import { For, Show, createEffect, createSignal, on, onCleanup, onMount } from "solid-js";
 import { isCommandError } from "../api";
-import { listNav, selectedFolder, selectedMessage, setSelectedMessage, setSelectedRow } from "../state";
+import { listNav, searchQuery, selectedFolder, selectedMessage, setSelectedMessage, setSelectedRow } from "../state";
+import { OnlineHits, SearchBar } from "./SearchBar";
 import { type Row, type Sort, listIndexOf, listOpen, listRows, onStoreChanged } from "./api";
 import { shortDate } from "./format";
 
@@ -27,6 +28,7 @@ export function MessageList() {
   const [selIndex, setSelIndex] = createSignal<number | null>(null);
   const [error, setError] = createSignal<string | null>(null);
   const [rev, setRev] = createSignal(0);
+  const [notices, setNotices] = createSignal<string[]>([]);
 
   // Pages of rows for the current view generation.
   let pages = new Map<number, Row[]>();
@@ -65,13 +67,19 @@ export function MessageList() {
   async function reopen(keepScroll: boolean) {
     const g = ++gen;
     try {
-      const { total: n } = await listOpen({
+      const opened = await listOpen({
         folders: selectedFolder() === null ? [] : [selectedFolder()!],
         unread_only: unreadOnly(),
         sort: sort(),
+        query: searchQuery(),
       });
+      const n = opened.total;
       if (g !== gen) return;
       setError(null);
+      setNotices([
+        ...opened.notices,
+        ...(opened.capped ? [`Showing the newest ${n.toLocaleString()} matches`] : []),
+      ]);
       // On a refresh, fetch the rows on screen before swapping them in, so the
       // list doesn't flash empty while famd syncs.
       const fresh = new Map<number, Row[]>();
@@ -126,7 +134,7 @@ export function MessageList() {
     return out;
   };
 
-  createEffect(on([selectedFolder, sort, unreadOnly], () => void reopen(false)));
+  createEffect(on([selectedFolder, sort, unreadOnly, searchQuery], () => void reopen(false)));
 
   // The selected row's flags, for actions such as "mark unread". A selected
   // message whose row has left the view (the Unread filter, once opening it
@@ -216,10 +224,16 @@ export function MessageList() {
 
   return (
     <div class="message-list">
+      <SearchBar />
       <div class="list-header">
         <label class="list-control">
           <span class="visually-hidden">Sort by</span>
-          <select value={sort()} onChange={(e) => setSort(e.currentTarget.value as Sort)}>
+          <select
+            value={searchQuery() ? "newest" : sort()}
+            disabled={searchQuery() !== null}
+            title={searchQuery() ? "Search results are newest first" : undefined}
+            onChange={(e) => setSort(e.currentTarget.value as Sort)}
+          >
             <For each={SORTS}>{(s) => <option value={s.value}>{s.label}</option>}</For>
           </select>
         </label>
@@ -231,8 +245,12 @@ export function MessageList() {
           />
           Unread
         </label>
-        <span class="list-count">{total().toLocaleString()} messages</span>
+        <span class="list-count">
+          {total().toLocaleString()} {searchQuery() ? "found" : "messages"}
+        </span>
       </div>
+      <For each={notices()}>{(n) => <p class="list-notice">{n}</p>}</For>
+      <OnlineHits />
       <div
         class="list-scroller"
         ref={scroller}
@@ -252,7 +270,7 @@ export function MessageList() {
         </Show>
         <div class="list-spacer" style={{ height: `${total() * ROW_H}px` }}>
           <For each={visible()}>
-            {(i) => <ListRow index={i} row={rowAt(i)} selected={selIndex() === i} onSelect={select} unified={selectedFolder() === null} />}
+            {(i) => <ListRow index={i} row={rowAt(i)} selected={selIndex() === i} onSelect={select} unified={selectedFolder() === null || searchQuery() !== null} />}
           </For>
         </div>
       </div>

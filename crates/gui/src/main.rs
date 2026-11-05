@@ -25,6 +25,13 @@ const SOURCE_GUI: &str = "gui";
 /// Commands the window can't run: they need a terminal of their own.
 const NOT_FROM_GUI: &[&str] = &["mcp.serve"];
 
+/// One saved search.
+#[derive(Debug, Serialize)]
+struct View {
+    name: String,
+    query: String,
+}
+
 /// Facts the front end needs before it draws anything.
 #[derive(Debug, Serialize)]
 struct UiInfo {
@@ -37,6 +44,8 @@ struct UiInfo {
     config_error: Option<String>,
     /// `[keys]` from config.toml: action name to key, overriding the defaults.
     keys: std::collections::BTreeMap<String, String>,
+    /// `[[views]]` from config.toml: saved searches shown as smart folders.
+    views: Vec<View>,
     /// True when `FAMILIAR_BENCH_OUT` names a file: the front end then runs
     /// its timing script and reports with `bench_report`.
     bench: bool,
@@ -44,23 +53,37 @@ struct UiInfo {
 
 #[tauri::command]
 fn ui_info() -> UiInfo {
-    let (theme, keys, config_error) = match familiar_config::paths::resolve(None) {
-        None => ("system", Default::default(), None),
-        Some((path, _)) if !path.exists() => ("system", Default::default(), None),
-        Some((path, _)) => match familiar_config::load(&path) {
-            Ok(c) => (theme_name(c.app.theme), c.keys, None),
-            Err(e) => (
-                "system",
-                Default::default(),
-                Some(format!("{}: {e}", path.display())),
-            ),
-        },
+    let config = match familiar_config::paths::resolve(None) {
+        None => Ok(None),
+        Some((path, _)) if !path.exists() => Ok(None),
+        Some((path, _)) => familiar_config::load(&path)
+            .map(Some)
+            .map_err(|e| format!("{}: {e}", path.display())),
+    };
+    let (config, config_error) = match config {
+        Ok(c) => (c, None),
+        Err(e) => (None, Some(e)),
+    };
+    let (theme, keys, views) = match config {
+        Some(c) => (
+            theme_name(c.app.theme),
+            c.keys,
+            c.views
+                .into_iter()
+                .map(|v| View {
+                    name: v.name,
+                    query: v.query,
+                })
+                .collect(),
+        ),
+        None => ("system", Default::default(), Vec::new()),
     };
     UiInfo {
         version: env!("CARGO_PKG_VERSION"),
         platform: std::env::consts::OS,
         theme,
         keys,
+        views,
         config_error,
         bench: std::env::var_os(BENCH_ENV).is_some(),
     }

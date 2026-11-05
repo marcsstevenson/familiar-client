@@ -16,6 +16,9 @@ use tauri::{AppHandle, Emitter};
 /// Most rows one `list_rows` call returns.
 const MAX_ROWS: usize = 500;
 
+/// Most search results a view holds (the newest).
+const MAX_SEARCH: usize = 10_000;
+
 /// How the list is sorted.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -40,13 +43,16 @@ pub struct ViewSpec {
     /// Only unread messages.
     #[serde(default)]
     pub unread_only: bool,
-    /// Sort order.
+    /// Sort order. Search results are always newest first.
     #[serde(default)]
     pub sort: Sort,
     /// Increases with each open. An open older than the current view is
     /// ignored, since overlapping opens can take the lock out of order.
     #[serde(default)]
     pub generation: u64,
+    /// A search, in `fam mail search` syntax, instead of folders.
+    #[serde(default)]
+    pub query: Option<String>,
 }
 
 /// The result of opening a view.
@@ -54,6 +60,10 @@ pub struct ViewSpec {
 pub struct Opened {
     /// Messages in the view.
     pub total: usize,
+    /// For a search: things to know, such as a folder name that matched nothing.
+    pub notices: Vec<String>,
+    /// For a search: true when there were more than the view holds.
+    pub capped: bool,
 }
 
 /// One row, as the list draws it.
@@ -82,6 +92,7 @@ pub struct Lists {
 #[derive(Default)]
 struct Inner {
     reader: Option<Reader>,
+    searcher: Option<familiar_search::Searcher>,
     ids: Vec<MessageId>,
     accounts: HashMap<i64, String>,
     generation: u64,
@@ -111,6 +122,50 @@ impl Inner {
     }
 }
 
+impl Inner {
+    /// Opens a search view: the newest [`MAX_SEARCH`] matches.
+    fn search(&mut self, text: &str, unread_only: bool) -> Result<Opened, CommandError> {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_secs() as i64);
+        let mut q = familiar_search::Query::parse(text, now)
+            .map_err(|e| CommandError::usage(format!("search: {e}")))?;
+        if unread_only {
+            q.unread = Some(true);
+        }
+        if self.searcher.is_none() {
+            let index = DaemonPaths::resolve()?.index;
+            self.searcher = Some(familiar_search::Searcher::open(&index).map_err(|e| {
+                CommandError::new(
+                    ErrorKind::NotFound,
+                    format!("search isn't ready yet ({e}); famd builds the index as it syncs"),
+                )
+            })?);
+        }
+        let searcher = self.searcher.as_ref().expect("just opened");
+        // See famd's latest index commit.
+        searcher.reload().map_err(store_error)?;
+        let reader = self.reader.get_or_insert(open_reader()?);
+        let (mut ids, notices) = searcher
+            .all_ids(reader, &q, MAX_SEARCH + 1)
+            .map_err(store_error)?;
+        let capped = ids.len() > MAX_SEARCH;
+        ids.truncate(MAX_SEARCH);
+        self.accounts = reader
+            .accounts()
+            .map_err(store_error)?
+            .into_iter()
+            .map(|a| (a.id.0, a.key))
+            .collect();
+        self.ids = ids;
+        Ok(Opened {
+            total: self.ids.len(),
+            notices,
+            capped,
+        })
+    }
+}
+
 impl Lists {
     /// Opens a view: reads and sorts its message IDs.
     pub fn open(&self, spec: &ViewSpec) -> Result<Opened, CommandError> {
@@ -119,9 +174,16 @@ impl Lists {
             .lock()
             .map_err(|_| store_error("lock poisoned"))?;
         if spec.generation < g.generation {
-            return Ok(Opened { total: g.ids.len() });
+            return Ok(Opened {
+                total: g.ids.len(),
+                notices: Vec::new(),
+                capped: false,
+            });
         }
         g.generation = spec.generation;
+        if let Some(q) = spec.query.as_deref() {
+            return g.search(q, spec.unread_only);
+        }
         let (ids, accounts) = g
             .reader()?
             .snapshot(|r| {
@@ -148,7 +210,11 @@ impl Lists {
             .map_err(store_error)?;
         g.ids = ids;
         g.accounts = accounts;
-        Ok(Opened { total: g.ids.len() })
+        Ok(Opened {
+            total: g.ids.len(),
+            notices: Vec::new(),
+            capped: false,
+        })
     }
 
     /// Rows `start..start + count` of the open view.
@@ -305,6 +371,7 @@ mod tests {
                 unread_only: false,
                 sort,
                 generation: 0,
+                query: None,
             };
             sorted_ids(&r, &[f], &spec).unwrap()
         };

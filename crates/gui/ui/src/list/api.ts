@@ -9,6 +9,8 @@ export type ViewSpec = {
   folders: number[];
   unread_only: boolean;
   sort: Sort;
+  /** A search instead of folders. */
+  query: string | null;
 };
 
 export type Row = {
@@ -27,8 +29,9 @@ export type Row = {
 
 // Each open is numbered, so Rust can ignore an older open that takes its lock late.
 let generation = 0;
+export type Opened = { total: number; notices: string[]; capped: boolean };
 export const listOpen = (spec: ViewSpec) =>
-  invoke<{ total: number }>("list_open", { spec: { ...spec, generation: ++generation } });
+  invoke<Opened>("list_open", { spec: { ...spec, generation: ++generation } });
 export const listRows = (start: number, count: number) =>
   invoke<Row[]>("list_rows", { start, count });
 export const listIndexOf = (id: number) => invoke<number | null>("list_index_of", { id });

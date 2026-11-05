@@ -1430,6 +1430,7 @@ dependencies = [
  "dirs 6.0.0",
  "familiar-config",
  "familiar-core",
+ "familiar-search",
  "familiar-store",
  "reqwest 0.12.28",
  "serde",

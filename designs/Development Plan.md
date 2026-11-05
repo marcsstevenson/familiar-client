@@ -179,6 +179,8 @@ Tauri 2 + SolidJS was chosen in Phase 0 (WP 0.4).
 
 **WP 3.5 status (5 Nov 2026):** done. Ctrl+K palette with every action and every registered command (forms generated from the input schemas, prefilled from the selection, showing the `fam` line). Single-key actions with defaults, rebindable in `[keys]`. `fam ui open` and `fam ui folder` drive the running app over its own socket. `ui/src/actions/surface.ts` must place every registered command, so CI's `tsc` fails on a new command until it is in the palette (or marked terminal-only).
 
+**WP 3.6 status (5 Nov 2026):** done. Search box over the list (same query language as `fam mail search`, `/` to focus), results in the virtualised list (newest 10,000), "Server too" lists server-only hits labelled online, and `[[views]]` show as smart folders. Search target met on the 500k synthetic store: first page of rows in 5 to 7 ms for sender, subject, phrase and attachment queries, 71 ms median for `is:unread`.
+
 ## Phase 4: Calendar, rules, contacts and migration
 
 | WP | Work | Depends on | Done when |

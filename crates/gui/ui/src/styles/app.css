@@ -194,9 +194,12 @@ button {
 
 /* Message list */
 .message-list {
-  display: grid;
-  grid-template-rows: auto 1fr;
+  display: flex;
+  flex-direction: column;
   height: 100%;
+}
+.message-list .list-scroller {
+  flex: 1;
 }
 .list-header {
   display: flex;
@@ -461,4 +464,65 @@ button.link {
   background: var(--bg-sidebar);
   border-radius: var(--radius-sm);
   padding: var(--space-3) var(--space-4);
+}
+
+/* Search */
+.search-bar {
+  display: flex;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4) 0;
+}
+.search-bar input {
+  flex: 1;
+  min-width: 0;
+  font: inherit;
+  color: inherit;
+  background: var(--bg-sidebar);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+}
+.search-server {
+  flex: none;
+  font-size: var(--text-sm);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 0 var(--space-3);
+}
+.list-notice {
+  margin: 0;
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--text-sm);
+  color: var(--warn);
+  border-bottom: 1px solid var(--border);
+}
+.online-hits {
+  border-bottom: 1px solid var(--border);
+  font-size: var(--text-sm);
+  max-height: 40%;
+  overflow-y: auto;
+}
+.online-hits summary {
+  padding: var(--space-2) var(--space-4);
+  color: var(--text-muted);
+  cursor: default;
+}
+.online-hits ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.online-hits li {
+  display: flex;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+  border-top: 1px solid var(--border);
+}
+.online-label {
+  flex: none;
+  font-size: var(--text-xs);
+  text-transform: uppercase;
+  color: var(--accent);
+  font-weight: 600;
 }

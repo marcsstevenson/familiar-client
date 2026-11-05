@@ -27,10 +27,26 @@ export async function runBench(): Promise<void> {
   const opens: number[] = [];
   for (let i = 0; i < 5; i++) {
     const t = performance.now();
-    await listOpen({ folders: [], unread_only: false, sort: "newest" });
+    await listOpen({ folders: [], unread_only: false, sort: "newest", query: null });
     opens.push(performance.now() - t);
   }
   report.list_open_ms = stats(opens);
+
+  // Searches, as the search box runs them (all matches up to the cap, then
+  // the first page of rows).
+  const searches: Record<string, unknown> = {};
+  for (const q of ["from:ana", "subject:invoice", "\"team meeting\"", "is:unread", "has:attachment after:2025-01-01"]) {
+    const ts: number[] = [];
+    for (let i = 0; i < 5; i++) {
+      const t = performance.now();
+      await listOpen({ folders: [], unread_only: false, sort: "newest", query: q });
+      await invoke("list_rows", { start: 0, count: 100 });
+      ts.push(performance.now() - t);
+    }
+    searches[q] = stats(ts);
+  }
+  report.search_first_page_ms = searches;
+  await listOpen({ folders: [], unread_only: false, sort: "newest", query: null });
 
   // Scroll 40 px a frame for 600 frames and record frame intervals.
   const el = scroller()!;
