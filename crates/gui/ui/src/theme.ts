@@ -6,7 +6,10 @@ import type { Theme } from "./api";
 const media = window.matchMedia("(prefers-color-scheme: dark)");
 const [theme, setThemeSignal] = createSignal<Theme>("system");
 const [systemDark, setSystemDark] = createSignal(media.matches);
-media.addEventListener("change", (e) => setSystemDark(e.matches));
+media.addEventListener("change", (e) => {
+  setSystemDark(e.matches);
+  apply();
+});
 
 export { theme };
 
@@ -14,9 +17,15 @@ export { theme };
 export const resolvedTheme = (): "light" | "dark" =>
   theme() === "system" ? (systemDark() ? "dark" : "light") : (theme() as "light" | "dark");
 
+// The page always carries the resolved theme, so tokens.css has exactly one
+// light and one dark set.
+function apply(): void {
+  document.documentElement.dataset.theme = resolvedTheme();
+}
+
 export function setTheme(t: Theme): void {
   setThemeSignal(t);
-  document.documentElement.dataset.theme = t;
+  apply();
 }
 
 const ORDER: Theme[] = ["system", "light", "dark"];

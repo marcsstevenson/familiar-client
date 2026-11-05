@@ -90,15 +90,27 @@ Single keys are ignored while typing in a field.
 
 The app listens on its own socket (`familiar-ui.sock` in the data directory, or the pipe `\\.\pipe\familiar-ui-<hash>` on Windows), with the same line protocol as famd. `fam ui open <message>` shows a message (its folder, then the message) and `fam ui folder [<folder>] [--account <name>]` shows a folder, or all inboxes with no folder. Both bring the window to the front, and fail with exit code 11 when the app isn't running.
 
-## Timing
+## Timing and accessibility checks
 
-`FAMILIAR_BENCH_OUT=<file> familiar` runs `ui/src/bench.ts`: it times opening the unified view and five searches, scrolls 600 frames at 40 px, jumps around the list, writes the numbers as JSON to the file and exits. For a large synthetic store:
+`FAMILIAR_BENCH_OUT=<file> familiar` runs `ui/src/bench.ts` and writes its numbers as JSON to the file, then exits (with `FAMILIAR_BENCH_HOLD` set it stays open, so a harness can measure idle memory). It times:
+
+- cold start to the first rows;
+- opening the unified view, and five searches to their first page of rows;
+- 600 frames of scrolling at 40 px, and jumps around the list;
+- 30 presses of `j`, to the frame showing the new selection and to the frame showing its header in the reading pane.
+
+It also runs axe-core's WCAG 2.1 A and AA rules over the app's page (not the message frame) and lists serious and critical violations.
+
+`scripts/bench-gui.sh <data dir> <report.json>` runs all that under `xvfb-run` on Linux, adds idle private memory (anonymous memory over the app and its WebKit processes, 10 s after the bench), and checks the report against `crates/gui/perf-budget.json` with `scripts/check-bench.mjs`. Each entry there has a `limit`, which fails the build, and the design doc's `target`. The limits are looser than the targets where CI's software-rendered runner can't show them (a scroll frame there is about 17 to 20 ms however fast the list is). CI's "GUI performance and accessibility" job runs it on main against a fresh synthetic store:
 
 ```sh
-cargo run --release -p familiar-store --example seed -- /tmp/fam-bench/store 500000
-cargo run --release -p familiar-search --example index -- /tmp/fam-bench
-FAMILIAR_DATA_DIR=/tmp/fam-bench FAMILIAR_BENCH_OUT=bench.json target/release/familiar
+cargo build --release -p familiar-gui -p familiar-store -p familiar-search --examples --bins
+target/release/examples/seed /tmp/fam-bench/store 500000
+target/release/examples/index /tmp/fam-bench
+bash scripts/bench-gui.sh /tmp/fam-bench bench.json
 ```
+
+`scripts/check-contrast.mjs` (in the lint job) checks every text colour in `tokens.css` at 4.5:1 against the surfaces it sits on, and the focus ring at 3:1, in the light and dark sets.
 
 ## famd
 
@@ -108,7 +120,7 @@ When the window opens, the app looks for famd on its socket. If nothing answers,
 
 On Windows and Linux the window has no system frame and the app draws its own title bar with the window buttons. On macOS the system traffic lights sit over the left end of the app's bar.
 
-Colours, spacing and type sizes are tokens in `ui/src/styles/tokens.css`, with a light and a dark set. The theme starts from `[app] theme` (`system`, `light` or `dark`); the button in the title bar cycles through them for the session.
+Colours, spacing and type sizes are tokens in `ui/src/styles/tokens.css`, with one light and one dark set; `theme.ts` resolves `system` and sets `data-theme` to `light` or `dark`. The theme starts from `[app] theme` (`system`, `light` or `dark`); the button in the title bar cycles through them for the session.
 
 ## Reading pane
 
