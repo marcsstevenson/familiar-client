@@ -1,5 +1,6 @@
 {
   "permissions": {
+    "defaultMode": "bypassPermissions",
     "allow": [
       "Bash(git:*)", "Bash(gh:*)", "Bash(cargo:*)", "Bash(rustup:*)",
       "Bash(bash scripts/*)", "Bash(curl:*)", "Bash(python3:*)",
