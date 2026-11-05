@@ -57,14 +57,34 @@ impl Shared {
     }
 }
 
-/// Connects to famd, starting it first if nothing answers.
-pub fn ensure_running(app: &AppHandle, shared: &Shared) {
+/// How often a running famd is checked, and how long to wait before trying
+/// again after a start failed.
+const CHECK_EVERY: Duration = Duration::from_secs(5);
+const RETRY_AFTER: Duration = Duration::from_secs(30);
+
+/// Keeps famd running for as long as the app is open: starts it if nothing
+/// answers, and starts it again if it stops.
+pub fn keep_running(app: &AppHandle, shared: &Shared) {
     let paths = match DaemonPaths::resolve() {
         Ok(p) => p,
         Err(e) => {
             return shared.set(app, DaemonState::Unavailable { message: e.message });
         }
     };
+    loop {
+        ensure_running(app, shared, &paths);
+        if matches!(shared.get(), DaemonState::Unavailable { .. }) {
+            std::thread::sleep(RETRY_AFTER);
+            continue;
+        }
+        while Client::connect_with_timeout(&paths.socket, Duration::from_millis(500)).is_ok() {
+            std::thread::sleep(CHECK_EVERY);
+        }
+    }
+}
+
+/// Connects to famd, starting it first if nothing answers.
+fn ensure_running(app: &AppHandle, shared: &Shared, paths: &DaemonPaths) {
     let answers =
         || Client::connect_with_timeout(&paths.socket, Duration::from_millis(500)).is_ok();
     if answers() {

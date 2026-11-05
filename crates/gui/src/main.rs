@@ -107,7 +107,7 @@ fn main() {
             builder.build()?;
             let handle = app.handle().clone();
             let shared = app.state::<daemon::Shared>().inner().clone();
-            std::thread::spawn(move || daemon::ensure_running(&handle, &shared));
+            std::thread::spawn(move || daemon::keep_running(&handle, &shared));
             Ok(())
         })
         .run(tauri::generate_context!())
