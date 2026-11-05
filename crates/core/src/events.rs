@@ -977,7 +977,8 @@ pub fn suggest(subject: &str, text: &str, today: NaiveDate) -> Suggestion {
     let (own, quoted) = split_quoted(text);
     out.location = keyed_location(&own)
         .or_else(|| listed_location(&own))
-        .or_else(|| keyed_location(&quoted));
+        // The whole text, so `> Location: ...` quotes count too.
+        .or_else(|| keyed_location(text));
     if let Some((date, time)) =
         find_when(&format!("{subject}\n{own}"), today).or_else(|| find_when(&quoted, today))
     {
@@ -1337,6 +1338,17 @@ mod tests {
             .location
             .as_deref(),
             Some("New Venue")
+        );
+        // A venue only in a `>` quote still counts when nothing new has one.
+        assert_eq!(
+            suggest(
+                "RE: Quiz",
+                "Count me in\n\n> Quiz night Sat 7 Nov 7pm\n> Location: Town Hall",
+                today
+            )
+            .location
+            .as_deref(),
+            Some("Town Hall")
         );
         // A labelled address keeps its street number.
         assert_eq!(
