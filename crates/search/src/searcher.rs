@@ -436,6 +436,24 @@ impl Searcher {
         }
     }
 
+    /// The newest `max` matches for `q`, newest first, with the query's
+    /// notices. For a list that pages by position (the desktop app's), so
+    /// rows are read later, a page at a time. Read and flag state come from
+    /// the store as the query runs.
+    pub fn all_ids(
+        &self,
+        r: &Reader,
+        q: &Query,
+        max: usize,
+    ) -> Result<(Vec<MessageId>, Vec<String>)> {
+        let scope = resolve_scope(r, q)?;
+        let Some(query) = self.build(r, q, &scope, Bound::Unbounded, None)? else {
+            return Ok((Vec::new(), scope.notices));
+        };
+        let ids = self.top_ids(query.as_ref(), max)?;
+        Ok((ids.into_iter().map(|(_, id)| id).collect(), scope.notices))
+    }
+
     /// Which of `ids` the local index matches for `q`. Used to tell server
     /// results the local search would find anyway from those only the
     /// server found.

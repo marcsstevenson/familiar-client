@@ -41,6 +41,20 @@ A background thread checks the store's `PRAGMA data_version` once a second and s
 
 Keys in the list: the arrow keys, Page Up/Down, Home and End (and `j`/`k` from anywhere, below).
 
+## Search and smart folders
+
+The box above the list searches this device with the `fam mail search` query language (`from:`, `subject:`, `has:attachment`, `after:`, `is:unread`, "phrases" and so on); `/` jumps to it and Escape clears it. Rust runs the query against famd's index (`Searcher::all_ids`) and the list shows the newest 10,000 matches, newest first, through the same virtualised list as a folder. "Server too" runs `mail.search --scope all` and lists what only the server found, labelled online, above the results; those messages aren't on this device yet, so they can't be opened.
+
+`[[views]]` in `config.toml` appear under Views in the folder pane, and choosing one runs its query:
+
+```toml
+[[views]]
+name = "Club, unread"
+query = "account:parklands is:unread"
+```
+
+The bench (below) times five searches to the first page of rows; on the 500k synthetic store they took 5 to 7 ms, and `is:unread` (30k matches) 71 ms median, against the 100 ms target.
+
 ## Command palette and keys
 
 Ctrl+K (Cmd+K on macOS) opens the palette. It lists the app's actions with their keys, and every registered command with its `fam` form. Choosing a command opens a form generated from its input schema (`fam schema`), prefilled with the selected message where the command takes `message` or `messages`, and shows the matching `fam` command line as you fill it in. Run shows the command's JSON output.
@@ -59,6 +73,7 @@ Actions and their default keys (`ui/src/actions/builtin.ts`):
 | `toggle_read` | `u` | `fam mail read` (or `--unread`) |
 | `reply`, `reply_all`, `forward` | `r`, `a`, `f` | Draft a reply or forward (the command form until the compose window lands) |
 | `compose` | `c` | New message |
+| `search` | `/` | Go to the search box |
 | `theme` | | Cycle the theme |
 
 Change a key in `config.toml`, by action ID:
@@ -77,10 +92,11 @@ The app listens on its own socket (`familiar-ui.sock` in the data directory, or 
 
 ## Timing
 
-`FAMILIAR_BENCH_OUT=<file> familiar` runs `ui/src/bench.ts`: it times opening the unified view, scrolls 600 frames at 40 px, jumps around the list, writes the numbers as JSON to the file and exits. For a large synthetic store:
+`FAMILIAR_BENCH_OUT=<file> familiar` runs `ui/src/bench.ts`: it times opening the unified view and five searches, scrolls 600 frames at 40 px, jumps around the list, writes the numbers as JSON to the file and exits. For a large synthetic store:
 
 ```sh
 cargo run --release -p familiar-store --example seed -- /tmp/fam-bench/store 500000
+cargo run --release -p familiar-search --example index -- /tmp/fam-bench
 FAMILIAR_DATA_DIR=/tmp/fam-bench FAMILIAR_BENCH_OUT=bench.json target/release/familiar
 ```
 

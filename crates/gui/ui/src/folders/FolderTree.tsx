@@ -3,7 +3,7 @@ import { For, Show, createMemo, createResource, onCleanup, onMount } from "solid
 import { type CommandError, isCommandError, run } from "../api";
 import type { FolderRow } from "../../../../../bindings/commands";
 import { onStoreChanged } from "../list/api";
-import { selectedFolder, setSelectedFolder, setSelectedMessage } from "../state";
+import { searchQuery, selectedFolder, setSearchQuery, setSelectedFolder, setSelectedMessage } from "../state";
 
 /** Well-known folders first, in this order; the rest keep the tree order. */
 const WELL_KNOWN = ["inbox", "drafts", "sentitems", "archive", "deleteditems", "junkemail"];
@@ -34,11 +34,17 @@ function ordered(rows: FolderRow[]): Map<string, FolderRow[]> {
 }
 
 function choose(id: number | null) {
+  setSearchQuery(null);
   setSelectedFolder(id);
   setSelectedMessage(null);
 }
 
-export function FolderTree() {
+function chooseView(query: string) {
+  setSearchQuery(query);
+  setSelectedMessage(null);
+}
+
+export function FolderTree(props: { views: { name: string; query: string }[] }) {
   const [data, { refetch }] = createResource(() => run("folder.list", {}));
   onMount(async () => {
     const stop = await onStoreChanged(() => void refetch());
@@ -59,9 +65,25 @@ export function FolderTree() {
         name="All inboxes"
         unread={inboxUnread()}
         depth={0}
-        selected={selectedFolder() === null}
+        selected={selectedFolder() === null && searchQuery() === null}
         onSelect={() => choose(null)}
       />
+      <Show when={props.views.length > 0}>
+        <div role="group" aria-label="Saved searches">
+          <div class="folder-account">Views</div>
+          <For each={props.views}>
+            {(v) => (
+              <FolderItem
+                name={v.name}
+                unread={0}
+                depth={0}
+                selected={searchQuery() === v.query}
+                onSelect={() => chooseView(v.query)}
+              />
+            )}
+          </For>
+        </div>
+      </Show>
       <For each={[...accounts()]}>
         {([account, rows]) => (
           <div role="group" aria-label={account}>
@@ -72,7 +94,7 @@ export function FolderTree() {
                   name={f.name}
                   unread={f.unread}
                   depth={f.depth}
-                  selected={selectedFolder() === f.id}
+                  selected={selectedFolder() === f.id && searchQuery() === null}
                   onSelect={() => choose(f.id)}
                 />
               )}
