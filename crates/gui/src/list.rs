@@ -232,7 +232,9 @@ pub fn watch_store(app: &AppHandle) {
         let Some(r) = reader.as_ref() else { continue };
         match r.data_version() {
             Ok(v) => {
-                if last.is_some_and(|l| l != v) {
+                // Also on the first read: the store may have appeared, or been
+                // written, since the panes first asked for it.
+                if last != Some(v) {
                     let _ = app.emit("store_changed", ());
                 }
                 last = Some(v);

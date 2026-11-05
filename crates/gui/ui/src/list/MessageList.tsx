@@ -30,23 +30,29 @@ export function MessageList() {
 
   // Pages of rows for the current view generation.
   let pages = new Map<number, Row[]>();
-  let inflight = new Set<number>();
+  let inflight = new Map<number, Promise<void>>();
   let gen = 0;
 
-  async function loadPage(p: number) {
-    if (p < 0 || p * PAGE >= total() || pages.has(p) || inflight.has(p)) return;
+  /** Loads a page; a page already loading returns the same promise. */
+  function loadPage(p: number): Promise<void> {
+    if (p < 0 || p * PAGE >= total() || pages.has(p)) return Promise.resolve();
+    const pending = inflight.get(p);
+    if (pending) return pending;
     const g = gen;
-    inflight.add(p);
-    try {
-      const rows = await listRows(p * PAGE, PAGE);
-      if (g !== gen) return;
-      pages.set(p, rows);
-      setRev((n) => n + 1);
-    } catch (e) {
-      if (g === gen) setError(isCommandError(e) ? e.message : String(e));
-    } finally {
-      if (g === gen) inflight.delete(p);
-    }
+    const job = (async () => {
+      try {
+        const rows = await listRows(p * PAGE, PAGE);
+        if (g !== gen) return;
+        pages.set(p, rows);
+        setRev((n) => n + 1);
+      } catch (e) {
+        if (g === gen) setError(isCommandError(e) ? e.message : String(e));
+      } finally {
+        if (g === gen) inflight.delete(p);
+      }
+    })();
+    inflight.set(p, job);
+    return job;
   }
 
   // Reads `rev` so rows redraw when their page arrives.
@@ -76,7 +82,7 @@ export function MessageList() {
         }
       }
       pages = fresh;
-      inflight = new Set();
+      inflight = new Map();
       setTotal(n);
       if (!keepScroll) {
         scroller.scrollTop = 0;
