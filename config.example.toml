@@ -23,6 +23,8 @@ send_delay_seconds = 10    # undo-send window, 0 to 120
 [accounts.hotmail]
 email = "you@hotmail.example"
 tenant = "consumers"
+# Other addresses you send from, offered in the From menu.
+aliases = ["you@outlook.example"]
 
 [accounts.hotmail.signature]
 new = '''

@@ -295,6 +295,9 @@ pub enum WriteRequest {
     DraftUpdate {
         /// Local message ID of the draft.
         message: i64,
+        /// New From.
+        #[serde(default)]
+        from: Option<Recipient>,
         /// New subject.
         subject: Option<String>,
         /// New whole body.
@@ -1004,6 +1007,7 @@ pub fn plan(tx: &WriteTx<'_>, req: &WriteRequest) -> Result<Vec<Planned>, Comman
         }
         WriteRequest::DraftUpdate {
             message,
+            from,
             subject,
             html,
             to,
@@ -1024,6 +1028,7 @@ pub fn plan(tx: &WriteTx<'_>, req: &WriteRequest) -> Result<Vec<Planned>, Comman
                 ),
                 payload: OpPayload::UpdateDraft(DraftUpdateOp {
                     message: *message,
+                    from: from.clone(),
                     subject: subject.clone(),
                     html: html
                         .as_ref()

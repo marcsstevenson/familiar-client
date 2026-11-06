@@ -145,6 +145,19 @@ pub fn check(c: &Config) -> Vec<Problem> {
                 "must not be empty; remove it to use the account's own name",
             ));
         }
+        for (n, alias) in a.aliases.iter().enumerate() {
+            if !is_email(alias) {
+                p.push(Problem::error(
+                    format!("{base}.aliases[{n}]"),
+                    "must be an email address",
+                ));
+            } else if alias.eq_ignore_ascii_case(&a.email) {
+                p.push(Problem::warning(
+                    format!("{base}.aliases[{n}]"),
+                    "is the account's own address; it needn't be listed",
+                ));
+            }
+        }
     }
 
     for (key, value) in [("past", &c.calendar.past), ("future", &c.calendar.future)] {

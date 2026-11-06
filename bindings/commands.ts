@@ -603,6 +603,8 @@ export type DraftCreateInput = {
   cc?: Array<string>;
   /** Only show what would happen. */
   dry_run?: boolean;
+  /** Send from this alias of the account (listed in `aliases` in config.toml). */
+  from?: string | null;
   /** The body is HTML. */
   html?: boolean;
   /** low, normal or high. */
@@ -634,6 +636,8 @@ export type DraftForwardInput = {
   cc?: Array<string>;
   /** Only show what would happen. */
   dry_run?: boolean;
+  /** Send from this alias of the account; defaults to the alias the original was sent to. */
+  from?: string | null;
   /** The body is HTML. */
   html?: boolean;
   /** Local ID of the message to forward. */
@@ -663,6 +667,8 @@ export type DraftReplyInput = {
   cc?: Array<string>;
   /** Only show what would happen. */
   dry_run?: boolean;
+  /** Send from this alias of the account; defaults to the alias the original was sent to. */
+  from?: string | null;
   /** The body is HTML. */
   html?: boolean;
   /** Add an inline image. */
@@ -709,6 +715,8 @@ export type DraftUpdateInput = {
   draft: number;
   /** Only show what would happen. */
   dry_run?: boolean;
+  /** Send from this alias, or the account's own address. */
+  from?: string | null;
   /** The body is HTML. */
   html?: boolean;
   /** Add an inline image. */
@@ -1092,6 +1100,8 @@ export type MailSendInput = {
   cc?: Array<string>;
   /** Only show what would happen. */
   dry_run?: boolean;
+  /** Send from this alias of the account (listed in `aliases` in config.toml). */
+  from?: string | null;
   /** The body is HTML. */
   html?: boolean;
   /** low, normal or high. */

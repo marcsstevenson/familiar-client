@@ -30,6 +30,8 @@ export type Attachment = {
 export type LoadedDraft = {
   id: number;
   account: string;
+  /** The From address. */
+  from: string;
   remoteId: string;
   subject: string;
   to: string[];
@@ -56,6 +58,7 @@ export async function loadDraft(id: number, body: (html: string) => string): Pro
   const d: LoadedDraft = {
     id,
     account: f.account,
+    from: f.from.addr,
     remoteId: f.remote_id,
     subject: f.subject,
     to: f.to.map(mailbox),

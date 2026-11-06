@@ -402,6 +402,9 @@ pub enum ResponseKind {
 pub struct DraftOp {
     /// Local ID of the draft (set when it is made locally).
     pub message: i64,
+    /// From, when it's an alias rather than the account's own address.
+    #[serde(default)]
+    pub from: Option<Recipient>,
     /// The message it responds to, with how.
     pub respond_to: Option<(i64, ResponseKind)>,
     /// Subject.
@@ -429,6 +432,9 @@ pub struct DraftOp {
 /// What a draft looked like before an update, to undo it.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
 pub struct DraftSnapshot {
+    /// From.
+    #[serde(default)]
+    pub from: Option<Recipient>,
     /// Subject.
     pub subject: String,
     /// To.
@@ -444,6 +450,9 @@ pub struct DraftSnapshot {
 pub struct DraftUpdateOp {
     /// Local ID of the draft.
     pub message: i64,
+    /// New From (an alias, or the account's own address).
+    #[serde(default)]
+    pub from: Option<Recipient>,
     /// New subject.
     pub subject: Option<String>,
     /// New whole body.
@@ -477,6 +486,9 @@ pub struct ComposeRequest {
     /// The account (config name or address). Taken from the original for
     /// responses; needed for a new message with more than one account.
     pub account: Option<String>,
+    /// Send from this alias; `None` sends from the account's own address.
+    #[serde(default)]
+    pub from: Option<Recipient>,
     /// Local ID of the message this responds to.
     pub respond_to: Option<i64>,
     /// How it responds; `None` for a new message.
@@ -563,6 +575,7 @@ pub fn plan_draft(
 ) -> Result<DraftOp, CommandError> {
     let mut op = DraftOp {
         message: 0,
+        from: req.from.clone(),
         respond_to: None,
         subject: req.subject.clone().unwrap_or_default(),
         html: format!("<html><body>{}</body></html>", req.html),
@@ -594,8 +607,13 @@ pub fn plan_draft(
             };
         }
         if req.to.is_empty() && kind != ResponseKind::Forward {
+            // Not to ourselves: the account's address, nor the alias it sends from.
             let me = account.email.to_ascii_lowercase();
-            let not_me = |r: &Recipient| r.address.to_ascii_lowercase() != me;
+            let alias = req.from.as_ref().map(|f| f.address.to_ascii_lowercase());
+            let not_me = |r: &Recipient| {
+                let a = r.address.to_ascii_lowercase();
+                a != me && Some(&a) != alias.as_ref()
+            };
             let from = Recipient::from_address(&orig.from);
             op.to = vec![from.clone()];
             if kind == ResponseKind::ReplyAll {
@@ -678,10 +696,13 @@ pub fn apply_draft(
         internet_message_id: None,
         conversation_id: conversation.unwrap_or_else(|| remote.clone()),
         subject: op.subject.clone(),
-        from: Address {
-            name: acc.display_name.clone(),
-            addr: acc.email.clone(),
-        },
+        from: op.from.as_ref().map_or_else(
+            || Address {
+                name: acc.display_name.clone(),
+                addr: acc.email.clone(),
+            },
+            Recipient::to_address,
+        ),
         to: op.to.iter().map(Recipient::to_address).collect(),
         cc: op.cc.iter().map(Recipient::to_address).collect(),
         received_at: t,
@@ -708,6 +729,7 @@ pub fn apply_draft(
 fn rewrite(
     tx: &WriteTx<'_>,
     m: &Message,
+    from: Option<&Recipient>,
     subject: Option<&str>,
     to: Option<&[Recipient]>,
     cc: Option<&[Recipient]>,
@@ -728,7 +750,7 @@ fn rewrite(
         internet_message_id: m.internet_message_id.clone(),
         conversation_id: conversation,
         subject: subject.map_or_else(|| m.subject.clone(), str::to_string),
-        from: m.from.clone(),
+        from: from.map_or_else(|| m.from.clone(), Recipient::to_address),
         to: to.map_or_else(
             || m.to.clone(),
             |v| v.iter().map(Recipient::to_address).collect(),
@@ -756,6 +778,7 @@ pub fn snapshot(tx: &WriteTx<'_>, m: &Message) -> familiar_store::Result<DraftSn
         None => None,
     };
     Ok(DraftSnapshot {
+        from: Some(Recipient::from_address(&m.from)),
         subject: m.subject.clone(),
         to: m.to.iter().map(Recipient::from_address).collect(),
         cc: m.cc.iter().map(Recipient::from_address).collect(),
@@ -774,6 +797,7 @@ pub fn apply_update(tx: &WriteTx<'_>, op: &DraftUpdateOp) -> familiar_store::Res
     rewrite(
         tx,
         &m,
+        op.from.as_ref(),
         op.subject.as_deref(),
         op.to.as_deref(),
         op.cc.as_deref(),
@@ -789,6 +813,7 @@ pub fn undo_update(tx: &WriteTx<'_>, op: &DraftUpdateOp) -> familiar_store::Resu
     rewrite(
         tx,
         &m,
+        op.prev.from.as_ref(),
         Some(&op.prev.subject),
         Some(&op.prev.to),
         Some(&op.prev.cc),

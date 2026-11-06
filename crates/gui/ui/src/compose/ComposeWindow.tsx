@@ -16,7 +16,7 @@ import type { ComposeSpec } from "./spec";
 import "./compose.css";
 
 type SigChoice = "new" | "reply" | "none";
-type Field = "to" | "cc" | "bcc" | "subject" | "body";
+type Field = "from" | "to" | "cc" | "bcc" | "subject" | "body";
 
 const MAX_IMAGE = 3 * 1024 * 1024;
 const AUTOSAVE_MS = 4000;
@@ -37,6 +37,8 @@ export function ComposeWindow(props: { info: UiInfo; spec: ComposeSpec }) {
   const [loading, setLoading] = createSignal(true);
   const [fatal, setFatal] = createSignal<string | null>(null);
   const [account, setAccount] = createSignal<string | null>(null);
+  // An alias of the account to send from; null sends from its own address.
+  const [from, setFrom] = createSignal<string | null>(null);
   const [isResponse, setIsResponse] = createSignal(props.spec.kind === "reply" || props.spec.kind === "forward");
   const [opened, setOpened] = createSignal(false); // an existing draft opened here
   const [to, setTo] = createSignal<string[]>([]);
@@ -124,6 +126,7 @@ export function ComposeWindow(props: { info: UiInfo; spec: ComposeSpec }) {
       if (id === null) {
         const out = await run("draft.create", {
           account: account(),
+          from: from(),
           to: to(),
           cc: cc(),
           bcc: bcc(),
@@ -137,6 +140,7 @@ export function ComposeWindow(props: { info: UiInfo; spec: ComposeSpec }) {
         const line = (v: string[]) => (v.length ? v : [""]);
         await run("draft.update", {
           draft: id,
+          ...(edited.has("from") ? { from: from() ?? identity()?.email ?? null } : {}),
           ...(edited.has("to") ? { to: line(to()) } : {}),
           ...(edited.has("cc") ? { cc: line(cc()) } : {}),
           ...(edited.has("bcc") ? { bcc: line(bcc()) } : {}),
@@ -168,6 +172,8 @@ export function ComposeWindow(props: { info: UiInfo; spec: ComposeSpec }) {
     const d = await loadDraft(id, bodyOf);
     setDraftId(id);
     setAccount(d.account);
+    const own = identity(d.account)?.email;
+    setFrom(own && d.from.toLowerCase() !== own.toLowerCase() ? d.from : null);
     setSubject(d.subject);
     setTo(d.to);
     setCc(d.cc);
@@ -241,11 +247,27 @@ export function ComposeWindow(props: { info: UiInfo; spec: ComposeSpec }) {
 
   // --- identity and signature ---------------------------------------------
 
+  /** A From choice: `<account key>\n<address>`. */
+  const fromValue = (key: string, addr: string) => `${key}\n${addr}`;
+  const fromChoices = () => settings().identities.flatMap((i) => [i.email, ...i.aliases].map((addr) => ({ i, addr })));
+
+  function chooseFrom(value: string) {
+    const [key, addr] = value.split("\n");
+    if (key === undefined || addr === undefined) return;
+    if (key !== account()) switchAccount(key);
+    const own = identity()?.email.toLowerCase();
+    const next = addr.toLowerCase() === own ? null : addr;
+    if (next === from()) return;
+    setFrom(next);
+    touch("from");
+  }
+
   function switchAccount(key: string) {
     const before = account();
     if (key === before) return;
     const oldSig = sigText(sig(), before);
     setAccount(key);
+    setFrom(null);
     applySignature(oldSig);
     const id = draftId();
     if (id !== null) {
@@ -456,7 +478,7 @@ export function ComposeWindow(props: { info: UiInfo; spec: ComposeSpec }) {
   };
 
   const title = () => subject().trim() || (isResponse() ? "Reply" : "New message");
-  const fromLabel = (i: Identity) => (i.display_name ? `${i.display_name} <${i.email}>` : i.email);
+  const fromLabel = (i: Identity, addr = i.email) => (i.display_name ? `${i.display_name} <${addr}>` : addr);
   const busy = () => loading() || sending() !== null;
 
   return (
@@ -498,20 +520,26 @@ export function ComposeWindow(props: { info: UiInfo; spec: ComposeSpec }) {
           <div class="compose-field">
             <label class="compose-label" for="compose-from">From</label>
             <Show
-              when={settings().identities.length > 1 || (account() && !identity())}
+              when={fromChoices().length > 1 || (account() && !identity())}
               fallback={<span class="compose-from">{identity() ? fromLabel(identity()!) : account() ?? "No account in config.toml"}</span>}
             >
               <select
                 id="compose-from"
-                value={account() ?? ""}
-                disabled={busy() || inFlight() || !canSwitchAccount()}
+                value={identity() ? fromValue(identity()!.key, from() ?? identity()!.email) : account() ?? ""}
+                disabled={busy() || inFlight()}
                 title={canSwitchAccount() ? "" : "A reply or a saved draft stays on its account"}
-                onChange={(e) => switchAccount(e.currentTarget.value)}
+                onChange={(e) => chooseFrom(e.currentTarget.value)}
               >
                 <Show when={account() && !identity()}>
                   <option value={account()!}>{account()}</option>
                 </Show>
-                <For each={settings().identities}>{(i) => <option value={i.key}>{fromLabel(i)}</option>}</For>
+                <For each={fromChoices()}>
+                  {(c) => (
+                    <option value={fromValue(c.i.key, c.addr)} disabled={c.i.key !== identity()?.key && !canSwitchAccount()}>
+                      {fromLabel(c.i, c.addr)}
+                    </option>
+                  )}
+                </For>
               </select>
             </Show>
             <span class="compose-spacer" />

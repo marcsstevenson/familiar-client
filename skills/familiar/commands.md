@@ -272,6 +272,7 @@ Saves a new message in Drafts, with the account's new-message signature, and que
 - `--body-file <body-file>`: Read the body from a file.
 - `--cc <cc>` (repeatable): Cc.
 - `--dry-run`: Only show what would happen.
+- `--from <from>`: Send from this alias of the account (listed in `aliases` in config.toml).
 - `--html`: The body is HTML.
 - `--importance <importance>`: low, normal or high.
 - `--inline <inline>` (repeatable): Add an inline image, referenced in an HTML body as cid:<file name>.
@@ -297,6 +298,7 @@ Saves a forward of a message (with its attachments) in Drafts, with your text an
 - `--body-file <body-file>`: Read the body from a file.
 - `--cc <cc>` (repeatable): Cc.
 - `--dry-run`: Only show what would happen.
+- `--from <from>`: Send from this alias of the account; defaults to the alias the original was sent to.
 - `--html`: The body is HTML.
 - `MESSAGE` (required): Local ID of the message to forward.
 - `--no-signature`: Leave the account's reply signature off.
@@ -321,6 +323,7 @@ Saves a reply (or reply all with --all) in Drafts, threaded with the original, w
 - `--body-file <body-file>`: Read the body from a file.
 - `--cc <cc>` (repeatable): Cc (replaces the default with --all).
 - `--dry-run`: Only show what would happen.
+- `--from <from>`: Send from this alias of the account; defaults to the alias the original was sent to.
 - `--html`: The body is HTML.
 - `--inline <inline>` (repeatable): Add an inline image.
 - `MESSAGE` (required): Local ID of the message to reply to.
@@ -363,6 +366,7 @@ Changes a draft's recipients, subject or body, or adds and removes attachments. 
 - `--cc <cc>` (repeatable): Replace Cc (`""` empties it).
 - `DRAFT` (required): Local ID of the draft.
 - `--dry-run`: Only show what would happen.
+- `--from <from>`: Send from this alias, or the account's own address.
 - `--html`: The body is HTML.
 - `--inline <inline>` (repeatable): Add an inline image.
 - `--remove-attachment <remove-attachment>` (repeatable): Take an attachment off, by file name (or Graph attachment ID); repeat for more.
@@ -624,6 +628,7 @@ Saves a new message as a draft with the account's signature and queues it to sen
 - `--body-file <body-file>`: Read the body from a file.
 - `--cc <cc>` (repeatable): Cc.
 - `--dry-run`: Only show what would happen.
+- `--from <from>`: Send from this alias of the account (listed in `aliases` in config.toml).
 - `--html`: The body is HTML.
 - `--importance <importance>`: low, normal or high.
 - `--inline <inline>` (repeatable): Add an inline image.

@@ -48,6 +48,11 @@ delete without `--yes` is `confirmation_required` (10).
 - **Signatures** come from `[accounts.<name>.signature]` in `config.toml`:
   `new` for new messages, `reply` for replies and forwards. `--no-signature`
   leaves it off. Bodies are plain text unless `--html`.
+- **Aliases.** `--from <address>` sends from one of the account's
+  `aliases` in `config.toml` (an address not listed is refused). Replies and
+  forwards default to the alias the original was sent to; `fam draft update
+  --from` changes it, back to the account's own address too. Graph gets it as
+  the draft's `from`.
 - **Attachments** are read by `fam` and travel in the op, up to 3 MB each
   (Graph's single-request limit; upload sessions for bigger files are not
   done yet). `--inline img.png` adds an inline image referenced as
