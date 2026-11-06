@@ -55,17 +55,20 @@ function setOpen(key: string, open: boolean) {
   }
 }
 
-/** The rows to show: those not under a collapsed folder, each with whether it has subfolders. */
-function shown(rows: FolderRow[]): { f: FolderRow; parent: boolean }[] {
-  const out: { f: FolderRow; parent: boolean }[] = [];
+/** The rows to show: those not under a collapsed folder. Returns the rows
+ * themselves, so `<For>` keeps each button (and its focus) across a toggle. */
+function shown(rows: FolderRow[]): FolderRow[] {
   let hideBelow: number | null = null;
-  rows.forEach((f, i) => {
-    if (hideBelow !== null && f.depth > hideBelow) return;
-    hideBelow = null;
-    out.push({ f, parent: (rows[i + 1]?.depth ?? -1) > f.depth });
-    if (collapsed().has(`f:${f.id}`)) hideBelow = f.depth;
+  return rows.filter((f) => {
+    if (hideBelow !== null && f.depth > hideBelow) return false;
+    hideBelow = collapsed().has(`f:${f.id}`) ? f.depth : null;
+    return true;
   });
-  return out;
+}
+
+/** The ids of folders with subfolders. */
+function parents(rows: FolderRow[]): Set<number> {
+  return new Set(rows.filter((f, i) => (rows[i + 1]?.depth ?? -1) > f.depth).map((f) => f.id));
 }
 
 function choose(id: number | null) {
@@ -136,12 +139,12 @@ export function FolderTree(props: { views: { name: string; query: string }[] }) 
             </button>
             <Show when={!collapsed().has(`a:${account}`)}>
               <For each={shown(rows)}>
-                {({ f, parent }) => (
+                {(f) => (
                   <FolderItem
                     name={f.name}
                     unread={f.unread}
                     depth={f.depth}
-                    expanded={parent ? !collapsed().has(`f:${f.id}`) : undefined}
+                    expanded={parents(rows).has(f.id) ? !collapsed().has(`f:${f.id}`) : undefined}
                     onToggle={(open) => setOpen(`f:${f.id}`, open)}
                     selected={selectedFolder() === f.id && searchQuery() === null}
                     onSelect={() => choose(f.id)}
