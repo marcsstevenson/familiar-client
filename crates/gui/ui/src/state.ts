@@ -26,7 +26,12 @@ export function notify(text: string, error = false): void {
 export const [dragged, setDragged] = createSignal<{ id: number; account: string } | null>(null);
 
 /** Moves the list selection; set by the list while it is mounted. */
-export const listNav = { move: (_delta: number): void => {} };
+export const listNav = {
+  move: (_delta: number): void => {},
+  /** A message about to leave the list (deleted, archived, moved). If it is the
+   * one open, the list then opens the next one down, or up at the end. */
+  leaving: null as number | null,
+};
 
 /** The search shown in the list instead of a folder, in `fam mail search` syntax. */
 export const [searchQuery, setSearchQuery] = createSignal<string | null>(null);

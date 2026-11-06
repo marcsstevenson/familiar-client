@@ -3,7 +3,7 @@ import { For, Show, createMemo, createResource, createSignal, onCleanup, onMount
 import { type CommandError, isCommandError, run } from "../api";
 import type { FolderRow } from "../../../../../bindings/commands";
 import { onStoreChanged } from "../list/api";
-import { dragged, notify, searchQuery, selectedFolder, setDragged, setSearchQuery, setSelectedFolder, setSelectedMessage } from "../state";
+import { dragged, listNav, notify, searchQuery, selectedFolder, setDragged, setSearchQuery, setSelectedFolder, setSelectedMessage } from "../state";
 
 /** Well-known folders first, in this order; the rest keep the tree order. */
 const WELL_KNOWN = ["inbox", "drafts", "sentitems", "archive", "deleteditems", "junkemail"];
@@ -76,6 +76,7 @@ function dropOn(f: FolderRow) {
   const d = dragged();
   setDragged(null);
   if (!d) return;
+  listNav.leaving = d.id;
   run("mail.move", { messages: [d.id], to: f.path }).then(
     () => notify(`Moved to ${f.name}`),
     (err) => notify(isCommandError(err) ? err.message : String(err), true),

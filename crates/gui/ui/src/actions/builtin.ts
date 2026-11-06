@@ -12,9 +12,11 @@ const hasMessage = () => selectedMessage() !== null;
 async function onSelected(
   label: string,
   f: (id: number) => Promise<unknown>,
+  leaves = false,
 ): Promise<void> {
   const id = selectedMessage();
   if (id === null) return;
+  if (leaves) listNav.leaving = id;
   try {
     await f(id);
     notify(label);
@@ -34,7 +36,7 @@ export function registerBuiltinActions(openPalette: (prefill?: string) => void):
     also: ["Backspace"],
     enabled: hasMessage,
     cli: () => `fam mail archive ${selectedMessage()}`,
-    run: () => onSelected("Archived", (id) => run("mail.archive", { messages: [id] })),
+    run: () => onSelected("Archived", (id) => run("mail.archive", { messages: [id] }), true),
   });
   registerAction({
     id: "delete",
@@ -43,7 +45,7 @@ export function registerBuiltinActions(openPalette: (prefill?: string) => void):
     also: ["Delete", "Ctrl+D"],
     enabled: hasMessage,
     cli: () => `fam mail delete ${selectedMessage()}`,
-    run: () => onSelected("Moved to Deleted Items", (id) => run("mail.delete", { messages: [id] })),
+    run: () => onSelected("Moved to Deleted Items", (id) => run("mail.delete", { messages: [id] }), true),
   });
   registerAction({
     id: "flag",
