@@ -2,7 +2,7 @@
 // component asks for the rows on screen a page at a time and draws only those.
 import { For, Show, createEffect, createSignal, on, onCleanup, onMount } from "solid-js";
 import { isCommandError, run } from "../api";
-import { listNav, notify, setDragged, searchQuery, selectedFolder, selectedMessage, setSelectedMessage, setSelectedRow } from "../state";
+import { listNav, removeFromList, setDragged, searchQuery, selectedFolder, selectedMessage, setSelectedMessage, setSelectedRow } from "../state";
 import { OnlineHits, SearchBar } from "./SearchBar";
 import { type Row, type Sort, listIndexOf, listOpen, listRows, onStoreChanged } from "./api";
 import { shortDate } from "./format";
@@ -66,6 +66,7 @@ export function MessageList() {
   /** Reopens the view; keeps the scroll position when `keepScroll`. */
   async function reopen(keepScroll: boolean) {
     const g = ++gen;
+    const wasAt = selIndex();
     try {
       const opened = await listOpen({
         folders: selectedFolder() === null ? [] : [selectedFolder()!],
@@ -99,6 +100,16 @@ export function MessageList() {
       const sel = selectedMessage();
       const ix = sel === null ? null : await listIndexOf(sel);
       if (g !== gen) return;
+      if (ix === null && sel !== null && sel === listNav.leaving && wasAt !== null) {
+        // The open message was deleted or moved: open the one that took its
+        // place (the next one down), or the new last one.
+        listNav.leaving = null;
+        setRev((x) => x + 1);
+        prefetch();
+        if (n === 0) setSelectedMessage(null);
+        else select(Math.min(wasAt, n - 1));
+        return;
+      }
       setSelIndex(ix);
       if (ix !== null && !keepScroll) scrollIntoView(ix);
       setRev((x) => x + 1);
@@ -336,10 +347,8 @@ function ListRow(props: {
               onMouseDown={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.stopPropagation();
-                run("mail.delete", { messages: [r().id] }).then(
-                  () => notify("Moved to Deleted Items"),
-                  (err) => notify(isCommandError(err) ? err.message : String(err), true),
-                );
+                const id = r().id;
+                void removeFromList(id, "Moved to Deleted Items", () => run("mail.delete", { messages: [id] }));
               }}
             >
               🗑

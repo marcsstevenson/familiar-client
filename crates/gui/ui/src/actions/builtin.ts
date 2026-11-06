@@ -1,7 +1,7 @@
 // The built-in actions. The message actions run the same registry commands as
 // `fam`, on the selected message.
 import { isCommandError, run } from "../api";
-import { listNav, notify, selectedMessage, selectedRow } from "../state";
+import { listNav, notify, removeFromList, selectedMessage, selectedRow } from "../state";
 import { searchFocus } from "../list/SearchBar";
 import { cycleTheme } from "../theme";
 import { openCompose } from "../compose/spec";
@@ -23,6 +23,11 @@ async function onSelected(
   }
 }
 
+function onSelectedLeaves(label: string, f: (id: number) => Promise<unknown>) {
+  const id = selectedMessage();
+  return id === null ? undefined : removeFromList(id, label, () => f(id));
+}
+
 export function registerBuiltinActions(openPalette: (prefill?: string) => void): void {
   registerAction({ id: "palette", title: "Show all commands", key: "Ctrl+K", run: () => openPalette() });
   registerAction({ id: "next", title: "Next message", key: "j", run: () => listNav.move(1) });
@@ -34,7 +39,7 @@ export function registerBuiltinActions(openPalette: (prefill?: string) => void):
     also: ["Backspace"],
     enabled: hasMessage,
     cli: () => `fam mail archive ${selectedMessage()}`,
-    run: () => onSelected("Archived", (id) => run("mail.archive", { messages: [id] })),
+    run: () => onSelectedLeaves("Archived", (id) => run("mail.archive", { messages: [id] })),
   });
   registerAction({
     id: "delete",
@@ -43,7 +48,7 @@ export function registerBuiltinActions(openPalette: (prefill?: string) => void):
     also: ["Delete", "Ctrl+D"],
     enabled: hasMessage,
     cli: () => `fam mail delete ${selectedMessage()}`,
-    run: () => onSelected("Moved to Deleted Items", (id) => run("mail.delete", { messages: [id] })),
+    run: () => onSelectedLeaves("Moved to Deleted Items", (id) => run("mail.delete", { messages: [id] })),
   });
   registerAction({
     id: "flag",

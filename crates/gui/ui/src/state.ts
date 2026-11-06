@@ -2,6 +2,7 @@
 // (folders/, list/, reading/, compose/) and talks to the others only through
 // these signals.
 import { createSignal } from "solid-js";
+import { isCommandError } from "./api";
 
 /** The folder shown in the list: a local folder ID, or null for the unified Inbox. */
 export const [selectedFolder, setSelectedFolder] = createSignal<number | null>(null);
@@ -26,7 +27,26 @@ export function notify(text: string, error = false): void {
 export const [dragged, setDragged] = createSignal<{ id: number; account: string } | null>(null);
 
 /** Moves the list selection; set by the list while it is mounted. */
-export const listNav = { move: (_delta: number): void => {} };
+export const listNav = {
+  move: (_delta: number): void => {},
+  /** A message about to leave the list (deleted, archived, moved). If it is the
+   * one open, the list then opens the next one down, or up at the end. */
+  leaving: null as number | null,
+};
+
+/** Runs a command that takes message `id` out of the list (delete, archive,
+ * move) and reports it in the status bar. If `id` is the open message, the
+ * list opens the next one once the command has taken effect. */
+export async function removeFromList(id: number, label: string, job: () => Promise<unknown>): Promise<void> {
+  if (id === selectedMessage()) listNav.leaving = id;
+  try {
+    await job();
+    notify(label);
+  } catch (e) {
+    if (listNav.leaving === id) listNav.leaving = null;
+    notify(isCommandError(e) ? e.message : String(e), true);
+  }
+}
 
 /** The search shown in the list instead of a folder, in `fam mail search` syntax. */
 export const [searchQuery, setSearchQuery] = createSignal<string | null>(null);
