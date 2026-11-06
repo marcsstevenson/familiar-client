@@ -1,0 +1,15 @@
+{
+  "_about": "Limits scripts/check-bench.mjs applies to a FAMILIAR_BENCH_OUT report. `limit` fails CI; `target` is the design doc's number, which CI's software-rendered Linux runner can't always show. Values in ms unless the name says otherwise.",
+  "checks": [
+    { "path": "cold_start_ms", "limit": 1500, "target": 500 },
+    { "path": "list_open_ms.p95", "limit": 150, "target": 50 },
+    { "path": "search_first_page_ms.*.p95", "limit": 150, "target": 100 },
+    { "path": "scroll_frame_ms.p95", "limit": 34, "target": 16.7 },
+    { "path": "frames_with_unloaded_rows", "limit": 30, "target": 0 },
+    { "path": "jump_to_rows_ms.p95", "limit": 150, "target": 50 },
+    { "path": "key_to_selection_ms.p95", "limit": 40, "target": 16 },
+    { "path": "key_to_header_ms.p95", "limit": 100, "target": 50 },
+    { "path": "idle_private_mb", "limit": 400, "target": 400 },
+    { "path": "a11y_violations.length", "limit": 0, "target": 0 }
+  ]
+}

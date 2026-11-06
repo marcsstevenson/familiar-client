@@ -181,6 +181,8 @@ Tauri 2 + SolidJS was chosen in Phase 0 (WP 0.4).
 
 **WP 3.6 status (5 Nov 2026):** done. Search box over the list (same query language as `fam mail search`, `/` to focus), results in the virtualised list (newest 10,000), "Server too" lists server-only hits labelled online, and `[[views]]` show as smart folders. Search target met on the 500k synthetic store: first page of rows in 5 to 7 ms for sender, subject, phrase and attachment queries, 71 ms median for `is:unread`.
 
+**WP 3.7 status (5 Nov 2026):** done. CI's "GUI performance and accessibility" job (on main) seeds 500k messages, runs the app's bench under Xvfb and fails on any number over `crates/gui/perf-budget.json`; the lint job checks token contrast (WCAG 2.1 AA). Cloud run (software rendering): cold start to first rows 0.9 s (target 0.5 s; mostly WebKitGTK start under Xvfb, to confirm on Windows), unified open 46 to 77 ms p95, search 5 to 86 ms p95, scroll frame p95 20 ms, `j` to visible selection 22 ms p95 and to the header 38 ms, idle private memory 318 to 333 MB, no serious axe violations. Found and fixed by the new checks: dark selected rows (muted text 4.3:1, now 4.8:1), folder buttons whose accessible name didn't contain their visible count, and a system-dark token set that had drifted from the dark one (now there is one dark set).
+
 ## Phase 4: Calendar, rules, contacts and migration
 
 | WP | Work | Depends on | Done when |

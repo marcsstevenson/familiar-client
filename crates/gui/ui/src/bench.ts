@@ -22,6 +22,7 @@ export async function runBench(): Promise<void> {
   const scroller = () => document.querySelector<HTMLElement>(".list-scroller");
   await waitFor(() => (scroller()?.querySelectorAll(".row-from").length ?? 0) > 0);
   report.first_rows_ms = performance.now();
+  report.cold_start_ms = await invoke<number>("bench_elapsed_ms");
 
   // Opening the unified Inbox view (all inboxes), sorted newest first.
   const opens: number[] = [];
@@ -74,5 +75,42 @@ export async function runBench(): Promise<void> {
   }
   report.jump_to_rows_ms = stats(jumps);
   report.total_rows = el.scrollHeight / 64;
+
+  // Keypresses: select the top row, then press j 30 times. Each is timed to
+  // the frame showing the new selection, then to the frame showing its header
+  // in the reading pane.
+  el.scrollTop = 0;
+  await frame();
+  await waitFor(() => el.querySelector("#msg-0 .row-from") !== null, 2000);
+  el.querySelector("#msg-0")!.dispatchEvent(new MouseEvent("mousedown", { bubbles: true }));
+  const subjectOf = (id: string | null) =>
+    (id && document.getElementById(id)?.querySelector(".row-subject")?.textContent) || "(no subject)";
+  const shown = () => document.querySelector(".reading-subject")?.textContent;
+  await waitFor(() => shown() === subjectOf("msg-0"), 2000);
+  const keys: number[] = [];
+  const headers: number[] = [];
+  for (let i = 1; i <= 30; i++) {
+    const t = performance.now();
+    document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "j", bubbles: true }));
+    await waitFor(() => el.getAttribute("aria-activedescendant") === `msg-${i}`, 2000);
+    await frame();
+    keys.push(performance.now() - t);
+    await waitFor(() => shown() === subjectOf(`msg-${i}`), 2000);
+    await frame();
+    headers.push(performance.now() - t);
+  }
+  report.key_to_selection_ms = stats(keys);
+  report.key_to_header_ms = stats(headers);
+
+  // Accessibility: axe's WCAG 2.1 A and AA rules over the app's own page (not
+  // the message frame, which runs no scripts).
+  const axe = (await import("axe-core")).default;
+  const result = await axe.run(
+    { exclude: [[".message-frame"]] },
+    { runOnly: ["wcag2a", "wcag2aa", "wcag21a", "wcag21aa"], iframes: false },
+  );
+  report.a11y_violations = result.violations
+    .filter((v) => v.impact === "serious" || v.impact === "critical")
+    .map((v) => ({ id: v.id, impact: v.impact, help: v.help, nodes: v.nodes.slice(0, 5).map((n) => n.target.join(" ")) }));
   await invoke("bench_report", { report });
 }
