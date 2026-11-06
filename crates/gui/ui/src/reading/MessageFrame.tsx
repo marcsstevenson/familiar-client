@@ -14,7 +14,8 @@ export type HoverLink = { href: string; text: string } | null;
 // behind the body is set to what white becomes, so short messages match.
 const DARK_CSS = `html.fam-dark{background:#121212}
 html.fam-dark body{filter:invert(1) hue-rotate(180deg) contrast(0.87);min-height:100vh;box-sizing:border-box}
-html.fam-dark :is(img,video,picture,svg,[style*="background-image"],[background]){filter:contrast(1.149) invert(1) hue-rotate(180deg)}`;
+html.fam-dark :is(img,video,picture,svg,[style*="background-image"],[background]){filter:contrast(1.149) invert(1) hue-rotate(180deg)}
+html.fam-dark :is(picture,svg,[style*="background-image"],[background]) :is(img,video,picture,svg,[style*="background-image"],[background]){filter:none}`;
 
 export function MessageFrame(props: {
   html: string;
