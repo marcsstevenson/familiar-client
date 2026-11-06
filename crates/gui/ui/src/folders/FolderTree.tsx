@@ -1,5 +1,6 @@
 // The folder pane: the unified Inbox, then each account's folder tree.
-import { For, Show, createMemo, createResource, createSignal, onCleanup, onMount } from "solid-js";
+import { For, Show, createEffect, createMemo, createResource, createSignal, onCleanup, onMount } from "solid-js";
+import { createStore, reconcile } from "solid-js/store";
 import { type CommandError, isCommandError, run } from "../api";
 import type { FolderRow } from "../../../../../bindings/commands";
 import { onStoreChanged } from "../list/api";
@@ -96,9 +97,17 @@ export function FolderTree(props: { views: { name: string; query: string }[] }) 
     const stop = await onStoreChanged(() => void refetch());
     onCleanup(stop);
   });
-  const accounts = createMemo(() => ordered(data.latest?.folders ?? []));
+  // Folders keep their identity across refreshes (every sync and every move
+  // changes counts), so <For> keeps their buttons: focus and a drag in progress
+  // survive.
+  const [folders, setFolders] = createStore<FolderRow[]>([]);
+  createEffect(() => {
+    const f = data.latest?.folders;
+    if (f) setFolders(reconcile(f, { key: "id" }));
+  });
+  const accounts = createMemo(() => ordered(folders));
   const inboxUnread = createMemo(() =>
-    (data.latest?.folders ?? [])
+    folders
       .filter((f) => f.well_known === "inbox")
       .reduce((n, f) => n + f.unread, 0),
   );
@@ -130,40 +139,43 @@ export function FolderTree(props: { views: { name: string; query: string }[] }) 
           </For>
         </div>
       </Show>
-      <For each={[...accounts()]}>
-        {([account, rows]) => (
-          <div role="group" aria-label={account}>
-            <button
-              class="folder-account"
-              role="treeitem"
-              aria-expanded={!collapsed().has(`a:${account}`)}
-              onClick={() => setOpen(`a:${account}`, collapsed().has(`a:${account}`))}
-              onKeyDown={(e) => {
-                if (e.key === "ArrowRight" || e.key === "ArrowLeft") setOpen(`a:${account}`, e.key === "ArrowRight");
-              }}
-            >
-              <span class="folder-twisty" aria-hidden="true">{collapsed().has(`a:${account}`) ? "▸" : "▾"}</span>
-              {account}
-            </button>
-            <Show when={!collapsed().has(`a:${account}`)}>
-              <For each={shown(rows)}>
-                {(f) => (
-                  <FolderItem
-                    name={f.name}
-                    unread={f.unread}
-                    depth={f.depth}
-                    expanded={parents(rows).has(f.id) ? !collapsed().has(`f:${f.id}`) : undefined}
-                    onToggle={(open) => setOpen(`f:${f.id}`, open)}
-                    selected={selectedFolder() === f.id && searchQuery() === null}
-                    onSelect={() => choose(f.id)}
-                    canDrop={() => dragged()?.account === f.account}
-                    onDrop={() => dropOn(f)}
-                  />
-                )}
-              </For>
-            </Show>
-          </div>
-        )}
+      <For each={[...accounts().keys()]}>
+        {(account) => {
+          const rows = () => accounts().get(account) ?? [];
+          return (
+            <div role="group" aria-label={account}>
+              <button
+                class="folder-account"
+                role="treeitem"
+                aria-expanded={!collapsed().has(`a:${account}`)}
+                onClick={() => setOpen(`a:${account}`, collapsed().has(`a:${account}`))}
+                onKeyDown={(e) => {
+                  if (e.key === "ArrowRight" || e.key === "ArrowLeft") setOpen(`a:${account}`, e.key === "ArrowRight");
+                }}
+              >
+                <span class="folder-twisty" aria-hidden="true">{collapsed().has(`a:${account}`) ? "▸" : "▾"}</span>
+                {account}
+              </button>
+              <Show when={!collapsed().has(`a:${account}`)}>
+                <For each={shown(rows())}>
+                  {(f) => (
+                    <FolderItem
+                      name={f.name}
+                      unread={f.unread}
+                      depth={f.depth}
+                      expanded={parents(rows()).has(f.id) ? !collapsed().has(`f:${f.id}`) : undefined}
+                      onToggle={(open) => setOpen(`f:${f.id}`, open)}
+                      selected={selectedFolder() === f.id && searchQuery() === null}
+                      onSelect={() => choose(f.id)}
+                      canDrop={() => dragged()?.account === f.account}
+                      onDrop={() => dropOn(f)}
+                    />
+                  )}
+                </For>
+              </Show>
+            </div>
+          );
+        }}
       </For>
     </div>
   );
