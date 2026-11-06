@@ -2,7 +2,7 @@
 // measures what the design doc's targets cover and hands the numbers to Rust,
 // which writes them to that file and exits.
 import { invoke } from "@tauri-apps/api/core";
-import { listOpen } from "./list/api";
+import { listOpen, onStoreChanged } from "./list/api";
 
 const frame = () => new Promise<number>((r) => requestAnimationFrame(r));
 
@@ -96,10 +96,19 @@ export async function runBench(): Promise<void> {
     focus: document.activeElement?.tagName ?? null,
   });
   if (!(await waitFor(() => shown() === subjectOf("msg-0"), 2000))) report.key_debug_start = state();
+  // TEMP trace: every selection change and store change during the key presses.
+  const t0 = performance.now();
+  const trace: unknown[] = [];
+  const mo = new MutationObserver(() =>
+    trace.push([Math.round(performance.now() - t0), "sel", el.getAttribute("aria-activedescendant"), el.scrollTop, shown() ?? null]),
+  );
+  mo.observe(el, { attributes: true, attributeFilter: ["aria-activedescendant"] });
+  const stopTrace = await onStoreChanged(() => trace.push([Math.round(performance.now() - t0), "store"]));
   const keys: number[] = [];
   const headers: number[] = [];
   for (let i = 1; i <= 30; i++) {
     const t = performance.now();
+    trace.push([Math.round(t - t0), "j", i]);
     document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "j", bubbles: true }));
     if (!(await waitFor(() => el.getAttribute("aria-activedescendant") === `msg-${i}`, 2000)))
       report.key_debug ??= { press: i, ...state() };
@@ -109,6 +118,9 @@ export async function runBench(): Promise<void> {
     await frame();
     headers.push(performance.now() - t);
   }
+  mo.disconnect();
+  stopTrace();
+  report.key_trace = trace.slice(0, 300);
   report.key_to_selection_ms = stats(keys);
   report.key_to_header_ms = stats(headers);
 
