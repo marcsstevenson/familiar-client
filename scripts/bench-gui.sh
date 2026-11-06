@@ -6,6 +6,12 @@
 set -euo pipefail
 data=$1 out=$2 bin=${3:-target/release/familiar}
 rm -f "$out"
+# A fresh machine's first launch builds font and WebKit caches and reads the
+# store from disk (33 s on a CI runner). Launch once to warm those, so cold
+# start measures the app, as on a machine that has run it before.
+FAMILIAR_DATA_DIR=$data FAMILIAR_CONFIG=/dev/null FAMILIAR_BENCH_OUT=$out.warmup \
+  timeout 120 xvfb-run -a -s "-screen 0 1280x800x24" "$bin" >/dev/null 2>&1 || true
+rm -f "$out.warmup"
 FAMILIAR_DATA_DIR=$data FAMILIAR_CONFIG=/dev/null FAMILIAR_BENCH_OUT=$out FAMILIAR_BENCH_HOLD=1 \
   xvfb-run -a -s "-screen 0 1280x800x24" "$bin" &
 runner=$!
