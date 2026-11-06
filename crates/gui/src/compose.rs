@@ -95,9 +95,11 @@ fn showable(html: &str) -> String {
 static NEXT_WINDOW: AtomicU32 = AtomicU32::new(1);
 
 /// Opens a compose window. `spec` says what to write (see ui/src/compose/spec.ts)
-/// and is handed to the page in its URL.
+/// and is handed to the page in its URL. Async because Windows runs sync
+/// commands on the main thread, which WebView2 needs to build the window: a
+/// sync command there never returns and hangs every later IPC call.
 #[tauri::command]
-pub fn open_compose(app: AppHandle, spec: Value) -> Result<(), String> {
+pub async fn open_compose(app: AppHandle, spec: Value) -> Result<(), String> {
     let n = NEXT_WINDOW.fetch_add(1, Ordering::Relaxed);
     let json = spec.to_string();
     let url = format!("index.html#compose={}", percent_encode(&json));
