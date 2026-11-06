@@ -146,7 +146,7 @@ pub fn check(c: &Config) -> Vec<Problem> {
             ));
         }
         for (n, alias) in a.aliases.iter().enumerate() {
-            if !alias.contains('@') || alias.trim() != alias {
+            if !is_email(alias) {
                 p.push(Problem::error(
                     format!("{base}.aliases[{n}]"),
                     "must be an email address",
