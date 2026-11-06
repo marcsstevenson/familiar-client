@@ -607,8 +607,13 @@ pub fn plan_draft(
             };
         }
         if req.to.is_empty() && kind != ResponseKind::Forward {
+            // Not to ourselves: the account's address, nor the alias it sends from.
             let me = account.email.to_ascii_lowercase();
-            let not_me = |r: &Recipient| r.address.to_ascii_lowercase() != me;
+            let alias = req.from.as_ref().map(|f| f.address.to_ascii_lowercase());
+            let not_me = |r: &Recipient| {
+                let a = r.address.to_ascii_lowercase();
+                a != me && Some(&a) != alias.as_ref()
+            };
             let from = Recipient::from_address(&orig.from);
             op.to = vec![from.clone()];
             if kind == ResponseKind::ReplyAll {
