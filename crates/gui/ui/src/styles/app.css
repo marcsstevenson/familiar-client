@@ -153,7 +153,15 @@ button {
   padding: var(--space-3) 0;
 }
 .folder-account {
-  margin: var(--space-5) var(--space-4) var(--space-2);
+  display: flex;
+  align-items: center;
+  width: calc(100% - var(--space-2));
+  margin: var(--space-5) 0 var(--space-2) var(--space-2);
+  padding: 0;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: default;
   font-size: var(--text-xs);
   font-weight: 600;
   text-transform: uppercase;
@@ -176,6 +184,12 @@ button {
 }
 .folder-item.selected {
   background: var(--bg-selected);
+}
+.folder-twisty {
+  flex: none;
+  width: var(--space-5);
+  text-align: center;
+  color: var(--text-muted);
 }
 .folder-name {
   flex: 1;
@@ -249,6 +263,23 @@ button {
 }
 .list-row:hover {
   background: var(--bg-hover);
+}
+.row-delete {
+  position: absolute;
+  right: var(--space-3);
+  bottom: var(--space-2);
+  display: none;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: var(--bg-hover);
+  color: var(--text-muted);
+  cursor: pointer;
+}
+.list-row:hover .row-delete {
+  display: block;
+}
+.row-delete:hover {
+  color: var(--danger);
 }
 .list-row.selected {
   background: var(--bg-selected-inactive);

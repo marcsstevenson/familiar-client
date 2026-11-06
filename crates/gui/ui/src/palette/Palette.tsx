@@ -3,7 +3,7 @@
 import { For, Match, Show, Switch, createEffect, createMemo, createResource, createSignal, onCleanup, onMount } from "solid-js";
 import type { CommandDoc, CommandName, SchemaDocument } from "../../../../../bindings/commands";
 import { COMMAND_SURFACE } from "../actions/surface";
-import { type Action, allActions, keyOf } from "../actions/registry";
+import { type Action, allActions, keysOf } from "../actions/registry";
 import { isCommandError, run } from "../api";
 import { selectedMessage } from "../state";
 import { type Field, type Values, cliLine, fieldsOf, inputOf } from "./schema";
@@ -46,7 +46,7 @@ export function Palette(props: { initial?: string; onClose: () => void }) {
   const items = createMemo<Item[]>(() => {
     const acts: Item[] = allActions()
       .filter((a) => a.id !== "palette" && (!a.enabled || a.enabled()))
-      .map((a) => ({ type: "action", action: a, title: a.title, hint: a.cli?.() ?? "", key: keyOf(a) }));
+      .map((a) => ({ type: "action", action: a, title: a.title, hint: a.cli?.() ?? "", key: keysOf(a).join(", ") || undefined }));
     const cmds: Item[] = (docs() ?? []).map((d) => ({
       type: "command",
       doc: d,

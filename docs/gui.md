@@ -63,18 +63,22 @@ Ctrl+K (Cmd+K on macOS) opens the palette. It lists the app's actions with their
 
 Actions and their default keys (`ui/src/actions/builtin.ts`):
 
-| Action ID | Key | Does |
-| --- | --- | --- |
-| `palette` | Ctrl+K | Show all commands |
-| `next`, `previous` | `j`, `k` | Move through the list |
-| `archive` | `e` | `fam mail archive` |
-| `delete` | `#` | `fam mail delete` |
-| `flag` | `s` | `fam mail flag` (or `--clear`) |
-| `toggle_read` | `u` | `fam mail read` (or `--unread`) |
-| `reply`, `reply_all`, `forward` | `r`, `a`, `f` | Open a compose window replying to or forwarding the selected message |
-| `compose` | `c` | New message (Ctrl+N also works) |
-| `search` | `/` | Go to the search box |
-| `theme` | | Cycle the theme |
+| Action ID | Key | Outlook key | Does |
+| --- | --- | --- | --- |
+| `palette` | Ctrl+K | | Show all commands |
+| `next`, `previous` | `j`, `k` | arrows (in the list) | Move through the list |
+| `archive` | `e` | Backspace | `fam mail archive` |
+| `delete` | `#` | Delete, Ctrl+D | `fam mail delete` |
+| `flag` | `s` | Insert | `fam mail flag` (or `--clear`) |
+| `toggle_read` | `u` | | `fam mail read` (or `--unread`) |
+| `mark_read`, `mark_unread` | | Ctrl+Q, Ctrl+U | `fam mail read` / `--unread` |
+| `move` | | Ctrl+Shift+V | The palette's Move form |
+| `reply`, `reply_all`, `forward` | `r`, `a`, `f` | Ctrl+R, Ctrl+Shift+R, Ctrl+F | Open a compose window replying to or forwarding the selected message |
+| `compose` | `c` | Ctrl+N | New message |
+| `search` | `/` | Ctrl+E, F3 | Go to the search box |
+| `theme` | | | Cycle the theme |
+
+The Outlook keys are bound as well as the single keys; `[keys]` changes only the single key. Hovering a row shows a delete button. Accounts and folders with subfolders collapse with their arrow (or Left and Right); the app remembers which.
 
 Change a key in `config.toml`, by action ID:
 
