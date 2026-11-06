@@ -6,17 +6,27 @@
 set -euo pipefail
 data=$1 out=$2 bin=${3:-target/release/familiar}
 rm -f "$out"
+# On a CI runner each launch otherwise waits 30 s on the runner's D-Bus
+# session (accessibility bus and portals) before WebKit loads the page. A
+# private session bus with no services answers at once.
+export NO_AT_BRIDGE=1 GTK_USE_PORTAL=0
+export FAMILIAR_DATA_DIR=$data FAMILIAR_CONFIG=/dev/null
+log=$out.log
+xvfb=(dbus-run-session -- xvfb-run -a -s "-screen 0 1280x800x24" "$bin")
 # A fresh machine's first launch builds font and WebKit caches and reads the
-# store from disk (33 s on a CI runner). Launch once to warm those, so cold
-# start measures the app, as on a machine that has run it before.
-FAMILIAR_DATA_DIR=$data FAMILIAR_CONFIG=/dev/null FAMILIAR_BENCH_OUT=$out.warmup \
-  timeout 120 xvfb-run -a -s "-screen 0 1280x800x24" "$bin" >/dev/null 2>&1 || true
+# store from disk. Launch once to warm those, so cold start measures the app,
+# as on a machine that has run it before.
+FAMILIAR_BENCH_OUT=$out.warmup timeout 180 "${xvfb[@]}" >"$log" 2>&1 || true
 rm -f "$out.warmup"
-FAMILIAR_DATA_DIR=$data FAMILIAR_CONFIG=/dev/null FAMILIAR_BENCH_OUT=$out FAMILIAR_BENCH_HOLD=1 \
-  xvfb-run -a -s "-screen 0 1280x800x24" "$bin" &
+FAMILIAR_BENCH_OUT=$out FAMILIAR_BENCH_HOLD=1 "${xvfb[@]}" >>"$log" 2>&1 &
 runner=$!
-for _ in $(seq 240); do [ -s "$out" ] && break; sleep 0.5; done
-if [ ! -s "$out" ]; then echo "no bench report after 120 s"; kill "$runner"; exit 1; fi
+for _ in $(seq 360); do [ -s "$out" ] && break; sleep 0.5; done
+if [ ! -s "$out" ]; then
+  echo "no bench report after 180 s; app output:"
+  grep -v prefetch "$log" | tail -40
+  kill "$runner"
+  exit 1
+fi
 
 # Idle memory: settle, then sum anonymous memory over the app and its WebKit
 # processes. That is the private memory the target means (Windows' private

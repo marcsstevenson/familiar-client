@@ -21,6 +21,10 @@ function values(obj, parts, at = []) {
 }
 
 let failed = 0;
+if (report.error) {
+  console.log(`FAIL bench stopped: ${report.error}`);
+  failed++;
+}
 for (const c of checks) {
   for (const [path, v] of values(report, c.path.split("."))) {
     const ok = typeof v === "number" && v <= c.limit;
