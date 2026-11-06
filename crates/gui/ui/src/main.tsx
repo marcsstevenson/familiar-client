@@ -15,4 +15,9 @@ render(
   () => (spec ? <ComposeWindow info={info} spec={spec} /> : <App info={info} />),
   document.getElementById("root")!,
 );
-if (!spec && info.bench) void import("./bench").then((b) => b.runBench());
+if (!spec && info.bench) {
+  // A bench that fails still reports, so the harness shows why.
+  void import("./bench")
+    .then((b) => b.runBench())
+    .catch((e) => import("@tauri-apps/api/core").then((c) => c.invoke("bench_report", { report: { error: String(e) } })));
+}

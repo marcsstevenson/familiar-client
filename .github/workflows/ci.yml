@@ -115,7 +115,7 @@ jobs:
         if: always()
         with:
           name: gui-bench
-          path: bench.json
+          path: bench.json*
 
   secrets:
     name: Secret scanning
