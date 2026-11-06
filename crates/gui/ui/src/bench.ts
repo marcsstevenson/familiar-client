@@ -12,9 +12,10 @@ function stats(xs: number[]) {
   return { n: s.length, median: at(0.5), p95: at(0.95), max: s[s.length - 1] ?? 0 };
 }
 
-async function waitFor(f: () => boolean, ms = 10000) {
+async function waitFor(f: () => boolean, ms = 10000): Promise<boolean> {
   const t0 = performance.now();
   while (!f() && performance.now() - t0 < ms) await frame();
+  return f();
 }
 
 export async function runBench(): Promise<void> {
@@ -86,13 +87,22 @@ export async function runBench(): Promise<void> {
   const subjectOf = (id: string | null) =>
     (id && document.getElementById(id)?.querySelector(".row-subject")?.textContent) || "(no subject)";
   const shown = () => document.querySelector(".reading-subject")?.textContent;
-  await waitFor(() => shown() === subjectOf("msg-0"), 2000);
+  // What the page looks like, for a key step that times out.
+  const state = () => ({
+    selected: el.getAttribute("aria-activedescendant"),
+    shown: shown() ?? null,
+    row0: subjectOf("msg-0"),
+    dialog: document.querySelector("[role=dialog],[role=alertdialog]")?.getAttribute("aria-label") ?? null,
+    focus: document.activeElement?.tagName ?? null,
+  });
+  if (!(await waitFor(() => shown() === subjectOf("msg-0"), 2000))) report.key_debug_start = state();
   const keys: number[] = [];
   const headers: number[] = [];
   for (let i = 1; i <= 30; i++) {
     const t = performance.now();
     document.body.dispatchEvent(new KeyboardEvent("keydown", { key: "j", bubbles: true }));
-    await waitFor(() => el.getAttribute("aria-activedescendant") === `msg-${i}`, 2000);
+    if (!(await waitFor(() => el.getAttribute("aria-activedescendant") === `msg-${i}`, 2000)))
+      report.key_debug ??= { press: i, ...state() };
     await frame();
     keys.push(performance.now() - t);
     await waitFor(() => shown() === subjectOf(`msg-${i}`), 2000);
