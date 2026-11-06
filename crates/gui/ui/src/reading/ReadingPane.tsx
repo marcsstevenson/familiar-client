@@ -9,6 +9,7 @@
 import { For, Show, createEffect, createSignal, on } from "solid-js";
 import { run } from "../api";
 import { selectedMessage } from "../state";
+import { resolvedTheme } from "../theme";
 import { Attachments } from "./Attachments";
 import { type MailFetchOutput, type ReadView, errorText, openLink, openMessage, trustSender } from "./api";
 import { mismatch } from "./links";
@@ -32,6 +33,9 @@ export function ReadingPane() {
   const [loading, setLoading] = createSignal(false);
   const [hover, setHover] = createSignal<HoverLink>(null);
   const [status, setStatus] = createSignal<string | null>(null);
+  // In the dark theme, messages show dark unless switched to light, one at a time.
+  const [light, setLight] = createSignal(false);
+  const dark = () => resolvedTheme() === "dark" && !light();
   let pane!: HTMLElement;
   // Answers for a message no longer selected are dropped.
   let generation = 0;
@@ -68,6 +72,7 @@ export function ReadingPane() {
     on(selectedMessage, (id) => {
       setView(null);
       setHover(null);
+      setLight(false);
       if (id === null) {
         generation++;
         return;
@@ -116,7 +121,20 @@ export function ReadingPane() {
           return (
             <div class="reading-message">
               <header class="reading-header">
-                <h1 class="reading-subject">{m().subject || "(no subject)"}</h1>
+                <div class="reading-title">
+                  <h1 class="reading-subject">{m().subject || "(no subject)"}</h1>
+                  <Show when={resolvedTheme() === "dark" && v().html}>
+                    <button
+                      class="reading-mode"
+                      aria-pressed={light()}
+                      title={light() ? "Show this message dark" : "Show this message light"}
+                      aria-label={light() ? "Show this message dark" : "Show this message light"}
+                      onClick={() => setLight(!light())}
+                    >
+                      {light() ? "☾" : "☀"}
+                    </button>
+                  </Show>
+                </div>
                 <div class="reading-from">{who(m().from)}</div>
                 <div class="reading-meta">
                   <Show when={m().to.length > 0}>
@@ -166,7 +184,7 @@ export function ReadingPane() {
                   <div class="reading-wait">{loading() ? "Downloading the message…" : "The body isn't on this device."}</div>
                 }
               >
-                {(html) => <MessageFrame html={html()} onHover={setHover} onOpen={open} onLoad={loaded} />}
+                {(html) => <MessageFrame html={html()} dark={dark()} onHover={setHover} onOpen={open} onLoad={loaded} />}
               </Show>
               <Show when={hover() ?? status()}>
                 <div class="reading-status" role="status">

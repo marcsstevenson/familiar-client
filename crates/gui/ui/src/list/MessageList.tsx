@@ -110,8 +110,12 @@ export function MessageList() {
         else select(Math.min(wasAt, n - 1));
         return;
       }
-      setSelIndex(ix);
-      if (ix !== null && !keepScroll) scrollIntoView(ix);
+      // A key may have moved the selection while this looked up the old one;
+      // then the selection already has its new place.
+      if (selectedMessage() === sel) {
+        setSelIndex(ix);
+        if (ix !== null && !keepScroll) scrollIntoView(ix);
+      }
       setRev((x) => x + 1);
       prefetch();
     } catch (e) {

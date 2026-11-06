@@ -10,6 +10,20 @@
   padding: var(--space-5) var(--space-5) var(--space-4);
   border-bottom: 1px solid var(--border);
 }
+.reading-title {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-3);
+}
+.reading-title .reading-subject {
+  flex: 1;
+}
+.reading-mode {
+  flex: none;
+  padding: 2px 8px;
+  font-size: 18px;
+  line-height: 1.2;
+}
 .reading-subject {
   margin: 0 0 var(--space-3);
   font-size: var(--text-xl);
@@ -99,6 +113,9 @@
   min-height: 0;
   border: 0;
   background: #fff;
+}
+.message-frame.dark {
+  background: #121212;
 }
 .reading-wait {
   flex: 1;

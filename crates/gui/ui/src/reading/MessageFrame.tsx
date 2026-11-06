@@ -5,6 +5,7 @@
 // document to show where a link goes and to open links outside the app.
 import { createEffect, onCleanup } from "solid-js";
 import { onGlobalKey } from "../actions/registry";
+import { DARK_FIRST_CSS, darken } from "./dark";
 
 export type HoverLink = { href: string; text: string } | null;
 
@@ -13,6 +14,8 @@ export function MessageFrame(props: {
   onHover: (l: HoverLink) => void;
   onOpen: (href: string) => void;
   onLoad: () => void;
+  /** Show it dark (the app is dark and the message isn't switched to light). */
+  dark: boolean;
 }) {
   let frame!: HTMLIFrameElement;
 
@@ -30,6 +33,7 @@ export function MessageFrame(props: {
   const attach = () => {
     const doc = frame.contentDocument;
     if (!doc) return;
+    if (props.dark) darken(doc);
     // Keys pressed while the body has focus don't reach the app's window.
     doc.addEventListener("keydown", onGlobalKey);
     doc.addEventListener("mouseover", (e) => {
@@ -56,8 +60,9 @@ export function MessageFrame(props: {
     props.onLoad();
   };
 
+  // Switching between dark and light reloads the message, which is local.
   createEffect(() => {
-    frame.srcdoc = props.html;
+    frame.srcdoc = props.dark ? props.html.replace("</head>", `<style>${DARK_FIRST_CSS}</style></head>`) : props.html;
   });
   onCleanup(() => props.onHover(null));
 
@@ -65,6 +70,7 @@ export function MessageFrame(props: {
     <iframe
       ref={frame}
       class="message-frame"
+      classList={{ dark: props.dark }}
       title="Message body"
       sandbox="allow-same-origin"
       referrerpolicy="no-referrer"

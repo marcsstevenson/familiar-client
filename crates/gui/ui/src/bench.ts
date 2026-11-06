@@ -3,6 +3,7 @@
 // which writes them to that file and exits.
 import { invoke } from "@tauri-apps/api/core";
 import { listOpen } from "./list/api";
+import { setSearchQuery } from "./state";
 
 const frame = () => new Promise<number>((r) => requestAnimationFrame(r));
 
@@ -48,7 +49,13 @@ export async function runBench(): Promise<void> {
     searches[q] = stats(ts);
   }
   report.search_first_page_ms = searches;
-  await listOpen({ folders: [], unread_only: false, sort: "newest", query: null });
+  // The calls above swap the open view under the list. A store change during
+  // them made the list fetch rows from a search view, so the rows it then
+  // showed didn't match the view's order. Have the list reopen its own view.
+  setSearchQuery("is:unread");
+  setSearchQuery(null);
+  await frame();
+  await waitFor(() => scroller()!.querySelector(".row-placeholder") === null && scroller()!.querySelector(".row-from") !== null);
 
   // Scroll 40 px a frame for 600 frames and record frame intervals.
   const el = scroller()!;
