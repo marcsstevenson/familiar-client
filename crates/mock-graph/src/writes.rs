@@ -251,7 +251,11 @@ fn update_message(st: &mut MailboxState, id: &str, body: &Value, prefer: &Prefer
     let to = obj.get("toRecipients").map(recipients);
     let cc = obj.get("ccRecipients").map(recipients);
     let bcc = obj.get("bccRecipients").map(recipients);
+    let from = obj.get("from").and_then(recipient);
     st.update_message(&imm, |m| {
+        if let Some(f) = from {
+            m.from = f;
+        }
         if let Some(r) = read {
             m.is_read = r;
         }
@@ -282,6 +286,15 @@ fn update_message(st: &mut MailboxState, id: &str, body: &Value, prefer: &Prefer
     })
     .map_err(|_| GraphError::not_found())?;
     Ok(Reply::ok(message_reply(st, &imm, prefer)))
+}
+
+/// `{"emailAddress": {"name", "address"}}` as a model address.
+fn recipient(v: &Value) -> Option<crate::model::EmailAddress> {
+    let e = v.get("emailAddress")?;
+    Some(crate::model::EmailAddress::new(
+        e["name"].as_str().unwrap_or(""),
+        e["address"].as_str()?,
+    ))
 }
 
 /// `[{"emailAddress": {"name", "address"}}]` as model addresses.
@@ -429,6 +442,9 @@ fn create_draft(st: &mut MailboxState, body: &Value, prefer: &Prefer) -> R {
     );
     m.is_draft = true;
     m.is_read = true;
+    if let Some(f) = recipient(&body["from"]) {
+        m.from = f;
+    }
     m.to = recipients(&body["toRecipients"]);
     m.cc = recipients(&body["ccRecipients"]);
     m.bcc = recipients(&body["bccRecipients"]);

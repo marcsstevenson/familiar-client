@@ -362,6 +362,9 @@ impl OpRunner {
                     unreachable!()
                 };
                 let mut fields = serde_json::Map::new();
+                if let Some(f) = &d.from {
+                    fields.insert("from".into(), recipient_json(f));
+                }
                 if let Some(s) = &d.subject {
                     fields.insert("subject".into(), json!(s));
                 }
@@ -685,12 +688,12 @@ impl OpRunner {
     }
 }
 
+fn recipient_json(r: &Recipient) -> Value {
+    json!({"emailAddress": {"name": r.name, "address": r.address}})
+}
+
 fn recipients_json(v: &[Recipient]) -> Value {
-    Value::Array(
-        v.iter()
-            .map(|r| json!({"emailAddress": {"name": r.name, "address": r.address}}))
-            .collect(),
-    )
+    Value::Array(v.iter().map(recipient_json).collect())
 }
 
 fn draft_json(d: &DraftOp) -> Value {
@@ -703,6 +706,9 @@ fn draft_json(d: &DraftOp) -> Value {
     });
     if let Some(i) = &d.importance {
         v["importance"] = json!(i);
+    }
+    if let Some(f) = &d.from {
+        v["from"] = recipient_json(f);
     }
     v
 }

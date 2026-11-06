@@ -5,6 +5,8 @@ import { invoke } from "@tauri-apps/api/core";
 export type Identity = {
   key: string;
   email: string;
+  /** Other addresses it can send from. */
+  aliases: string[];
   display_name: string | null;
   signature_new: string | null;
   signature_reply: string | null;

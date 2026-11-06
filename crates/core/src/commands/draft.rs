@@ -53,6 +53,8 @@ pub struct ComposeSettings {
     pub reply_signatures: Vec<(String, String)>,
     /// Undo-send delay.
     pub send_delay_secs: u32,
+    /// Aliases, per account key.
+    pub aliases: Vec<(String, Vec<String>)>,
 }
 
 impl ComposeSettings {
@@ -69,6 +71,9 @@ impl ComposeSettings {
             ..Self::default()
         };
         for (key, a) in &c.accounts {
+            if !a.aliases.is_empty() {
+                s.aliases.push((key.clone(), a.aliases.clone()));
+            }
             if let Some(sig) = &a.signature {
                 if let Some(n) = &sig.new {
                     s.new_signatures.push((key.clone(), n.clone()));
@@ -79,6 +84,46 @@ impl ComposeSettings {
             }
         }
         Ok(s)
+    }
+
+    fn aliases(&self, key: &str) -> &[String] {
+        self.aliases
+            .iter()
+            .find(|(k, _)| k.eq_ignore_ascii_case(key))
+            .map_or(&[], |(_, v)| v.as_slice())
+    }
+
+    /// The alias to send from: `from` when given (checked against the
+    /// account's aliases), otherwise for a response the alias the original
+    /// was sent to. `None` means the account's own address.
+    fn alias_to_send_as(
+        &self,
+        account: &Account,
+        from: Option<&str>,
+        original: Option<&familiar_store::Message>,
+    ) -> Result<Option<String>, CommandError> {
+        let aliases = self.aliases(&account.key);
+        let alias = |addr: &str| {
+            aliases
+                .iter()
+                .find(|a| a.eq_ignore_ascii_case(addr))
+                .cloned()
+        };
+        if let Some(f) = from.map(str::trim).filter(|f| !f.is_empty()) {
+            let addr = Recipient::parse_all(&[f.to_string()])?
+                .pop()
+                .map_or_else(|| f.to_string(), |r| r.address);
+            if addr.eq_ignore_ascii_case(&account.email) {
+                return Ok(None);
+            }
+            return alias(&addr).map(Some).ok_or_else(|| {
+                CommandError::usage(format!(
+                    "{addr} isn't an address of account {}; list it in aliases in config.toml",
+                    account.key
+                ))
+            });
+        }
+        Ok(original.and_then(|m| m.to.iter().chain(&m.cc).find_map(|a| alias(&a.addr))))
     }
 
     fn signature(&self, key: &str, reply: bool) -> Option<&str> {
@@ -196,6 +241,8 @@ fn account_of(
 pub struct ComposeArgs {
     /// Account (new messages).
     pub account: Option<String>,
+    /// Send from this alias of the account.
+    pub from: Option<String>,
     /// Message responded to.
     pub respond_to: Option<i64>,
     /// How.
@@ -230,10 +277,19 @@ pub fn compose_request(
     args: &ComposeArgs,
     settings: &ComposeSettings,
 ) -> Result<(ComposeRequest, Account), CommandError> {
-    let account = match args.respond_to {
-        Some(id) => account_of(paths, id)?.0,
-        None => account_for(paths, args.account.as_deref())?,
+    let (account, original) = match args.respond_to {
+        Some(id) => {
+            let (a, m) = account_of(paths, id)?;
+            (a, Some(m))
+        }
+        None => (account_for(paths, args.account.as_deref())?, None),
     };
+    let from = settings
+        .alias_to_send_as(&account, args.from.as_deref(), original.as_ref())?
+        .map(|address| Recipient {
+            name: account.display_name.clone(),
+            address,
+        });
     let body = body_html(args.body.as_deref(), args.body_file.as_deref(), args.html)?;
     let sig = if args.no_signature {
         None
@@ -247,6 +303,7 @@ pub fn compose_request(
     Ok((
         ComposeRequest {
             account: Some(account.key.clone()),
+            from,
             respond_to: args.respond_to,
             response: args.response,
             subject: args.subject.clone(),
@@ -350,6 +407,9 @@ pub struct DraftCreateInput {
     /// The account to write from (config name or address); needed with more than one.
     #[serde(default)]
     pub account: Option<String>,
+    /// Send from this alias of the account (listed in `aliases` in config.toml).
+    #[serde(default)]
+    pub from: Option<String>,
     /// To: an address or `Name <address>`; repeat, or separate with commas.
     #[serde(default)]
     pub to: Vec<String>,
@@ -408,6 +468,7 @@ impl Command for DraftCreate {
     fn run(&self, _ctx: &Context<'_>, i: DraftCreateInput) -> Result<WriteOutput, CommandError> {
         let args = ComposeArgs {
             account: i.account,
+            from: i.from,
             to: i.to,
             cc: i.cc,
             bcc: i.bcc,
@@ -448,6 +509,9 @@ pub struct DraftReplyInput {
     /// Reply to everyone on it, not just the sender.
     #[serde(default)]
     pub all: bool,
+    /// Send from this alias of the account; defaults to the alias the original was sent to.
+    #[serde(default)]
+    pub from: Option<String>,
     /// Replace the recipients (default: the sender, or everyone with --all).
     #[serde(default)]
     pub to: Vec<String>,
@@ -500,6 +564,7 @@ impl Command for DraftReply {
     fn run(&self, _ctx: &Context<'_>, i: DraftReplyInput) -> Result<WriteOutput, CommandError> {
         let args = ComposeArgs {
             respond_to: Some(i.message),
+            from: i.from,
             response: Some(if i.all {
                 ResponseKind::ReplyAll
             } else {
@@ -540,6 +605,9 @@ pub struct DraftForwardInput {
     /// Local ID of the message to forward.
     #[schemars(extend("x-positional" = 0))]
     pub message: i64,
+    /// Send from this alias of the account; defaults to the alias the original was sent to.
+    #[serde(default)]
+    pub from: Option<String>,
     /// To.
     #[serde(default)]
     pub to: Vec<String>,
@@ -589,6 +657,7 @@ impl Command for DraftForward {
     fn run(&self, _ctx: &Context<'_>, i: DraftForwardInput) -> Result<WriteOutput, CommandError> {
         let args = ComposeArgs {
             respond_to: Some(i.message),
+            from: i.from,
             response: Some(ResponseKind::Forward),
             to: i.to,
             cc: i.cc,
@@ -624,6 +693,9 @@ pub struct DraftUpdateInput {
     /// Local ID of the draft.
     #[schemars(extend("x-positional" = 0))]
     pub draft: i64,
+    /// Send from this alias, or the account's own address.
+    #[serde(default)]
+    pub from: Option<String>,
     /// Replace To (`""` empties it).
     #[serde(default)]
     pub to: Vec<String>,
@@ -677,6 +749,18 @@ impl Command for DraftUpdate {
     };
 
     fn run(&self, _ctx: &Context<'_>, i: DraftUpdateInput) -> Result<WriteOutput, CommandError> {
+        let paths = DaemonPaths::resolve()?;
+        let from = match i.from.as_deref() {
+            Some(f) => {
+                let (account, _) = account_of(&paths, i.draft)?;
+                let alias = ComposeSettings::load()?.alias_to_send_as(&account, Some(f), None)?;
+                Some(Recipient {
+                    name: account.display_name.clone(),
+                    address: alias.unwrap_or(account.email),
+                })
+            }
+            None => None,
+        };
         let mut files = attachments(&i.attach, &i.inline)?;
         // Images the body embeds become inline attachments, as for a new
         // draft. Their content IDs follow their bytes, so images the draft
@@ -705,9 +789,10 @@ impl Command for DraftUpdate {
             }
         };
         submit_at(
-            &DaemonPaths::resolve()?,
+            &paths,
             WriteRequest::DraftUpdate {
                 message: i.draft,
+                from,
                 subject: i.subject,
                 html,
                 to: list(&i.to)?,
@@ -789,6 +874,9 @@ pub struct MailSendInput {
     /// The account to send from (config name or address); needed with more than one.
     #[serde(default)]
     pub account: Option<String>,
+    /// Send from this alias of the account (listed in `aliases` in config.toml).
+    #[serde(default)]
+    pub from: Option<String>,
     /// To: an address or `Name <address>`; repeat, or separate with commas.
     #[serde(default)]
     pub to: Vec<String>,
@@ -853,6 +941,7 @@ impl Command for MailSend {
     fn run(&self, _ctx: &Context<'_>, i: MailSendInput) -> Result<WriteOutput, CommandError> {
         let args = ComposeArgs {
             account: i.account,
+            from: i.from,
             to: i.to,
             cc: i.cc,
             bcc: i.bcc,

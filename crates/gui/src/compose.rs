@@ -20,6 +20,8 @@ pub struct Identity {
     /// Its name in config.toml, as `--account` takes it.
     key: String,
     email: String,
+    /// Other addresses it can send from.
+    aliases: Vec<String>,
     display_name: Option<String>,
     /// Signature HTML for new messages, with its images as `data:` URIs so the
     /// window can show them.
@@ -64,6 +66,7 @@ pub fn compose_info() -> ComposeInfo {
         info.identities.push(Identity {
             key,
             email: a.email,
+            aliases: a.aliases,
             display_name: a.display_name,
             signature_new: sig.new.as_deref().map(showable),
             signature_reply: sig.reply.as_deref().map(showable),

@@ -11,7 +11,7 @@ use common::{Env, KEY, fast_policy};
 use familiar_core::CommandError;
 use familiar_core::commands::draft::{ComposeArgs, ComposeSettings, compose_at, send_at};
 use familiar_core::commands::write::{WriteFlags, submit_at};
-use familiar_core::compose::ResponseKind;
+use familiar_core::compose::{Recipient, ResponseKind};
 use familiar_core::ops::{WriteOutput, WriteRequest};
 use familiar_daemon::policy::SyncPolicy;
 use familiar_store::{MessageId, OpId, OpState};
@@ -36,6 +36,7 @@ fn settings() -> ComposeSettings {
         new_signatures: vec![(KEY.into(), "<p>-- Pat (new)</p>".into())],
         reply_signatures: vec![(KEY.into(), "<p>-- Pat (reply)</p>".into())],
         send_delay_secs: 30,
+        aliases: vec![(KEY.into(), vec!["pat.alias@example.com".into()])],
     }
 }
 
@@ -111,6 +112,7 @@ async fn drafts_replies_and_sending() {
             &p,
             WriteRequest::DraftUpdate {
                 message: draft,
+                from: None,
                 subject: Some("Familiar Test draft v2".into()),
                 html: None,
                 to: None,
@@ -136,6 +138,7 @@ async fn drafts_replies_and_sending() {
         let (html, images) = familiar_core::compose::embedded_images(html).unwrap();
         WriteRequest::DraftUpdate {
             message: draft,
+            from: None,
             subject: None,
             html: Some(html),
             to: None,
@@ -234,6 +237,67 @@ async fn drafts_replies_and_sending() {
     );
     assert!(html.contains("divRplyFwdMsg"), "{html}");
     assert!(!html.contains("-- Pat (new)"));
+
+    // From an alias, then back to the account's own address.
+    const ALIAS: &str = "pat.alias@example.com";
+    let out = compose(
+        &env,
+        ComposeArgs {
+            from: Some(ALIAS.into()),
+            to: vec![ME.into()],
+            subject: Some("Familiar Test alias".into()),
+            ..ComposeArgs::default()
+        },
+        None,
+        waiting(),
+    )
+    .await
+    .unwrap();
+    let aliased = draft_id(&out);
+    let local = env.reader().message(MessageId(aliased)).unwrap().unwrap();
+    assert_eq!(local.from.addr, ALIAS);
+    assert_eq!(
+        mbox().message(&local.remote_id).unwrap().from.address,
+        ALIAS
+    );
+    let p = env.paths.clone();
+    blocking(move || {
+        submit_at(
+            &p,
+            WriteRequest::DraftUpdate {
+                message: aliased,
+                from: Some(Recipient {
+                    name: String::new(),
+                    address: ME.into(),
+                }),
+                subject: None,
+                html: None,
+                to: None,
+                cc: None,
+                bcc: None,
+                attachments: vec![],
+                remove_attachments: vec![],
+            },
+            &waiting(),
+        )
+    })
+    .await
+    .unwrap();
+    assert_eq!(mbox().message(&local.remote_id).unwrap().from.address, ME);
+    // An address that isn't the account's is refused.
+    let err = compose(
+        &env,
+        ComposeArgs {
+            from: Some("someone.else@example.com".into()),
+            to: vec![ME.into()],
+            ..ComposeArgs::default()
+        },
+        None,
+        waiting(),
+    )
+    .await
+    .unwrap_err();
+    assert!(err.message.contains("aliases"), "{err:?}");
 
     // After a sync round, the store matches the mock (no duplicate drafts).
     env.daemon()

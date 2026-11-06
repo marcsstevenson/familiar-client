@@ -95,8 +95,20 @@ pub struct Account {
     pub tenant: String,
     /// The name shown on sent mail. Defaults to the name on the account.
     pub display_name: Option<String>,
+    /// Other addresses this mailbox can send from (Outlook.com aliases, or
+    /// addresses the organisation lets it send as), offered as From choices.
+    #[serde(default)]
+    pub aliases: Vec<String>,
     /// Signatures for this account.
     pub signature: Option<Signature>,
+}
+
+impl Account {
+    /// Whether `address` is this account's own address or one of its aliases.
+    pub fn sends_as(&self, address: &str) -> bool {
+        self.email.eq_ignore_ascii_case(address)
+            || self.aliases.iter().any(|a| a.eq_ignore_ascii_case(address))
+    }
 }
 
 /// `[accounts.<name>.signature]`, as HTML.
