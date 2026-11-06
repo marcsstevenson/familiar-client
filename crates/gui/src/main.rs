@@ -222,7 +222,11 @@ fn main() {
             let builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
                 .title("Familiar")
                 .inner_size(1280.0, 800.0)
-                .min_inner_size(720.0, 420.0);
+                .min_inner_size(720.0, 420.0)
+                // Off so messages can be dragged onto folders: on Windows the
+                // native file-drop handler swallows the page's own drag and drop.
+                // Only compose windows take dropped files.
+                .disable_drag_drop_handler();
             // macOS keeps its traffic lights over our own title bar; elsewhere the
             // app draws the whole bar, including the window buttons.
             #[cfg(target_os = "macos")]

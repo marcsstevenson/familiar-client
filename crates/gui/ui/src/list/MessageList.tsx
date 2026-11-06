@@ -2,7 +2,7 @@
 // component asks for the rows on screen a page at a time and draws only those.
 import { For, Show, createEffect, createSignal, on, onCleanup, onMount } from "solid-js";
 import { isCommandError, run } from "../api";
-import { listNav, notify, searchQuery, selectedFolder, selectedMessage, setSelectedMessage, setSelectedRow } from "../state";
+import { listNav, notify, setDragged, searchQuery, selectedFolder, selectedMessage, setSelectedMessage, setSelectedRow } from "../state";
 import { OnlineHits, SearchBar } from "./SearchBar";
 import { type Row, type Sort, listIndexOf, listOpen, listRows, onStoreChanged } from "./api";
 import { shortDate } from "./format";
@@ -294,6 +294,15 @@ function ListRow(props: {
       aria-selected={props.selected}
       style={{ transform: `translateY(${props.index * ROW_H}px)` }}
       onMouseDown={() => props.onSelect(props.index)}
+      draggable={props.row !== undefined}
+      onDragStart={(e) => {
+        const r = props.row;
+        if (!r || !e.dataTransfer) return;
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", r.subject);
+        setDragged({ id: r.id, account: r.account });
+      }}
+      onDragEnd={() => setDragged(null)}
     >
       <Show when={props.row} fallback={<div class="row-placeholder" />}>
         {(r) => (

@@ -78,7 +78,7 @@ Actions and their default keys (`ui/src/actions/builtin.ts`):
 | `search` | `/` | Ctrl+E, F3 | Go to the search box |
 | `theme` | | | Cycle the theme |
 
-The Outlook keys are bound as well as the single keys; `[keys]` changes only the single key. Hovering a row shows a delete button. Accounts and folders with subfolders collapse with their arrow (or Left and Right); the app remembers which.
+The Outlook keys are bound as well as the single keys; `[keys]` changes only the single key. Hovering a row shows a delete button, and dragging a row onto a folder of the same account moves it there. Accounts and folders with subfolders collapse with their arrow (or Left and Right); the app remembers which.
 
 Change a key in `config.toml`, by action ID:
 
