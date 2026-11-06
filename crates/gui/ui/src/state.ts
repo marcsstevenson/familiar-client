@@ -22,6 +22,9 @@ export function notify(text: string, error = false): void {
   noticeTimer = setTimeout(() => setNotice(null), error ? 8000 : 4000);
 }
 
+/** The message being dragged from the list, for the folder pane to drop on. */
+export const [dragged, setDragged] = createSignal<{ id: number; account: string } | null>(null);
+
 /** Moves the list selection; set by the list while it is mounted. */
 export const listNav = { move: (_delta: number): void => {} };
 

@@ -3,7 +3,7 @@ import { For, Show, createMemo, createResource, createSignal, onCleanup, onMount
 import { type CommandError, isCommandError, run } from "../api";
 import type { FolderRow } from "../../../../../bindings/commands";
 import { onStoreChanged } from "../list/api";
-import { searchQuery, selectedFolder, setSearchQuery, setSelectedFolder, setSelectedMessage } from "../state";
+import { dragged, notify, searchQuery, selectedFolder, setDragged, setSearchQuery, setSelectedFolder, setSelectedMessage } from "../state";
 
 /** Well-known folders first, in this order; the rest keep the tree order. */
 const WELL_KNOWN = ["inbox", "drafts", "sentitems", "archive", "deleteditems", "junkemail"];
@@ -69,6 +69,17 @@ function shown(rows: FolderRow[]): FolderRow[] {
 /** The ids of folders with subfolders. */
 function parents(rows: FolderRow[]): Set<number> {
   return new Set(rows.filter((f, i) => (rows[i + 1]?.depth ?? -1) > f.depth).map((f) => f.id));
+}
+
+/** Moves the message dragged from the list into `f`. */
+function dropOn(f: FolderRow) {
+  const d = dragged();
+  setDragged(null);
+  if (!d) return;
+  run("mail.move", { messages: [d.id], to: f.path }).then(
+    () => notify(`Moved to ${f.name}`),
+    (err) => notify(isCommandError(err) ? err.message : String(err), true),
+  );
 }
 
 function choose(id: number | null) {
@@ -148,6 +159,8 @@ export function FolderTree(props: { views: { name: string; query: string }[] }) 
                     onToggle={(open) => setOpen(`f:${f.id}`, open)}
                     selected={selectedFolder() === f.id && searchQuery() === null}
                     onSelect={() => choose(f.id)}
+                    canDrop={() => dragged()?.account === f.account}
+                    onDrop={() => dropOn(f)}
                   />
                 )}
               </For>
@@ -168,16 +181,32 @@ function FolderItem(props: {
   onToggle?: (open: boolean) => void;
   selected: boolean;
   onSelect: () => void;
+  /** Whether the message being dragged can be moved here (same account). */
+  canDrop?: () => boolean;
+  onDrop?: () => void;
 }) {
+  const [over, setOver] = createSignal(false);
   return (
     <button
       class="folder-item"
-      classList={{ selected: props.selected, unread: props.unread > 0 }}
+      classList={{ selected: props.selected, unread: props.unread > 0, "drop-target": over() }}
       role="treeitem"
       aria-selected={props.selected}
       aria-expanded={props.expanded}
       style={{ "padding-left": `calc(var(--space-2) + ${props.depth} * var(--space-5))` }}
       onClick={props.onSelect}
+      onDragOver={(e) => {
+        if (!props.canDrop?.()) return;
+        e.preventDefault();
+        if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+        setOver(true);
+      }}
+      onDragLeave={() => setOver(false)}
+      onDrop={(e) => {
+        e.preventDefault();
+        setOver(false);
+        props.onDrop?.();
+      }}
       onKeyDown={(e) => {
         if (props.expanded === undefined) return;
         if (e.key === "ArrowRight" || e.key === "ArrowLeft") props.onToggle?.(e.key === "ArrowRight");
