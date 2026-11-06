@@ -2,7 +2,7 @@
 // component asks for the rows on screen a page at a time and draws only those.
 import { For, Show, createEffect, createSignal, on, onCleanup, onMount } from "solid-js";
 import { isCommandError, run } from "../api";
-import { listNav, notify, setDragged, searchQuery, selectedFolder, selectedMessage, setSelectedMessage, setSelectedRow } from "../state";
+import { listNav, removeFromList, setDragged, searchQuery, selectedFolder, selectedMessage, setSelectedMessage, setSelectedRow } from "../state";
 import { OnlineHits, SearchBar } from "./SearchBar";
 import { type Row, type Sort, listIndexOf, listOpen, listRows, onStoreChanged } from "./api";
 import { shortDate } from "./format";
@@ -347,11 +347,8 @@ function ListRow(props: {
               onMouseDown={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.stopPropagation();
-                listNav.leaving = r().id;
-                run("mail.delete", { messages: [r().id] }).then(
-                  () => notify("Moved to Deleted Items"),
-                  (err) => notify(isCommandError(err) ? err.message : String(err), true),
-                );
+                const id = r().id;
+                void removeFromList(id, "Moved to Deleted Items", () => run("mail.delete", { messages: [id] }));
               }}
             >
               🗑
