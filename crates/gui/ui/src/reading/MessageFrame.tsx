@@ -5,17 +5,9 @@
 // document to show where a link goes and to open links outside the app.
 import { createEffect, onCleanup } from "solid-js";
 import { onGlobalKey } from "../actions/registry";
+import { DARK_FIRST_CSS, darken } from "./dark";
 
 export type HoverLink = { href: string; text: string } | null;
-
-// Dark mode for a message written for a white page, as Outlook does: the body
-// is inverted with its hues kept, and pictures are inverted back (very
-// saturated colours in them shift a little: ☀ shows the message as sent). The page
-// behind the body is set to what white becomes, so short messages match.
-const DARK_CSS = `html.fam-dark{background:#121212}
-html.fam-dark body{filter:invert(1) hue-rotate(180deg) contrast(0.87);min-height:100vh;box-sizing:border-box}
-html.fam-dark :is(img,video,picture,svg,[style*="background-image"],[background]){filter:contrast(1.149) invert(1) hue-rotate(180deg)}
-html.fam-dark :is(picture,svg,[style*="background-image"],[background]) :is(img,video,picture,svg,[style*="background-image"],[background]){filter:none}`;
 
 export function MessageFrame(props: {
   html: string;
@@ -41,10 +33,7 @@ export function MessageFrame(props: {
   const attach = () => {
     const doc = frame.contentDocument;
     if (!doc) return;
-    const style = doc.createElement("style");
-    style.textContent = DARK_CSS;
-    doc.head.append(style);
-    doc.documentElement.classList.toggle("fam-dark", props.dark);
+    if (props.dark) darken(doc);
     // Keys pressed while the body has focus don't reach the app's window.
     doc.addEventListener("keydown", onGlobalKey);
     doc.addEventListener("mouseover", (e) => {
@@ -71,11 +60,9 @@ export function MessageFrame(props: {
     props.onLoad();
   };
 
+  // Switching between dark and light reloads the message, which is local.
   createEffect(() => {
-    frame.srcdoc = props.html;
-  });
-  createEffect(() => {
-    frame.contentDocument?.documentElement.classList.toggle("fam-dark", props.dark);
+    frame.srcdoc = props.dark ? props.html.replace("</head>", `<style>${DARK_FIRST_CSS}</style></head>`) : props.html;
   });
   onCleanup(() => props.onHover(null));
 
