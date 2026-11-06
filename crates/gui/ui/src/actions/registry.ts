@@ -8,6 +8,8 @@ export type Action = {
   title: string;
   /** Default key: a single key such as `e`, or a chord such as `Ctrl+K`. */
   key?: string;
+  /** Outlook's keys for the same thing, bound as well (not changed by [keys]). */
+  also?: string[];
   /** The CLI command that does the same, for the current selection. */
   cli?: () => string | undefined;
   /** False when the action can't run now (for example, nothing selected). */
@@ -39,13 +41,20 @@ export function keyOf(a: Action): string | undefined {
   return overrides()[a.id] ?? a.key;
 }
 
+/** Every key bound to an action: its own, then Outlook's. */
+export function keysOf(a: Action): string[] {
+  const k = keyOf(a);
+  return [...(k ? [k] : []), ...(a.also ?? [])];
+}
+
 /** Normalises a key event to the form used in bindings: `Ctrl+K`, `e`, `#`. */
 export function keyName(e: KeyboardEvent): string {
   const mods: string[] = [];
   if (e.ctrlKey || e.metaKey) mods.push("Ctrl");
   if (e.altKey) mods.push("Alt");
-  // Shift is part of a printed character (`#`, `A`), so only named keys keep it.
-  if (e.shiftKey && e.key.length > 1) mods.push("Shift");
+  // Shift is part of a printed character (`#`, `A`), so only named keys and
+  // chords keep it (`Ctrl+Shift+R`).
+  if (e.shiftKey && (e.key.length > 1 || mods.length > 0)) mods.push("Shift");
   const base = mods.length > 0 && e.key.length === 1 ? e.key.toUpperCase() : e.key;
   return [...mods, base].join("+");
 }
@@ -69,6 +78,8 @@ export function onGlobalKey(e: KeyboardEvent): void {
   const chord = name.includes("+");
   if (!chord && typing(e.target)) return;
   const bound = new Map<string, Action>();
+  // Outlook's keys first, so an action's own key wins if they clash.
+  for (const a of allActions()) for (const k of a.also ?? []) bound.set(normalise(k), a);
   for (const a of allActions()) {
     const k = keyOf(a);
     if (k) bound.set(normalise(k), a);

@@ -1,5 +1,5 @@
 // The folder pane: the unified Inbox, then each account's folder tree.
-import { For, Show, createMemo, createResource, onCleanup, onMount } from "solid-js";
+import { For, Show, createMemo, createResource, createSignal, onCleanup, onMount } from "solid-js";
 import { type CommandError, isCommandError, run } from "../api";
 import type { FolderRow } from "../../../../../bindings/commands";
 import { onStoreChanged } from "../list/api";
@@ -31,6 +31,41 @@ function ordered(rows: FolderRow[]): Map<string, FolderRow[]> {
     byAccount.set(account, trees.flat());
   }
   return byAccount;
+}
+
+// Collapsed accounts (`a:<key>`) and folders (`f:<id>`), kept between runs.
+const COLLAPSED_KEY = "familiar.folders.collapsed";
+function loadCollapsed(): Set<string> {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(COLLAPSED_KEY) ?? "[]") as string[]);
+  } catch {
+    return new Set();
+  }
+}
+const [collapsed, setCollapsed] = createSignal(loadCollapsed());
+function setOpen(key: string, open: boolean) {
+  const next = new Set(collapsed());
+  if (open) next.delete(key);
+  else next.add(key);
+  setCollapsed(next);
+  try {
+    localStorage.setItem(COLLAPSED_KEY, JSON.stringify([...next]));
+  } catch {
+    // Not kept; the tree still works.
+  }
+}
+
+/** The rows to show: those not under a collapsed folder, each with whether it has subfolders. */
+function shown(rows: FolderRow[]): { f: FolderRow; parent: boolean }[] {
+  const out: { f: FolderRow; parent: boolean }[] = [];
+  let hideBelow: number | null = null;
+  rows.forEach((f, i) => {
+    if (hideBelow !== null && f.depth > hideBelow) return;
+    hideBelow = null;
+    out.push({ f, parent: (rows[i + 1]?.depth ?? -1) > f.depth });
+    if (collapsed().has(`f:${f.id}`)) hideBelow = f.depth;
+  });
+  return out;
 }
 
 function choose(id: number | null) {
@@ -87,18 +122,33 @@ export function FolderTree(props: { views: { name: string; query: string }[] }) 
       <For each={[...accounts()]}>
         {([account, rows]) => (
           <div role="group" aria-label={account}>
-            <div class="folder-account">{account}</div>
-            <For each={rows}>
-              {(f) => (
-                <FolderItem
-                  name={f.name}
-                  unread={f.unread}
-                  depth={f.depth}
-                  selected={selectedFolder() === f.id && searchQuery() === null}
-                  onSelect={() => choose(f.id)}
-                />
-              )}
-            </For>
+            <button
+              class="folder-account"
+              role="treeitem"
+              aria-expanded={!collapsed().has(`a:${account}`)}
+              onClick={() => setOpen(`a:${account}`, collapsed().has(`a:${account}`))}
+              onKeyDown={(e) => {
+                if (e.key === "ArrowRight" || e.key === "ArrowLeft") setOpen(`a:${account}`, e.key === "ArrowRight");
+              }}
+            >
+              <span class="folder-twisty" aria-hidden="true">{collapsed().has(`a:${account}`) ? "▸" : "▾"}</span>
+              {account}
+            </button>
+            <Show when={!collapsed().has(`a:${account}`)}>
+              <For each={shown(rows)}>
+                {({ f, parent }) => (
+                  <FolderItem
+                    name={f.name}
+                    unread={f.unread}
+                    depth={f.depth}
+                    expanded={parent ? !collapsed().has(`f:${f.id}`) : undefined}
+                    onToggle={(open) => setOpen(`f:${f.id}`, open)}
+                    selected={selectedFolder() === f.id && searchQuery() === null}
+                    onSelect={() => choose(f.id)}
+                  />
+                )}
+              </For>
+            </Show>
           </div>
         )}
       </For>
@@ -110,6 +160,9 @@ function FolderItem(props: {
   name: string;
   unread: number;
   depth: number;
+  /** Set for a folder with subfolders: whether they show. */
+  expanded?: boolean;
+  onToggle?: (open: boolean) => void;
   selected: boolean;
   onSelect: () => void;
 }) {
@@ -119,9 +172,25 @@ function FolderItem(props: {
       classList={{ selected: props.selected, unread: props.unread > 0 }}
       role="treeitem"
       aria-selected={props.selected}
-      style={{ "padding-left": `calc(var(--space-4) + ${props.depth} * var(--space-5))` }}
+      aria-expanded={props.expanded}
+      style={{ "padding-left": `calc(var(--space-2) + ${props.depth} * var(--space-5))` }}
       onClick={props.onSelect}
+      onKeyDown={(e) => {
+        if (props.expanded === undefined) return;
+        if (e.key === "ArrowRight" || e.key === "ArrowLeft") props.onToggle?.(e.key === "ArrowRight");
+      }}
     >
+      <span
+        class="folder-twisty"
+        aria-hidden="true"
+        onClick={(e) => {
+          if (props.expanded === undefined) return;
+          e.stopPropagation();
+          props.onToggle?.(!props.expanded);
+        }}
+      >
+        {props.expanded === undefined ? "" : props.expanded ? "▾" : "▸"}
+      </span>
       <span class="folder-name">{props.name}</span>
       <Show when={props.unread > 0}>
         <span class="folder-count">

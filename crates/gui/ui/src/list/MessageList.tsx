@@ -1,8 +1,8 @@
 // The virtualised message list. Rust holds the sorted IDs of the view; this
 // component asks for the rows on screen a page at a time and draws only those.
 import { For, Show, createEffect, createSignal, on, onCleanup, onMount } from "solid-js";
-import { isCommandError } from "../api";
-import { listNav, searchQuery, selectedFolder, selectedMessage, setSelectedMessage, setSelectedRow } from "../state";
+import { isCommandError, run } from "../api";
+import { listNav, notify, searchQuery, selectedFolder, selectedMessage, setSelectedMessage, setSelectedRow } from "../state";
 import { OnlineHits, SearchBar } from "./SearchBar";
 import { type Row, type Sort, listIndexOf, listOpen, listRows, onStoreChanged } from "./api";
 import { shortDate } from "./format";
@@ -318,6 +318,23 @@ function ListRow(props: {
               </Show>
             </div>
             <div class="row-preview">{r().preview}</div>
+            {/* For the mouse; the keyboard has Delete. Not a button inside the
+                option, so screen readers keep one stop per row. */}
+            <span
+              class="row-delete"
+              title="Delete"
+              aria-hidden="true"
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                run("mail.delete", { messages: [r().id] }).then(
+                  () => notify("Moved to Deleted Items"),
+                  (err) => notify(isCommandError(err) ? err.message : String(err), true),
+                );
+              }}
+            >
+              🗑
+            </span>
           </>
         )}
       </Show>

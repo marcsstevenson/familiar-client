@@ -31,6 +31,7 @@ export function registerBuiltinActions(openPalette: (prefill?: string) => void):
     id: "archive",
     title: "Archive",
     key: "e",
+    also: ["Backspace"],
     enabled: hasMessage,
     cli: () => `fam mail archive ${selectedMessage()}`,
     run: () => onSelected("Archived", (id) => run("mail.archive", { messages: [id] })),
@@ -39,6 +40,7 @@ export function registerBuiltinActions(openPalette: (prefill?: string) => void):
     id: "delete",
     title: "Delete",
     key: "#",
+    also: ["Delete", "Ctrl+D"],
     enabled: hasMessage,
     cli: () => `fam mail delete ${selectedMessage()}`,
     run: () => onSelected("Moved to Deleted Items", (id) => run("mail.delete", { messages: [id] })),
@@ -47,6 +49,7 @@ export function registerBuiltinActions(openPalette: (prefill?: string) => void):
     id: "flag",
     title: "Flag or clear flag",
     key: "s",
+    also: ["Insert"],
     enabled: hasMessage,
     cli: () => `fam mail flag ${selectedMessage()}${selectedRow()?.is_flagged ? " --clear" : ""}`,
     run: () => {
@@ -69,6 +72,30 @@ export function registerBuiltinActions(openPalette: (prefill?: string) => void):
       );
     },
   });
+  // Outlook's separate read and unread keys.
+  registerAction({
+    id: "mark_read",
+    title: "Mark read",
+    also: ["Ctrl+Q"],
+    enabled: hasMessage,
+    cli: () => `fam mail read ${selectedMessage()}`,
+    run: () => onSelected("Marked read", (id) => run("mail.read", { messages: [id], unread: false })),
+  });
+  registerAction({
+    id: "mark_unread",
+    title: "Mark unread",
+    also: ["Ctrl+U"],
+    enabled: hasMessage,
+    cli: () => `fam mail read ${selectedMessage()} --unread`,
+    run: () => onSelected("Marked unread", (id) => run("mail.read", { messages: [id], unread: true })),
+  });
+  registerAction({
+    id: "move",
+    title: "Move to folder",
+    also: ["Ctrl+Shift+V"],
+    enabled: hasMessage,
+    run: () => openPalette("mail.move"),
+  });
   // These open a compose window.
   const composeOn = (f: (id: number) => Parameters<typeof openCompose>[0]) => async () => {
     const id = selectedMessage();
@@ -78,6 +105,7 @@ export function registerBuiltinActions(openPalette: (prefill?: string) => void):
     id: "reply",
     title: "Reply",
     key: "r",
+    also: ["Ctrl+R"],
     enabled: hasMessage,
     cli: () => `fam draft reply ${selectedMessage()}`,
     run: composeOn((message) => ({ kind: "reply", message })),
@@ -86,6 +114,7 @@ export function registerBuiltinActions(openPalette: (prefill?: string) => void):
     id: "reply_all",
     title: "Reply all",
     key: "a",
+    also: ["Ctrl+Shift+R"],
     enabled: hasMessage,
     cli: () => `fam draft reply ${selectedMessage()} --all`,
     run: composeOn((message) => ({ kind: "reply", message, all: true })),
@@ -94,6 +123,7 @@ export function registerBuiltinActions(openPalette: (prefill?: string) => void):
     id: "forward",
     title: "Forward",
     key: "f",
+    also: ["Ctrl+F"],
     enabled: hasMessage,
     cli: () => `fam draft forward ${selectedMessage()}`,
     run: composeOn((message) => ({ kind: "forward", message })),
@@ -105,6 +135,6 @@ export function registerBuiltinActions(openPalette: (prefill?: string) => void):
     cli: () => "fam draft create",
     run: () => openCompose({ kind: "new" }),
   });
-  registerAction({ id: "search", title: "Search mail", key: "/", cli: () => "fam mail search", run: () => searchFocus.focus() });
+  registerAction({ id: "search", title: "Search mail", key: "/", also: ["Ctrl+E", "F3"], cli: () => "fam mail search", run: () => searchFocus.focus() });
   registerAction({ id: "theme", title: "Change theme (system, light, dark)", run: cycleTheme });
 }
