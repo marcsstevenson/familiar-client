@@ -4,7 +4,7 @@
 // dark page (a blue button, white text on it) stay too.
 
 /** Put in the frame before it loads, so the page doesn't flash white first. */
-export const DARK_FIRST_CSS = "html,body{background:#121212}body{color:#e3e6eb}";
+export const DARK_FIRST_CSS = "html{color-scheme:dark}html,body{background:#121212}body{color:#e3e6eb}";
 
 type Rgba = [number, number, number, number];
 
