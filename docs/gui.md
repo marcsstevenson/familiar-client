@@ -124,7 +124,7 @@ When the window opens, the app looks for famd on its socket. If nothing answers,
 
 On Windows and Linux the window has no system frame and the app draws its own title bar with the window buttons. On macOS the system traffic lights sit over the left end of the app's bar.
 
-Colours, spacing and type sizes are tokens in `ui/src/styles/tokens.css`, with one light and one dark set; `theme.ts` resolves `system` and sets `data-theme` to `light` or `dark`. The theme starts from `[app] theme` (`system`, `light` or `dark`); the button in the title bar cycles through them for the session.
+Colours, spacing and type sizes are tokens in `ui/src/styles/tokens.css`, with one light and one dark set; `theme.ts` resolves `system` and sets `data-theme` to `light` or `dark`. The theme starts from `[app] theme` (`system`, `light` or `dark`); the button in the title bar cycles through them for the session. In the dark theme, message bodies show dark too, as in Outlook: the body is inverted with its hues kept and pictures inverted back. The ☀ button by the subject shows that message as sent, until another message opens.
 
 ## Reading pane
 

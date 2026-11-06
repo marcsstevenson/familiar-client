@@ -8,11 +8,21 @@ import { onGlobalKey } from "../actions/registry";
 
 export type HoverLink = { href: string; text: string } | null;
 
+// Dark mode for a message written for a white page, as Outlook does: the body
+// is inverted with its hues kept, and pictures are inverted back (very
+// saturated colours in them shift a little: ☀ shows the message as sent). The page
+// behind the body is set to what white becomes, so short messages match.
+const DARK_CSS = `html.fam-dark{background:#121212}
+html.fam-dark body{filter:invert(1) hue-rotate(180deg) contrast(0.87);min-height:100vh;box-sizing:border-box}
+html.fam-dark :is(img,video,picture,svg,[style*="background-image"],[background]){filter:contrast(1.149) invert(1) hue-rotate(180deg)}`;
+
 export function MessageFrame(props: {
   html: string;
   onHover: (l: HoverLink) => void;
   onOpen: (href: string) => void;
   onLoad: () => void;
+  /** Show it dark (the app is dark and the message isn't switched to light). */
+  dark: boolean;
 }) {
   let frame!: HTMLIFrameElement;
 
@@ -30,6 +40,10 @@ export function MessageFrame(props: {
   const attach = () => {
     const doc = frame.contentDocument;
     if (!doc) return;
+    const style = doc.createElement("style");
+    style.textContent = DARK_CSS;
+    doc.head.append(style);
+    doc.documentElement.classList.toggle("fam-dark", props.dark);
     // Keys pressed while the body has focus don't reach the app's window.
     doc.addEventListener("keydown", onGlobalKey);
     doc.addEventListener("mouseover", (e) => {
@@ -59,12 +73,16 @@ export function MessageFrame(props: {
   createEffect(() => {
     frame.srcdoc = props.html;
   });
+  createEffect(() => {
+    frame.contentDocument?.documentElement.classList.toggle("fam-dark", props.dark);
+  });
   onCleanup(() => props.onHover(null));
 
   return (
     <iframe
       ref={frame}
       class="message-frame"
+      classList={{ dark: props.dark }}
       title="Message body"
       sandbox="allow-same-origin"
       referrerpolicy="no-referrer"
