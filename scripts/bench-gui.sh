@@ -6,11 +6,13 @@
 set -euo pipefail
 data=$1 out=$2 bin=${3:-target/release/familiar}
 rm -f "$out"
-# No accessibility bus under Xvfb: without this, GTK waits on D-Bus for one.
-export NO_AT_BRIDGE=1
+# On a CI runner each launch otherwise waits 30 s on the runner's D-Bus
+# session (accessibility bus and portals) before WebKit loads the page. A
+# private session bus with no services answers at once.
+export NO_AT_BRIDGE=1 GTK_USE_PORTAL=0
 export FAMILIAR_DATA_DIR=$data FAMILIAR_CONFIG=/dev/null
 log=$out.log
-xvfb=(xvfb-run -a -s "-screen 0 1280x800x24" "$bin")
+xvfb=(dbus-run-session -- xvfb-run -a -s "-screen 0 1280x800x24" "$bin")
 # A fresh machine's first launch builds font and WebKit caches and reads the
 # store from disk. Launch once to warm those, so cold start measures the app,
 # as on a machine that has run it before.
