@@ -208,6 +208,10 @@ Tauri 2 + SolidJS was chosen in Phase 0 (WP 0.4).
 
 **Phase 5 gate:** Marc retires New Outlook on the desktop.
 
+## Phase G: Gmail accounts (proposed)
+
+Gmail support is planned separately in [Gmail Plan](Gmail%20Plan.md): the Gmail, Calendar and People APIs behind a small provider boundary in `famd`, labels shown as folders, and Marc's own unverified Google project for sign-in. Only its WP G.0 (the Google sign-in test) is proposed before the Phase 3 gate.
+
 ## Ordering and parallel work
 
 ```
