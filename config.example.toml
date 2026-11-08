@@ -25,6 +25,9 @@ email = "you@hotmail.example"
 tenant = "consumers"
 # Other addresses you send from, offered in the From menu.
 aliases = ["you@outlook.example"]
+# Where "processed" messages go: the tick on a message in the desktop app,
+# or `fam mail process`. Created at the top level if it doesn't exist.
+processed_folder = "Processed"
 
 [accounts.hotmail.signature]
 new = '''

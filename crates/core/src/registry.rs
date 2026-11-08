@@ -203,6 +203,7 @@ impl Registry {
         r.register(crate::commands::write::MailFlag);
         r.register(crate::commands::write::MailMove);
         r.register(crate::commands::write::MailArchive);
+        r.register(crate::commands::write::MailProcess);
         r.register(crate::commands::write::MailDelete);
         r.register(crate::commands::write::FolderCreate);
         r.register(crate::commands::write::FolderRename);

@@ -46,6 +46,9 @@ struct UiInfo {
     keys: std::collections::BTreeMap<String, String>,
     /// `[[views]]` from config.toml: saved searches shown as smart folders.
     views: Vec<View>,
+    /// Each account's `processed_folder` from config.toml, by account key:
+    /// the list shows its tick button for these accounts.
+    processed: std::collections::BTreeMap<String, String>,
     /// True when `FAMILIAR_BENCH_OUT` names a file: the front end then runs
     /// its timing script and reports with `bench_report`.
     bench: bool,
@@ -64,7 +67,7 @@ fn ui_info() -> UiInfo {
         Ok(c) => (c, None),
         Err(e) => (None, Some(e)),
     };
-    let (theme, keys, views) = match config {
+    let (theme, keys, views, processed) = match config {
         Some(c) => (
             theme_name(c.app.theme),
             c.keys,
@@ -75,8 +78,12 @@ fn ui_info() -> UiInfo {
                     query: v.query,
                 })
                 .collect(),
+            c.accounts
+                .into_iter()
+                .filter_map(|(k, a)| a.processed_folder.map(|f| (k, f)))
+                .collect(),
         ),
-        None => ("system", Default::default(), Vec::new()),
+        None => ("system", Default::default(), Vec::new(), Default::default()),
     };
     UiInfo {
         version: env!("CARGO_PKG_VERSION"),
@@ -84,6 +91,7 @@ fn ui_info() -> UiInfo {
         theme,
         keys,
         views,
+        processed,
         config_error,
         bench: std::env::var_os(BENCH_ENV).is_some(),
     }

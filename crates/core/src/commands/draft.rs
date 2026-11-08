@@ -32,7 +32,7 @@ const ERRORS: &[ErrorKind] = &[
 ];
 
 /// `config.toml`, if there is one. An invalid file is an error.
-fn config() -> Result<Option<familiar_config::Config>, CommandError> {
+pub(crate) fn config() -> Result<Option<familiar_config::Config>, CommandError> {
     let Some((path, _)) = familiar_config::paths::resolve(None) else {
         return Ok(None);
     };

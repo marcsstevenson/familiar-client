@@ -32,6 +32,8 @@ export type UiInfo = {
   keys: Record<string, string>;
   /** config.toml's [[views]]: saved searches. */
   views: { name: string; query: string }[];
+  /** config.toml's processed_folder, by account key. */
+  processed: Record<string, string>;
   /** Run the timing script (FAMILIAR_BENCH_OUT is set). */
   bench: boolean;
 };
