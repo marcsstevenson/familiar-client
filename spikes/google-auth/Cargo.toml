@@ -1,0 +1,19 @@
+[package]
+name = "google-auth-spike"
+version = "0.0.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+publish = false
+description = "Throwaway Gmail plan WP G.0 spike: Google sign-in (PKCE, loopback) and a few Gmail, Calendar and People calls"
+
+[[bin]]
+name = "google-auth-spike"
+path = "src/main.rs"
+
+[dependencies]
+base64 = "0.22"
+getrandom = "0.2"
+serde_json = "1"
+sha2 = "0.10"
+ureq = { version = "2.10", features = ["json"] }
+webbrowser = "1"
