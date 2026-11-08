@@ -190,7 +190,13 @@ pub(crate) fn message(rec: &MessageRecord, prefer: &Prefer) -> Value {
         "flag": { "flagStatus": if m.flagged { "flagged" } else { "notFlagged" } },
     });
     if let Some(meeting) = &m.meeting {
-        v["@odata.type"] = json!("#microsoft.graph.eventMessage");
+        // As Graph does: requests are the derived eventMessageRequest.
+        let kind = if meeting.meeting_message_type == "meetingRequest" {
+            "#microsoft.graph.eventMessageRequest"
+        } else {
+            "#microsoft.graph.eventMessage"
+        };
+        v["@odata.type"] = json!(kind);
         v["meetingMessageType"] = json!(meeting.meeting_message_type);
     }
     v

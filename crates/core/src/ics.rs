@@ -354,8 +354,23 @@ fn event(lines: &[Line], notes: &mut Vec<String>) -> Option<IcsEvent> {
             .and_then(|l| parse_duration(&l.value))
             .map(|d| add(start, d)),
     };
+    // A changed or moved occurrence of a series sent on its own: the series
+    // itself, or the person's copy of it, carries the change.
+    if get("RECURRENCE-ID").is_some() {
+        notes.push(format!(
+            "{summary:?}: one changed date of a repeating event is left out"
+        ));
+        return None;
+    }
+    let exceptions = get("EXDATE").or_else(|| get("RDATE")).is_some();
     let repeat = match get("RRULE") {
         None => None,
+        Some(_) if exceptions => {
+            notes.push(format!(
+                "{summary:?} repeats with dates added or left out, which Familiar can't set yet; only its first date is shown"
+            ));
+            None
+        }
         Some(l) => match parse_rrule(&l.value) {
             Ok(r) => Some(r),
             Err(why) => {
@@ -463,6 +478,15 @@ mod tests {
         assert_eq!(nets.until, NaiveDate::from_ymd_opt(2027, 4, 13));
         assert_eq!(c.events[1].repeat, None);
         assert_eq!(c.events[1].zone, None);
+        assert_eq!(c.notes.len(), 2, "{:?}", c.notes);
+    }
+
+    #[test]
+    fn repeats_with_exceptions_keep_only_the_first_date() {
+        let ics = "BEGIN:VEVENT\nUID:a\nSUMMARY:Nets\nDTSTART:20270202T030000Z\nRRULE:FREQ=WEEKLY;COUNT=8\nEXDATE:20270216T030000Z\nEND:VEVENT\nBEGIN:VEVENT\nUID:a\nRECURRENCE-ID:20270223T030000Z\nSUMMARY:Nets (moved)\nDTSTART:20270224T030000Z\nEND:VEVENT\n";
+        let c = parse(ics);
+        assert_eq!(c.events.len(), 1);
+        assert_eq!(c.events[0].repeat, None);
         assert_eq!(c.notes.len(), 2, "{:?}", c.notes);
     }
 

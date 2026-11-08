@@ -156,7 +156,8 @@ fn invitation(
     let is_event_message = head
         .get("@odata.type")
         .and_then(Value::as_str)
-        .is_some_and(|t| t.eq_ignore_ascii_case("#microsoft.graph.eventMessage"));
+        // Requests come as the derived `eventMessageRequest`.
+        .is_some_and(|t| t.starts_with("#microsoft.graph.eventMessage"));
     if !is_event_message {
         return Ok(None);
     }
@@ -233,14 +234,16 @@ fn from_ics(e: ics::IcsEvent, zone: &str) -> ProposedEvent {
     }
 }
 
-/// The events of the email's `.ics` attachments.
+/// The events of the email's `.ics` attachments, and whether one of them
+/// cancels something (then the text is not guessed from either).
 fn ics_events(
     paths: &DaemonPaths,
     message: i64,
     zone: &str,
     notes: &mut Vec<String>,
-) -> Result<Vec<ProposedEvent>, CommandError> {
+) -> Result<(Vec<ProposedEvent>, bool), CommandError> {
     let mut out = Vec::new();
+    let mut cancels = false;
     for a in list_at(paths, message)? {
         let is_ics = a
             .content_type
@@ -259,17 +262,19 @@ fn ics_events(
         notes.extend(cal.notes);
         if cal.method.as_deref() == Some("CANCEL") {
             notes.push(format!("{} cancels an event, so nothing is added", a.name));
+            cancels = true;
             continue;
         }
         for e in cal.events {
             if e.cancelled {
                 notes.push(format!("{:?} is marked cancelled", e.summary));
+                cancels = true;
                 continue;
             }
             out.push(from_ics(e, zone));
         }
     }
-    Ok(out)
+    Ok((out, cancels))
 }
 
 /// The local ID of an event already in the account's calendars that
@@ -288,14 +293,14 @@ fn already(r: &Reader, account: AccountId, p: &ProposedEvent) -> Result<Option<i
     let Some(w) = events::parse_when(&p.start, NaiveDate::MIN, None) else {
         return Ok(None);
     };
-    let range = match w.time {
+    let (start, range) = match w.time {
         Some(t) => {
             let at = instant(w.date, t, &p.time_zone);
-            EventRange::utc(at - 60, at + 61)
+            (at, EventRange::utc(at - 60, at + 61))
         }
         None => {
             let d = date_secs(w.date);
-            EventRange::utc(d, d + 86_400)
+            (d, EventRange::utc(d, d + 86_400))
         }
     };
     let cals: Vec<_> = r
@@ -308,7 +313,9 @@ fn already(r: &Reader, account: AccountId, p: &ProposedEvent) -> Result<Option<i
         .map_err(store_err)?
         .into_iter()
         .find(|e| {
-            e.data.subject.trim().eq_ignore_ascii_case(p.subject.trim())
+            // The range finds events that overlap; only the same start counts.
+            (e.data.start_at - start).abs() <= 60
+                && e.data.subject.trim().eq_ignore_ascii_case(p.subject.trim())
                 && e.data.is_all_day == p.all_day
         })
         .map(|e| e.id.0))
@@ -363,18 +370,22 @@ pub fn propose_at(
         .notes
         .iter()
         .any(|n| n.starts_with("famd isn't running"));
+    let mut cancels = false;
     if m.has_attachments && !daemon_down {
         match ics_events(paths, input.from_mail, &zone, &mut out.notes) {
-            Ok(evs) if !evs.is_empty() => {
-                out.source = "ics".into();
-                out.events = evs;
+            Ok((evs, c)) => {
+                cancels = c;
+                if !evs.is_empty() {
+                    out.source = "ics".into();
+                    out.events = evs;
+                }
             }
-            Ok(_) => {}
             Err(e) => out.notes.push(note_for("attachments", &e)),
         }
     }
 
-    if out.events.is_empty() {
+    // A cancellation repeats the date it cancels: don't offer to add it.
+    if out.events.is_empty() && !cancels {
         let (subject, text, at, _) = mail_text(&r, input.from_mail)?;
         // "Tonight" and "Saturday" are from when it was sent.
         let sent = if at > 0 {

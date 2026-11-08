@@ -149,6 +149,38 @@ async fn proposals_from_invitations_attachments_and_text() {
     }];
     let booking = env.mock.mailbox(KEY).add_message(booking).unwrap();
 
+    // Same subject, overlapping but starting earlier: not the same event.
+    env.mock
+        .mailbox(KEY)
+        .add_event(familiar_mock_graph::Event::new(
+            "Quiz night",
+            utc(at(d6, 18, 0)),
+            utc(at(d6, 22, 0)),
+        ))
+        .unwrap();
+    // A cancellation from outside Exchange, repeating the date it cancels.
+    let mut cancel = mail(
+        &env,
+        "Cancelled: Quiz night",
+        &format!(
+            "<p>Quiz night on {} at 7:30 pm is off.</p>",
+            d6.format("%A %-d %B")
+        ),
+    );
+    cancel.has_attachments = true;
+    cancel.attachments = vec![Attachment {
+        id: "att-cancel".into(),
+        name: "invite.ics".into(),
+        content_type: "text/calendar".into(),
+        is_inline: false,
+        content_id: None,
+        content_bytes: base64::engine::general_purpose::STANDARD.encode(format!(
+            "BEGIN:VCALENDAR\r\nMETHOD:CANCEL\r\nBEGIN:VEVENT\r\nUID:quiz\r\nSUMMARY:Quiz night\r\nDTSTART:{}T063000Z\r\nEND:VEVENT\r\nEND:VCALENDAR\r\n",
+            ymd(d6)
+        )),
+    }];
+    let cancel = env.mock.mailbox(KEY).add_message(cancel).unwrap();
+
     // Plain text only.
     let plain = mail(
         &env,
@@ -166,6 +198,7 @@ async fn proposals_from_invitations_attachments_and_text() {
     let orphan = synced(&env, &orphan).await;
     let booking = synced(&env, &booking).await;
     let plain = synced(&env, &plain).await;
+    let cancel = synced(&env, &cancel).await;
     env.until("the calendar", LIMIT, |e| {
         let r = e.reader();
         let cals: Vec<_> = r
@@ -238,6 +271,19 @@ async fn proposals_from_invitations_attachments_and_text() {
         format!("{} 19:30", d6.format("%Y-%m-%d"))
     );
     assert_eq!(out.events[0].location.as_deref(), Some("Clubrooms"));
+    assert_eq!(
+        out.events[0].already, None,
+        "an overlapping event isn't this one"
+    );
+
+    // A cancellation: nothing to add, not even from its text.
+    let out = propose(&env, cancel).await;
+    assert!(out.events.is_empty(), "{out:?}");
+    assert!(
+        out.notes.iter().any(|n| n.contains("cancels")),
+        "{:?}",
+        out.notes
+    );
 
     // Without famd, the booking's text is all there is to go on.
     env.stop().await;
