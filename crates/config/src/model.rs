@@ -38,6 +38,9 @@ pub struct Config {
     /// What agent sessions (CLI or MCP) may do.
     #[serde(default)]
     pub agent: Agent,
+    /// An AI tool on this computer that finds events in emails.
+    #[serde(default)]
+    pub ai: Ai,
 }
 
 /// `[app]`.
@@ -272,6 +275,53 @@ pub enum RuleRun {
     /// Runs in Familiar, only while the app or daemon is running.
     Local,
 }
+
+/// `[ai]`: an AI command-line tool the user already has (`claude`,
+/// `codex`) that `fam cal propose` asks for the events in an email. Off
+/// until `enabled = true`, because the email is sent to the tool's maker.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Ai {
+    /// Send emails to the tool when asked to find events in them.
+    #[serde(default)]
+    pub enabled: bool,
+    /// `auto` (Claude, else Codex, from PATH), `claude`, `codex`, `none`, or
+    /// a path to either program.
+    #[serde(default = "default_ai_tool")]
+    pub tool: String,
+    /// Passed to the tool as `--model`, when set.
+    #[serde(default)]
+    pub model: Option<String>,
+    /// How long to wait for an answer.
+    #[serde(default = "default_ai_timeout")]
+    pub timeout_seconds: u32,
+    /// Only these accounts' mail is sent. Default: every account.
+    #[serde(default)]
+    pub accounts: Option<Vec<String>>,
+}
+
+impl Default for Ai {
+    fn default() -> Self {
+        Self {
+            enabled: false,
+            tool: default_ai_tool(),
+            model: None,
+            timeout_seconds: default_ai_timeout(),
+            accounts: None,
+        }
+    }
+}
+
+fn default_ai_tool() -> String {
+    "auto".into()
+}
+
+fn default_ai_timeout() -> u32 {
+    90
+}
+
+/// The `[ai] tool` names (anything else is a path).
+pub const AI_TOOLS: &[&str] = &["auto", "claude", "codex", "none"];
 
 /// `[agent]`.
 #[derive(Debug, Clone, PartialEq, Deserialize)]

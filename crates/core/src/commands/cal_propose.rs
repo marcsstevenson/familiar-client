@@ -8,6 +8,11 @@
 //! Each proposal is ready for `fam cal add` (`start`, `end`, `tz`, the
 //! repeat flags), and one that is already in the calendar says so.
 //!
+//! With `[ai] enabled = true` in config.toml, an email with neither is sent
+//! (its text, and the text of its PDF attachments) to the AI tool `[ai]`
+//! names, which answers with events; Familiar checks them and falls back to
+//! its own guess when the tool fails. See [`crate::ai`].
+//!
 //! Attachments and invitations are read from the server through famd. When
 //! famd isn't running, or the server can't be reached, those checks are
 //! skipped with a note and the guess is still given.
@@ -18,7 +23,9 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
-use crate::commands::attachments::{content_at, graph_get, list_at, locate};
+use crate::ai;
+use crate::commands::attachments::{AttachmentInfo, content_at, graph_get, list_at, locate};
+use crate::commands::auth::config;
 use crate::commands::cal_write::{mail_text, open, zone_name};
 use crate::daemon::DaemonPaths;
 use crate::error::{CommandError, ErrorKind};
@@ -28,6 +35,9 @@ use crate::registry::{Access, Command, CommandSpec, Context};
 
 /// Attachments bigger than this aren't read as calendars.
 const ICS_LIMIT: u64 = 1024 * 1024;
+
+/// PDFs bigger than this aren't read.
+const PDF_LIMIT: u64 = 10 * 1024 * 1024;
 
 /// `fam cal propose`.
 pub struct CalPropose;
@@ -41,6 +51,9 @@ pub struct CalProposeInput {
     /// Time zone to give times in (IANA or Windows). Default: this computer's.
     #[serde(default)]
     pub tz: Option<String>,
+    /// Don't ask the AI tool, even when [ai] is enabled.
+    #[serde(default)]
+    pub no_ai: bool,
 }
 
 /// A repeat, in `fam cal add`'s terms.
@@ -77,6 +90,8 @@ pub struct ProposedEvent {
     pub notes: Option<String>,
     /// How it repeats.
     pub repeat: Option<ProposedRepeat>,
+    /// The words in the email it came from, when the AI found it.
+    pub evidence: Option<String>,
     /// iCalendar UID, from an `.ics`.
     pub uid: Option<String>,
     /// The local ID of an event already in the calendar that matches it.
@@ -107,7 +122,8 @@ pub struct CalProposeOutput {
     pub message: i64,
     /// Its account.
     pub account: String,
-    /// Where the proposals came from: `invite`, `ics`, `heuristic` or `none`.
+    /// Where the proposals came from: `invite`, `ics`, `ai:claude`,
+    /// `ai:codex`, `heuristic` or `none`.
     pub source: String,
     /// Events to add.
     pub events: Vec<ProposedEvent>,
@@ -231,6 +247,7 @@ fn from_ics(e: ics::IcsEvent, zone: &str) -> ProposedEvent {
             until: r.until.map(|u| day(u.local_in(&time_zone).0)),
             count: r.count,
         }),
+        evidence: None,
         uid: e.uid,
         already: None,
     }
@@ -238,21 +255,29 @@ fn from_ics(e: ics::IcsEvent, zone: &str) -> ProposedEvent {
 
 /// The events of the email's `.ics` attachments, and whether one of them
 /// cancels something (then the text is not guessed from either).
+fn is_ics(a: &AttachmentInfo) -> bool {
+    a.content_type
+        .to_ascii_lowercase()
+        .starts_with("text/calendar")
+        || a.name.to_ascii_lowercase().ends_with(".ics")
+}
+
+fn is_pdf(a: &AttachmentInfo) -> bool {
+    a.content_type.eq_ignore_ascii_case("application/pdf")
+        || a.name.to_ascii_lowercase().ends_with(".pdf")
+}
+
 fn ics_events(
     paths: &DaemonPaths,
     message: i64,
+    list: &[AttachmentInfo],
     zone: &str,
     notes: &mut Vec<String>,
 ) -> Result<(Vec<ProposedEvent>, bool), CommandError> {
     let mut out = Vec::new();
     let mut cancels = false;
-    for a in list_at(paths, message)? {
-        let is_ics = a
-            .content_type
-            .to_ascii_lowercase()
-            .starts_with("text/calendar")
-            || a.name.to_ascii_lowercase().ends_with(".ics");
-        if !is_ics || a.is_inline {
+    for a in list {
+        if !is_ics(a) || a.is_inline {
             continue;
         }
         if a.size > ICS_LIMIT {
@@ -277,6 +302,162 @@ fn ics_events(
         }
     }
     Ok((out, cancels))
+}
+
+/// The text of the email's PDF attachments, and the names of the rest.
+fn pdf_texts(
+    paths: &DaemonPaths,
+    message: i64,
+    list: &[AttachmentInfo],
+    notes: &mut Vec<String>,
+) -> (Vec<(String, String)>, Vec<String>) {
+    let mut pdfs = Vec::new();
+    let mut others = Vec::new();
+    for a in list.iter().filter(|a| !a.is_inline) {
+        if !is_pdf(a) {
+            others.push(a.name.clone());
+            continue;
+        }
+        if a.size > PDF_LIMIT {
+            notes.push(format!("{} is too big to read", a.name));
+            continue;
+        }
+        let bytes = match content_at(paths, message, &a.id) {
+            Ok(c) => c.bytes,
+            Err(e) => {
+                notes.push(format!("{} couldn't be downloaded: {}", a.name, e.message));
+                continue;
+            }
+        };
+        // The PDF reader can panic on a damaged file; that file is skipped.
+        let text = std::panic::catch_unwind(|| pdf_extract::extract_text_from_mem(&bytes))
+            .ok()
+            .and_then(Result::ok)
+            .map(|t| t.split_whitespace().collect::<Vec<_>>().join(" "))
+            .unwrap_or_default();
+        if text.is_empty() {
+            notes.push(format!("{} has no readable text", a.name));
+        } else {
+            pdfs.push((a.name.clone(), text));
+        }
+    }
+    (pdfs, others)
+}
+
+/// The AI's events, checked: a start `cal add` can read, an end after it,
+/// a known zone and repeat. Events that fail are left out with a note.
+fn ai_events(
+    kind: ai::ToolKind,
+    answer: ai::Answer,
+    today: NaiveDate,
+    zone: &str,
+    notes: &mut Vec<String>,
+) -> Vec<ProposedEvent> {
+    let who = kind.title();
+    if let Some(c) = answer.comment.filter(|c| !c.trim().is_empty()) {
+        notes.push(format!("{who}: {}", c.trim()));
+    }
+    let mut out = Vec::new();
+    for e in answer.events.into_iter().take(10) {
+        let subject = e.subject.trim().to_string();
+        let Some(start) = events::parse_when(&e.start, today, None) else {
+            notes.push(format!(
+                "{who}'s start for {subject:?} ({}) couldn't be read",
+                e.start
+            ));
+            continue;
+        };
+        let all_day = e.all_day || start.time.is_none();
+        let time_zone = match e.time_zone.as_deref().filter(|z| !z.trim().is_empty()) {
+            None => zone.to_string(),
+            Some(z) => match crate::tz::to_iana(z) {
+                Some(iana) => iana,
+                None => {
+                    notes.push(format!("{who} gave {subject:?} the zone {z:?}, which isn't one I know; using {zone}"));
+                    zone.to_string()
+                }
+            },
+        };
+        let end = match e.end.as_deref().filter(|x| !x.trim().is_empty()) {
+            None => None,
+            Some(x) => match events::parse_when(x, today, Some(start.date)) {
+                Some(w) if (w.date, w.time) >= (start.date, start.time) => {
+                    Some(stamp(w.date, if all_day { None } else { w.time }))
+                }
+                _ => {
+                    notes.push(format!("{who}'s end for {subject:?} ({x}) is before its start or unreadable, so it is left out"));
+                    None
+                }
+            },
+        };
+        let repeat = e.repeat.and_then(|r| {
+            let every = ["daily", "weekly", "monthly", "yearly"]
+                .into_iter()
+                .find(|k| k.eq_ignore_ascii_case(r.every.trim()))?;
+            let on: Vec<String> =
+                r.on.iter()
+                    .filter_map(|d| events::parse_weekday(d))
+                    .map(str::to_string)
+                    .collect();
+            let until = r.until.as_deref().and_then(|u| {
+                let words: Vec<&str> = u.split_whitespace().collect();
+                events::parse_date(&words, today).map(|(d, _)| day(d))
+            });
+            Some(ProposedRepeat {
+                every: every.to_string(),
+                interval: r.interval.unwrap_or(1).max(1),
+                on: if every == "weekly" { on } else { Vec::new() },
+                count: if until.is_some() {
+                    None
+                } else {
+                    r.count.filter(|c| *c > 0)
+                },
+                until,
+            })
+        });
+        out.push(ProposedEvent {
+            subject: if subject.is_empty() {
+                "(no subject)".into()
+            } else {
+                subject
+            },
+            start: stamp(start.date, if all_day { None } else { start.time }),
+            end,
+            all_day,
+            time_zone,
+            location: e.location.filter(|l| !l.trim().is_empty()),
+            notes: e.notes.filter(|n| !n.trim().is_empty()),
+            repeat,
+            evidence: e.evidence.filter(|x| !x.trim().is_empty()),
+            uid: None,
+            already: None,
+        });
+    }
+    out
+}
+
+/// The AI tool to ask for this account's mail, if any.
+fn ai_tool<'a>(
+    cfg: Option<&'a familiar_config::Config>,
+    account: &str,
+    no_ai: bool,
+) -> Option<(ai::Tool, &'a familiar_config::model::Ai)> {
+    let a = &cfg?.ai;
+    if no_ai || !a.enabled {
+        return None;
+    }
+    if a.accounts
+        .as_ref()
+        .is_some_and(|list| !list.iter().any(|x| x == account))
+    {
+        return None;
+    }
+    // An agent (or the MCP server) asking another agent is a loop nobody needs.
+    let source = crate::agent::session_source();
+    if source == "mcp" || source.starts_with("agent:") {
+        return None;
+    }
+    ai::pick(&a.tool).map(|t| (t, a))
 }
 
 /// The local ID of an event already in the account's calendars that
@@ -326,6 +507,7 @@ fn already(r: &Reader, account: AccountId, p: &ProposedEvent) -> Result<Option<i
 /// Runs `fam cal propose` against the store and famd at `paths`.
 pub fn propose_at(
     paths: &DaemonPaths,
+    cfg: Option<&familiar_config::Config>,
     input: &CalProposeInput,
     now: i64,
 ) -> Result<CalProposeOutput, CommandError> {
@@ -373,8 +555,15 @@ pub fn propose_at(
         .iter()
         .any(|n| n.starts_with("famd isn't running"));
     let mut cancels = false;
+    let mut list = Vec::new();
     if m.has_attachments && !daemon_down {
-        match ics_events(paths, input.from_mail, &zone, &mut out.notes) {
+        match list_at(paths, input.from_mail) {
+            Ok(l) => list = l,
+            Err(e) => out.notes.push(note_for("attachments", &e)),
+        }
+    }
+    if !list.is_empty() {
+        match ics_events(paths, input.from_mail, &list, &zone, &mut out.notes) {
             Ok((evs, c)) => {
                 cancels = c;
                 if !evs.is_empty() {
@@ -387,9 +576,55 @@ pub fn propose_at(
     }
 
     // A cancellation repeats the date it cancels: don't offer to add it.
+    let mut asked_ai = false;
     if out.events.is_empty() && !cancels {
         let (subject, text, at, _) = mail_text(&r, input.from_mail)?;
         // "Tonight" and "Saturday" are from when it was sent.
+        let sent = if at > 0 {
+            today_in(at, &zone)
+        } else {
+            today_in(now, &zone)
+        };
+        if let Some((tool, settings)) = ai_tool(cfg, &key, input.no_ai) {
+            let (pdfs, others) = pdf_texts(paths, input.from_mail, &list, &mut out.notes);
+            let from = if m.from.name.is_empty() {
+                m.from.addr.clone()
+            } else {
+                format!("{} <{}>", m.from.name, m.from.addr)
+            };
+            let prompt = ai::prompt(
+                &ai::Email {
+                    subject: &subject,
+                    from: &from,
+                    received: &sent.format("%A %-d %B %Y").to_string(),
+                    body: &text,
+                    pdfs: &pdfs,
+                    others: &others,
+                },
+                &today_in(now, &zone).format("%A %-d %B %Y").to_string(),
+                &zone,
+            );
+            let timeout = std::time::Duration::from_secs(u64::from(settings.timeout_seconds));
+            match ai::ask(&tool, settings.model.as_deref(), &prompt, timeout)
+                .and_then(|v| ai::parse_answer(tool.kind, v))
+            {
+                Ok(answer) => {
+                    asked_ai = true;
+                    out.source = format!("ai:{}", tool.kind.name());
+                    out.events = ai_events(tool.kind, answer, sent, &zone, &mut out.notes);
+                    if out.events.is_empty() {
+                        out.notes
+                            .push(format!("{} found no events", tool.kind.title()));
+                    }
+                }
+                Err(why) => out
+                    .notes
+                    .push(format!("{why}; showing Familiar's own guess")),
+            }
+        }
+    }
+    if out.events.is_empty() && !cancels && !asked_ai {
+        let (subject, text, at, _) = mail_text(&r, input.from_mail)?;
         let sent = if at > 0 {
             today_in(at, &zone)
         } else {
@@ -412,6 +647,7 @@ pub fn propose_at(
                     location: s.location,
                     notes: None,
                     repeat: None,
+                    evidence: None,
                     uid: None,
                     already: None,
                 });
@@ -432,7 +668,7 @@ impl Command for CalPropose {
     const SPEC: CommandSpec = CommandSpec {
         path: &["cal", "propose"],
         summary: "Suggest calendar events from an email, without adding them",
-        description: "Reads an email and says which calendar events it suggests, for you to check before adding them with fam cal add. A meeting request comes back as an invitation to answer with fam cal rsvp, not as a new event. Otherwise the events in its .ics attachments, or else the date, time and place found in its text. Each event says whether it is already in your calendar. Nothing is changed. Attachments and invitations are read through famd; without famd only the text is used.",
+        description: "Reads an email and says which calendar events it suggests, for you to check before adding them with fam cal add. A meeting request comes back as an invitation to answer with fam cal rsvp, not as a new event. Otherwise the events in its .ics attachments; else, with [ai] enabled in config.toml, the events the AI tool (Claude or Codex) finds in its text and PDFs; else the date, time and place found in its text. Each event says whether it is already in your calendar. Nothing is changed. Attachments and invitations are read through famd; without famd only the text is used.",
         access: Access::Read,
         errors: &[ErrorKind::NotFound, ErrorKind::Usage],
     };
@@ -445,7 +681,8 @@ impl Command for CalPropose {
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_or(0, |d| d.as_secs() as i64);
-        propose_at(&DaemonPaths::resolve()?, &input, now)
+        let cfg = config()?;
+        propose_at(&DaemonPaths::resolve()?, cfg.as_ref(), &input, now)
     }
 
     fn render_text(&self, o: &CalProposeOutput) -> String {
