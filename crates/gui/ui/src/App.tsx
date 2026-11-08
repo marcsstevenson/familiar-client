@@ -11,6 +11,7 @@ import { EventDialog } from "./calendar/EventDialog";
 import { aiSettings, eventDialog, notice, processedFolders, setEventDialog, setSearchQuery, setSelectedFolder, setSelectedMessage } from "./state";
 import { FolderTree } from "./folders/FolderTree";
 import { MessageList } from "./list/MessageList";
+import { Splitters, paneColumns } from "./Splitters";
 import { TitleBar } from "./TitleBar";
 
 function daemonText(s: DaemonState): string {
@@ -58,7 +59,8 @@ export function App(props: { info: UiInfo }) {
   return (
     <div class="app">
       <TitleBar platform={props.info.platform} />
-      <main class="panes">
+      <main class="panes" style={{ "grid-template-columns": paneColumns() }}>
+        <Splitters />
         <nav class="pane folders" aria-label="Folders">
           <FolderTree views={props.info.views} />
         </nav>

@@ -159,6 +159,14 @@ export function ReadingPane() {
                   <span class="muted">{when(m().received_at)}</span>
                   <span class="muted">{m().account} / {m().folder}</span>
                 </div>
+                {/* Shown only while the pointer is over the header (or it has
+                    focus), so it takes no room otherwise. */}
+                <Show when={v().sender_trusted}>
+                  <div class="reading-trusted" role="note">
+                    <span>Images from {m().from.addr} are always shown.</span>
+                    <button onClick={() => setTrusted(m().from.addr, false)}>Stop</button>
+                  </div>
+                </Show>
               </header>
               <Show when={v().blocked_images > 0 && !v().images_shown}>
                 <div class="reading-banner" role="note">
@@ -173,12 +181,6 @@ export function ReadingPane() {
                       Always show from {m().from.addr}
                     </button>
                   </Show>
-                </div>
-              </Show>
-              <Show when={v().sender_trusted}>
-                <div class="reading-banner quiet" role="note">
-                  <span>Images from {m().from.addr} are always shown.</span>
-                  <button onClick={() => setTrusted(m().from.addr, false)}>Stop</button>
                 </div>
               </Show>
               <Show when={m().has_attachments}>
