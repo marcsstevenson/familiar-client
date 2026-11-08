@@ -28,7 +28,7 @@ function ratio(a, b) {
 const surfaces = ["bg", "bg-sidebar", "bg-chrome", "bg-hover", "bg-selected", "bg-selected-inactive"];
 const pairs = [
   ...["text", "text-muted"].flatMap((t) => surfaces.map((s) => [t, s, 4.5])),
-  ...["accent", "warn", "danger"].flatMap((t) => ["bg", "bg-sidebar", "bg-chrome"].map((s) => [t, s, 4.5])),
+  ...["accent", "warn", "danger", "success"].flatMap((t) => ["bg", "bg-sidebar", "bg-chrome"].map((s) => [t, s, 4.5])),
   ["text-on-accent", "accent", 4.5],
   ...["focus"].flatMap((t) => surfaces.map((s) => [t, s, 3])),
 ];

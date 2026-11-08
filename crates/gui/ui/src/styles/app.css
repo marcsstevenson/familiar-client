@@ -279,7 +279,7 @@ button {
   font-size: 22px;
   line-height: 1;
   background: var(--bg-hover);
-  color: var(--text-muted);
+  border: 1px solid currentColor;
   cursor: pointer;
 }
 .list-row:hover .row-action {
@@ -289,11 +289,14 @@ button {
 .row-process {
   right: calc(var(--space-3) + 48px);
 }
-.row-process:hover {
-  color: var(--accent);
+.row-process {
+  color: var(--success);
 }
-.row-delete:hover {
+.row-delete {
   color: var(--danger);
+}
+.row-action:hover {
+  background: var(--bg);
 }
 .list-row.selected {
   background: var(--bg-selected-inactive);
