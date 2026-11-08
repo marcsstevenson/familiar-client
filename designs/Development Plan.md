@@ -194,6 +194,8 @@ Tauri 2 + SolidJS was chosen in Phase 0 (WP 0.4).
 | 4.5 | **Rules and contacts in the GUI** | 4.3, 2.5 | Editable from the GUI, written back to config |
 | 4.6 | **First-run migration.** Import server rules and folder favourites into config; guided one-time signature copy | 4.3, 1.3 | A fresh config is generated from a real account |
 
+Adding events from an email with an AI tool the user already has (`claude`, `codex`), plus `.ics` attachments, is planned in [AI Event Inference Plan](AI%20Event%20Inference%20Plan.md), which folds in WP 4.2.
+
 **Phase 4 gate:** every V1 requirement in the design doc is done, checked row by row.
 
 ## Phase 5: Parallel run and release
