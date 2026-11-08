@@ -136,8 +136,9 @@ export function EventDialog(props: { message: number; from: string; onClose: () 
     setBusy(true);
     try {
       for (const c of list) {
-        if (c.event !== null) await run("cal.delete", { event: c.event, series: c.series });
-        else if (c.id !== null) await run("ops.cancel", { id: c.id });
+        // A create still queued is cancelled; one the server has is deleted.
+        const cancelled = c.id !== null && (await run("ops.cancel", { id: c.id })).changed;
+        if (!cancelled && c.event !== null) await run("cal.delete", { event: c.event, series: c.series });
       }
       notify(list.length === 1 ? "Event removed" : `${list.length} events removed`);
       props.onClose();
@@ -170,7 +171,6 @@ export function EventDialog(props: { message: number; from: string; onClose: () 
         class="palette event-dialog"
         role="dialog"
         aria-label={proposal()?.invitation ? "Invitation" : "Add to calendar"}
-        onKeyDown={(e) => e.stopPropagation()}
       >
         <Switch>
           <Match when={failed()}>

@@ -170,7 +170,7 @@ export function occurrences(d: Draft): number | null {
     if (d.every === "yearly") x.setUTCFullYear(start.getUTCFullYear() + n * i);
     if (x > until) break;
     // A 31st in a shorter month doesn't happen that month.
-    if (x.getUTCDate() === start.getUTCDate()) count++;
+    if (d.every === "daily" || x.getUTCDate() === start.getUTCDate()) count++;
   }
   return count;
 }
