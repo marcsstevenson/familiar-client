@@ -196,7 +196,7 @@ Tue 24 Nov in Parklands · Calendar: no clash
                          [ Decline ]  [ Tentative ]  [ Accept ]
 ```
 
-- **Detecting it.** `fam cal propose` asks famd for `/me/messages/{id}?$select=meetingMessageType&$expand=microsoft.graph.eventMessage/event($select=id)` through the existing `graph.get`. If it has an event, the local event with that remote id is the one answered; if that event hasn't synced yet, the dialog says so and offers Add to calendar as for any other email.
+- **Detecting it.** `fam cal propose` asks famd for `/me/messages/{id}?$select=meetingMessageType&$expand=microsoft.graph.eventMessage/event($select=id)` through the existing `graph.get`. If it has an event, the local event with that remote id is the one answered; if that event hasn't synced yet, the dialog stays an invitation and says "This meeting hasn't reached your calendar on this computer yet; try again in a few minutes", with no Add button, because adding would make a second copy and wouldn't answer the organiser.
 - **Answering** runs `cal rsvp <event> accept|tentative|decline`, with `--no-reply` when "Tell the organiser" is unticked, and `--series` for a series invitation. It is a `gui` write like any other, with undo.
 - **The calendar** is the one Exchange put it in; it can't be moved from the dialog.
 - **A cancellation** (`meetingMessageType` `meetingCancelled`) shows "This meeting was cancelled" with a Remove from calendar button (`cal delete`).
