@@ -113,7 +113,13 @@ export function FolderTree(props: { views: { name: string; query: string }[] }) 
       .reduce((n, f) => n + f.unread, 0),
   );
   const pinned = createMemo(() => folders.filter((f) => f.pinned));
-  const manyAccounts = createMemo(() => accounts().size > 1);
+  // A pinned folder's name gets its account only when another pinned folder
+  // has the same name; the full path and account show on hover.
+  const sharedNames = createMemo(() => {
+    const seen = new Map<string, number>();
+    for (const f of pinned()) seen.set(f.name.toLowerCase(), (seen.get(f.name.toLowerCase()) ?? 0) + 1);
+    return new Set([...seen].filter(([, n]) => n > 1).map(([k]) => k));
+  });
   // The folder whose context menu is open, and where.
   const [menu, setMenu] = createSignal<{ folder: FolderRow; x: number; y: number } | null>(null);
   const openMenu = (f: FolderRow) => (e: MouseEvent) => {
@@ -140,7 +146,8 @@ export function FolderTree(props: { views: { name: string; query: string }[] }) 
           <For each={pinned()}>
             {(f) => (
               <FolderItem
-                name={manyAccounts() ? `${f.name} · ${f.account}` : f.name}
+                name={sharedNames().has(f.name.toLowerCase()) ? `${f.name} · ${f.account}` : f.name}
+                title={`${f.path} (${f.account})`}
                 unread={f.unread}
                 depth={0}
                 color={f.color}
@@ -232,6 +239,8 @@ function FolderItem(props: {
   /** Its colour (`fam folder color`), shown as a dot before the name. */
   color?: string | null;
   onContextMenu?: (e: MouseEvent) => void;
+  /** Hover text. */
+  title?: string;
 }) {
   const [over, setOver] = createSignal(false);
   return (
@@ -244,6 +253,7 @@ function FolderItem(props: {
       style={{ "padding-left": `calc(var(--space-2) + ${props.depth} * var(--space-5))` }}
       onClick={props.onSelect}
       onContextMenu={props.onContextMenu}
+      title={props.title}
       onDragOver={(e) => {
         if (!props.canDrop?.()) return;
         e.preventDefault();
