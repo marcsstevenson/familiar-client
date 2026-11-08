@@ -326,3 +326,42 @@ fn api_is_get_only_and_graph_only() {
         );
     }
 }
+
+#[test]
+fn folder_colours_and_pins_are_kept_on_this_device() {
+    let dir = tempfile::tempdir().unwrap();
+    let data = dir.path();
+    sync_store(data);
+
+    let v = json(data, &["folder", "color", "Cricket Club", "Green"]);
+    assert_eq!(v["path"], "Cricket Club");
+    assert_eq!(v["color"], "green");
+    let v = json(data, &["folder", "pin", "inbox/receipts"]);
+    assert_eq!(v["pinned"], true);
+
+    let rows = json(data, &["folder", "list"]);
+    let rows = rows["folders"].as_array().unwrap();
+    let row = |p: &str| rows.iter().find(|f| f["path"] == p).unwrap().clone();
+    assert_eq!(row("Cricket Club")["color"], "green");
+    assert_eq!(row("Inbox/Receipts")["pinned"], true);
+    assert!(row("Inbox").get("color").is_none());
+    assert!(row("Inbox").get("pinned").is_none());
+    assert!(data.join("folders.json").exists());
+
+    json(data, &["folder", "color", "Cricket Club", "none"]);
+    json(data, &["folder", "unpin", "Inbox/Receipts"]);
+    let rows = json(data, &["folder", "list"]);
+    assert!(
+        rows["folders"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|f| f.get("color").is_none() && f.get("pinned").is_none()),
+        "{rows}"
+    );
+
+    let (code, e) = fails(data, &["folder", "color", "Cricket Club", "beige"]);
+    assert_eq!((code, e["kind"].as_str()), (2, Some("usage")));
+    let (code, e) = fails(data, &["folder", "pin", "Nowhere"]);
+    assert_eq!((code, e["kind"].as_str()), (6, Some("not_found")));
+}

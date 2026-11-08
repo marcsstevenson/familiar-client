@@ -45,6 +45,16 @@
   --danger: #c42b1c;
   --success: #187530;
   --focus: #1f5fc7;
+  /* Folder colours (fam folder color). */
+  --folder-red: #d13438;
+  --folder-orange: #ca5010;
+  --folder-yellow: #c19c00;
+  --folder-green: #498205;
+  --folder-teal: #038387;
+  --folder-blue: #0078d4;
+  --folder-purple: #8764b8;
+  --folder-pink: #c239b3;
+  --folder-grey: #7a7574;
 }
 
 :root[data-theme="dark"] {
@@ -64,4 +74,13 @@
   --danger: #ff6b5e;
   --success: #4ac26b;
   --focus: #6ea2f5;
+  --folder-red: #ff6b6b;
+  --folder-orange: #f7894a;
+  --folder-yellow: #f2d04b;
+  --folder-green: #7bc043;
+  --folder-teal: #3cc8c8;
+  --folder-blue: #5aa9f0;
+  --folder-purple: #b39ddb;
+  --folder-pink: #f078d8;
+  --folder-grey: #a19f9d;
 }

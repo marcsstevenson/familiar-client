@@ -4,6 +4,7 @@ import { createStore, reconcile } from "solid-js/store";
 import { type CommandError, isCommandError, run } from "../api";
 import type { FolderRow } from "../../../../../bindings/commands";
 import { onStoreChanged } from "../list/api";
+import { FolderMenu } from "./FolderMenu";
 import { dragged, removeFromList, searchQuery, selectedFolder, setDragged, setSearchQuery, setSelectedFolder, setSelectedMessage } from "../state";
 
 /** Well-known folders first, in this order; the rest keep the tree order. */
@@ -111,6 +112,17 @@ export function FolderTree(props: { views: { name: string; query: string }[] }) 
       .filter((f) => f.well_known === "inbox")
       .reduce((n, f) => n + f.unread, 0),
   );
+  const pinned = createMemo(() => folders.filter((f) => f.pinned));
+  const manyAccounts = createMemo(() => accounts().size > 1);
+  // The folder whose context menu is open, and where.
+  const [menu, setMenu] = createSignal<{ folder: FolderRow; x: number; y: number } | null>(null);
+  const openMenu = (f: FolderRow) => (e: MouseEvent) => {
+    e.preventDefault();
+    // From the keyboard (menu key, Shift+F10) there is no pointer: open by the row.
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const keyboard = e.clientX === 0 && e.clientY === 0;
+    setMenu({ folder: { ...f }, x: keyboard ? r.left + 24 : e.clientX, y: keyboard ? r.bottom : e.clientY });
+  };
   const error = () => (isCommandError(data.error) ? (data.error as CommandError).message : null);
 
   return (
@@ -123,6 +135,25 @@ export function FolderTree(props: { views: { name: string; query: string }[] }) 
         selected={selectedFolder() === null && searchQuery() === null}
         onSelect={() => choose(null)}
       />
+      <Show when={pinned().length > 0}>
+        <div role="group" aria-label="Pinned folders">
+          <For each={pinned()}>
+            {(f) => (
+              <FolderItem
+                name={manyAccounts() ? `${f.name} · ${f.account}` : f.name}
+                unread={f.unread}
+                depth={0}
+                color={f.color}
+                selected={selectedFolder() === f.id && searchQuery() === null}
+                onSelect={() => choose(f.id)}
+                onContextMenu={openMenu(f)}
+                canDrop={() => dragged()?.account === f.account}
+                onDrop={() => dropOn(f)}
+              />
+            )}
+          </For>
+        </div>
+      </Show>
       <Show when={props.views.length > 0}>
         <div role="group" aria-label="Saved searches">
           <div class="folder-account">Views</div>
@@ -167,6 +198,8 @@ export function FolderTree(props: { views: { name: string; query: string }[] }) 
                       onToggle={(open) => setOpen(`f:${f.id}`, open)}
                       selected={selectedFolder() === f.id && searchQuery() === null}
                       onSelect={() => choose(f.id)}
+                      color={f.color}
+                      onContextMenu={openMenu(f)}
                       canDrop={() => dragged()?.account === f.account}
                       onDrop={() => dropOn(f)}
                     />
@@ -177,6 +210,9 @@ export function FolderTree(props: { views: { name: string; query: string }[] }) 
           );
         }}
       </For>
+      <Show when={menu()}>
+        {(m) => <FolderMenu folder={m().folder} x={m().x} y={m().y} onClose={() => setMenu(null)} onChanged={() => void refetch()} />}
+      </Show>
     </div>
   );
 }
@@ -193,6 +229,9 @@ function FolderItem(props: {
   /** Whether the message being dragged can be moved here (same account). */
   canDrop?: () => boolean;
   onDrop?: () => void;
+  /** Its colour (`fam folder color`), shown as a dot before the name. */
+  color?: string | null;
+  onContextMenu?: (e: MouseEvent) => void;
 }) {
   const [over, setOver] = createSignal(false);
   return (
@@ -204,6 +243,7 @@ function FolderItem(props: {
       aria-expanded={props.expanded}
       style={{ "padding-left": `calc(var(--space-2) + ${props.depth} * var(--space-5))` }}
       onClick={props.onSelect}
+      onContextMenu={props.onContextMenu}
       onDragOver={(e) => {
         if (!props.canDrop?.()) return;
         e.preventDefault();
@@ -232,6 +272,9 @@ function FolderItem(props: {
       >
         {props.expanded === undefined ? "" : props.expanded ? "▾" : "▸"}
       </span>
+      <Show when={props.color}>
+        {(c) => <span class="folder-dot" aria-hidden="true" style={{ background: `var(--folder-${c()})` }} />}
+      </Show>
       <span class="folder-name">{props.name}</span>
       <Show when={props.unread > 0}>
         <span class="folder-count">

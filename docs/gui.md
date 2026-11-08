@@ -29,7 +29,11 @@ The shell has a few IPC commands of its own: `ui_info` (version, platform, the `
 
 ## Folders and the message list
 
-The folder pane shows "All inboxes" (every account's Inbox together), then each account's tree from `folder.list`, with the well-known folders first.
+The folder pane shows "All inboxes" (every account's Inbox together), then pinned folders, then each account's tree from `folder.list`, with the well-known folders first.
+
+Right-clicking a folder (or the menu key / Shift+F10) opens its menu: pin or unpin, a colour (shown as a dot before the name), and for folders that aren't built in, Rename… and Delete… (which asks first, then moves the folder into Deleted Items). Colours and pins are kept on this device only, in `folders.json` in the data directory, keyed by the folder's Graph ID so they survive a rename or move; `fam folder color <folder> <colour|none>`, `fam folder pin` and `fam folder unpin` change the same file. Rename and delete are `folder.rename` and `folder.delete` through the op queue.
+
+The splitters between the panes drag to resize (arrow keys when focused, double-click to reset); the widths are kept in localStorage. The folder and list panes keep their widths when the window resizes, and the reading pane takes the change. The sort, Unread and count row above the list shows only while the pointer is over the search box (or while it isn't the default), and the "images from this sender are always shown" line shows only while the pointer is over the reading pane's header.
 
 The list is virtualised. Rust (`src/list.rs`) holds the sorted message IDs of the open view, and the front end asks for the rows on screen by position:
 
