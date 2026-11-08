@@ -49,6 +49,11 @@ struct UiInfo {
     /// Each account's `processed_folder` from config.toml, by account key:
     /// the list shows its tick button for these accounts.
     processed: std::collections::BTreeMap<String, String>,
+    /// `[ai] tool` when `[ai]` is on (`auto`, `claude`, `codex` or a path):
+    /// the Add to calendar dialog names it while it waits.
+    ai_tool: Option<String>,
+    /// The accounts whose mail `[ai]` may send to that tool.
+    ai_accounts: Vec<String>,
     /// True when `FAMILIAR_BENCH_OUT` names a file: the front end then runs
     /// its timing script and reports with `bench_report`.
     bench: bool,
@@ -66,6 +71,15 @@ fn ui_info() -> UiInfo {
     let (config, config_error) = match config {
         Ok(c) => (c, None),
         Err(e) => (None, Some(e)),
+    };
+    let (ai_tool, ai_accounts) = match &config {
+        Some(c) if c.ai.enabled && c.ai.tool != "none" => (
+            Some(c.ai.tool.clone()),
+            c.ai.accounts
+                .clone()
+                .unwrap_or_else(|| c.accounts.keys().cloned().collect()),
+        ),
+        _ => (None, Vec::new()),
     };
     let (theme, keys, views, processed) = match config {
         Some(c) => (
@@ -92,6 +106,8 @@ fn ui_info() -> UiInfo {
         keys,
         views,
         processed,
+        ai_tool,
+        ai_accounts,
         config_error,
         bench: std::env::var_os(BENCH_ENV).is_some(),
     }

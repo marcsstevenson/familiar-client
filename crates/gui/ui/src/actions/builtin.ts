@@ -1,7 +1,7 @@
 // The built-in actions. The message actions run the same registry commands as
 // `fam`, on the selected message.
 import { isCommandError, run } from "../api";
-import { listNav, notify, processMessage, processedFolders, removeFromList, selectedMessage, selectedRow } from "../state";
+import { listNav, notify, processMessage, processedFolders, readingFrom, removeFromList, selectedMessage, selectedRow, setEventDialog } from "../state";
 import { searchFocus } from "../list/SearchBar";
 import { cycleTheme } from "../theme";
 import { openCompose } from "../compose/spec";
@@ -106,6 +106,17 @@ export function registerBuiltinActions(openPalette: (prefill?: string) => void):
     enabled: hasMessage,
     cli: () => `fam mail read ${selectedMessage()} --unread`,
     run: () => onSelected("Marked unread", (id) => run("mail.read", { messages: [id], unread: true })),
+  });
+  registerAction({
+    id: "add_to_calendar",
+    title: "Add to calendar (events in this email)",
+    key: "Ctrl+Shift+A",
+    enabled: hasMessage,
+    cli: () => `fam cal propose --from-mail ${selectedMessage()}`,
+    run: () => {
+      const id = selectedMessage();
+      if (id !== null) setEventDialog({ message: id, from: readingFrom() });
+    },
   });
   registerAction({
     id: "move",

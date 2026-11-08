@@ -8,7 +8,7 @@
 // marks it read.
 import { For, Show, createEffect, createSignal, on } from "solid-js";
 import { run } from "../api";
-import { selectedMessage } from "../state";
+import { selectedMessage, setEventDialog, setReadingFrom } from "../state";
 import { resolvedTheme } from "../theme";
 import { Attachments } from "./Attachments";
 import { type MailFetchOutput, type ReadView, errorText, openLink, openMessage, trustSender } from "./api";
@@ -49,6 +49,7 @@ export function ReadingPane() {
       let v = await openMessage(id, true, showImages);
       if (g !== generation) return;
       setView(v);
+      setReadingFrom(v.message.from.addr);
       // Opening a message reads it, as in Outlook.
       if (!v.message.is_read) {
         run("mail.read", { messages: [id] }).catch((e) =>
@@ -73,6 +74,7 @@ export function ReadingPane() {
       setView(null);
       setHover(null);
       setLight(false);
+      setReadingFrom("");
       if (id === null) {
         generation++;
         return;
@@ -123,6 +125,13 @@ export function ReadingPane() {
               <header class="reading-header">
                 <div class="reading-title">
                   <h1 class="reading-subject">{m().subject || "(no subject)"}</h1>
+                  <button
+                    class="reading-calendar"
+                    title="Add the events in this email to a calendar (Ctrl+Shift+A)"
+                    onClick={() => setEventDialog({ message: m().id, from: m().from.addr })}
+                  >
+                    Add to calendar
+                  </button>
                   <Show when={resolvedTheme() === "dark" && v().html}>
                     <button
                       class="reading-mode"
