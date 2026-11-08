@@ -1,7 +1,7 @@
 // The built-in actions. The message actions run the same registry commands as
 // `fam`, on the selected message.
 import { isCommandError, run } from "../api";
-import { listNav, notify, removeFromList, selectedMessage, selectedRow } from "../state";
+import { listNav, notify, processMessage, processedFolders, removeFromList, selectedMessage, selectedRow } from "../state";
 import { searchFocus } from "../list/SearchBar";
 import { cycleTheme } from "../theme";
 import { openCompose } from "../compose/spec";
@@ -40,6 +40,19 @@ export function registerBuiltinActions(openPalette: (prefill?: string) => void):
     enabled: hasMessage,
     cli: () => `fam mail archive ${selectedMessage()}`,
     run: () => onSelectedLeaves("Archived", (id) => run("mail.archive", { messages: [id] })),
+  });
+  registerAction({
+    id: "process",
+    title: "Processed (move to the account's processed folder)",
+    enabled: () => {
+      const r = selectedRow();
+      return r !== null && r.id === selectedMessage() && processedFolders[r.account] !== undefined;
+    },
+    cli: () => `fam mail process ${selectedMessage()}`,
+    run: () => {
+      const r = selectedRow();
+      return r === null ? undefined : processMessage(r.id, r.account);
+    },
   });
   registerAction({
     id: "delete",

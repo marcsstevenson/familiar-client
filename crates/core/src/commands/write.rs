@@ -388,6 +388,74 @@ impl Command for MailArchive {
     }
 }
 
+/// `fam mail process`.
+pub struct MailProcess;
+
+/// Input for `fam mail process`.
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct MailProcessInput {
+    /// Local message IDs.
+    #[schemars(extend("x-positional" = 0))]
+    pub messages: Vec<i64>,
+    /// Only show what would change.
+    #[serde(default)]
+    pub dry_run: bool,
+    /// Wait until the server has the change (needs famd).
+    #[serde(default)]
+    pub wait: bool,
+    /// Seconds --wait waits at most (default 60).
+    #[serde(default)]
+    pub wait_secs: Option<u32>,
+}
+
+/// Each account's `processed_folder` from config.toml.
+pub fn processed_folders() -> Result<std::collections::BTreeMap<String, String>, CommandError> {
+    Ok(crate::commands::draft::config()?
+        .map(|c| {
+            c.accounts
+                .into_iter()
+                .filter_map(|(k, a)| a.processed_folder.map(|f| (k, f)))
+                .collect()
+        })
+        .unwrap_or_default())
+}
+
+impl Command for MailProcess {
+    type Input = MailProcessInput;
+    type Output = WriteOutput;
+    const SPEC: CommandSpec = CommandSpec {
+        path: &["mail", "process"],
+        summary: "Move messages to their account's processed folder",
+        description: "Moves messages to the folder set as processed_folder for their account in config.toml, on this device at once and queued for the server. The folder is created at the top level if the account doesn't have it yet.",
+        access: Access::Write,
+        errors: &[
+            ErrorKind::NotFound,
+            ErrorKind::Config,
+            ErrorKind::Conflict,
+            ErrorKind::PermissionDenied,
+            ErrorKind::DaemonUnavailable,
+            ErrorKind::Offline,
+        ],
+    };
+
+    fn run(&self, _ctx: &Context<'_>, i: MailProcessInput) -> Result<WriteOutput, CommandError> {
+        run_write(
+            WriteRequest::Process {
+                messages: i.messages,
+                folders: processed_folders()?,
+            },
+            i.dry_run,
+            i.wait,
+            i.wait_secs,
+        )
+    }
+
+    fn render_text(&self, o: &WriteOutput) -> String {
+        o.render()
+    }
+}
+
 /// `fam mail delete`.
 pub struct MailDelete;
 

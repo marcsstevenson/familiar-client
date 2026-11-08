@@ -2,7 +2,7 @@
 // (folders/, list/, reading/, compose/) and talks to the others only through
 // these signals.
 import { createSignal } from "solid-js";
-import { isCommandError } from "./api";
+import { isCommandError, run } from "./api";
 
 /** The folder shown in the list: a local folder ID, or null for the unified Inbox. */
 export const [selectedFolder, setSelectedFolder] = createSignal<number | null>(null);
@@ -11,7 +11,7 @@ export const [selectedFolder, setSelectedFolder] = createSignal<number | null>(n
 export const [selectedMessage, setSelectedMessage] = createSignal<number | null>(null);
 
 /** The row selected in the list, for actions that need more than its ID. */
-export type SelectedRow = { id: number; is_read: boolean; is_flagged: boolean };
+export type SelectedRow = { id: number; account: string; is_read: boolean; is_flagged: boolean };
 export const [selectedRow, setSelectedRow] = createSignal<SelectedRow | null>(null);
 
 /** A short line in the status bar after an action, cleared after a few seconds. */
@@ -46,6 +46,17 @@ export async function removeFromList(id: number, label: string, job: () => Promi
     if (listNav.leaving === id) listNav.leaving = null;
     notify(isCommandError(e) ? e.message : String(e), true);
   }
+}
+
+/** Each account's processed folder (config.toml `processed_folder`), by
+ * account key; filled once at start. Accounts without one get no tick. */
+export const processedFolders: Record<string, string> = {};
+
+/** Moves message `id` of `account` to that account's processed folder, then
+ * opens the next one as delete does. */
+export function processMessage(id: number, account: string): Promise<void> {
+  const folder = processedFolders[account];
+  return removeFromList(id, `Moved to ${folder}`, () => run("mail.process", { messages: [id] }));
 }
 
 /** The search shown in the list instead of a folder, in `fam mail search` syntax. */

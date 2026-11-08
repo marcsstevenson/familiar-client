@@ -99,6 +99,9 @@ pub struct Account {
     /// addresses the organisation lets it send as), offered as From choices.
     #[serde(default)]
     pub aliases: Vec<String>,
+    /// The folder "processed" messages go to (`fam mail process`, the tick in
+    /// the desktop app). Off when unset; created at the top level when missing.
+    pub processed_folder: Option<String>,
     /// Signatures for this account.
     pub signature: Option<Signature>,
 }

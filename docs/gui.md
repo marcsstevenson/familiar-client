@@ -68,6 +68,7 @@ Actions and their default keys (`ui/src/actions/builtin.ts`):
 | `palette` | Ctrl+K | | Show all commands |
 | `next`, `previous` | `j`, `k` | arrows (in the list) | Move through the list |
 | `archive` | `e` | Backspace | `fam mail archive` |
+| `process` | (none; set one in `[keys]`) | | `fam mail process` |
 | `delete` | `#` | Delete, Ctrl+D | `fam mail delete` |
 | `flag` | `s` | Insert | `fam mail flag` (or `--clear`) |
 | `toggle_read` | `u` | | `fam mail read` (or `--unread`) |
@@ -78,7 +79,7 @@ Actions and their default keys (`ui/src/actions/builtin.ts`):
 | `search` | `/` | Ctrl+E, F3 | Go to the search box |
 | `theme` | | | Cycle the theme |
 
-The Outlook keys are bound as well as the single keys; `[keys]` changes only the single key. Hovering a row shows a delete button, and dragging a row onto a folder of the same account moves it there. When the open message is deleted, archived or moved, the next one down opens (or the one above, at the end of the list). Accounts and folders with subfolders collapse with their arrow (or Left and Right); the app remembers which.
+The Outlook keys are bound as well as the single keys; `[keys]` changes only the single key. Hovering a row shows a delete button, and a tick for accounts with a `processed_folder` in config.toml that moves the message there (creating the folder if needed), and dragging a row onto a folder of the same account moves it there. When the open message is deleted, archived, processed or moved, the next one down opens (or the one above, at the end of the list). Accounts and folders with subfolders collapse with their arrow (or Left and Right); the app remembers which.
 
 Change a key in `config.toml`, by action ID:
 

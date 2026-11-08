@@ -2,7 +2,7 @@
 // component asks for the rows on screen a page at a time and draws only those.
 import { For, Show, createEffect, createSignal, on, onCleanup, onMount } from "solid-js";
 import { isCommandError, run } from "../api";
-import { listNav, removeFromList, setDragged, searchQuery, selectedFolder, selectedMessage, setSelectedMessage, setSelectedRow } from "../state";
+import { listNav, processMessage, processedFolders, removeFromList, setDragged, searchQuery, selectedFolder, selectedMessage, setSelectedMessage, setSelectedRow } from "../state";
 import { OnlineHits, SearchBar } from "./SearchBar";
 import { type Row, type Sort, listIndexOf, listOpen, listRows, onStoreChanged } from "./api";
 import { shortDate } from "./format";
@@ -160,7 +160,7 @@ export function MessageList() {
     const id = selectedMessage();
     setSelectedRow((prev) =>
       r && r.id === id
-        ? { id: r.id, is_read: r.is_read, is_flagged: r.is_flagged }
+        ? { id: r.id, account: r.account, is_read: r.is_read, is_flagged: r.is_flagged }
         : prev && prev.id === id
           ? { ...prev, is_read: true }
           : null,
@@ -342,10 +342,27 @@ function ListRow(props: {
               </Show>
             </div>
             <div class="row-preview">{r().preview}</div>
-            {/* For the mouse; the keyboard has Delete. Not a button inside the
-                option, so screen readers keep one stop per row. */}
+            {/* For the mouse; the keyboard has Delete (and a key for Processed
+                if one is set). Not buttons inside the option, so screen
+                readers keep one stop per row. */}
+            <Show when={processedFolders[r().account]}>
+              {(folder) => (
+                <span
+                  class="row-action row-process"
+                  title={`Processed: move to ${folder()}`}
+                  aria-hidden="true"
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    void processMessage(r().id, r().account);
+                  }}
+                >
+                  ✓
+                </span>
+              )}
+            </Show>
             <span
-              class="row-delete"
+              class="row-action row-delete"
               title="Delete"
               aria-hidden="true"
               onMouseDown={(e) => e.stopPropagation()}
