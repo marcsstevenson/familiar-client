@@ -389,6 +389,20 @@ Changes a draft's recipients, subject or body, or adds and removes attachments. 
 - `--wait`: Wait until the server has the change (needs famd).
 - `--wait-secs <wait-secs>`: Seconds --wait waits at most (default 60).
 
+## folder.color
+
+Colour a mail folder in the folder pane. Access: `write`.
+
+```
+fam folder color <FOLDER> <COLOR>
+```
+
+Gives a folder a colour in the desktop app's folder pane, or none to clear it. Kept on this device only (folders.json in the data directory), not on the server; it follows the folder through a rename or move.
+
+- `--account <account>`: The account, when more than one has the folder.
+- `COLOR` (required): red, orange, yellow, green, teal, blue, purple, pink, grey, or none.
+- `FOLDER` (required): The folder (path, or name).
+
 ## folder.create
 
 Create a mail folder. Access: `write`.
@@ -454,6 +468,19 @@ Moves a folder (with everything in it) under --to, or to the top level with --to
 - `--wait`: Wait until the server has the change (needs famd).
 - `--wait-secs <wait-secs>`: Seconds --wait waits at most (default 60).
 
+## folder.pin
+
+Pin a mail folder to the top of the folder pane. Access: `write`.
+
+```
+fam folder pin <FOLDER>
+```
+
+Lists a folder below All inboxes in the desktop app's folder pane. Kept on this device only (folders.json in the data directory), not on the server.
+
+- `--account <account>`: The account, when more than one has the folder.
+- `FOLDER` (required): The folder (path, or name).
+
 ## folder.rename
 
 Rename a mail folder. Access: `write`.
@@ -470,6 +497,19 @@ Renames a folder on this device at once and queues it for the server. Built-in f
 - `NAME` (required): Its new name.
 - `--wait`: Wait until the server has the change (needs famd).
 - `--wait-secs <wait-secs>`: Seconds --wait waits at most (default 60).
+
+## folder.unpin
+
+Unpin a mail folder. Access: `write`.
+
+```
+fam folder unpin <FOLDER>
+```
+
+Stops listing a pinned folder below All inboxes in the desktop app's folder pane.
+
+- `--account <account>`: The account, when more than one has the folder.
+- `FOLDER` (required): The folder (path, or name).
 
 ## mail.archive
 

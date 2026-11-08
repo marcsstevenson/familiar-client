@@ -788,6 +788,15 @@ export type ExitCodeDoc = {
   kind?: ErrorKind | null;
 };
 
+export type FolderColorInput = {
+  /** The account, when more than one has the folder. */
+  account?: string | null;
+  /** red, orange, yellow, green, teal, blue, purple, pink, grey, or none. */
+  color: string;
+  /** The folder (path, or name). */
+  folder: string;
+};
+
 export type FolderCreateInput = {
   /** The account (config name or address); needed with more than one. */
   account?: string | null;
@@ -847,6 +856,13 @@ export type FolderMoveInput = {
   wait_secs?: number | null;
 };
 
+export type FolderPinInput = {
+  /** The account, when more than one has the folder. */
+  account?: string | null;
+  /** The folder (path, or name). */
+  folder: string;
+};
+
 export type FolderRenameInput = {
   /** The account; needed with more than one. */
   account?: string | null;
@@ -865,6 +881,8 @@ export type FolderRenameInput = {
 export type FolderRow = {
   /** Account name. */
   account: string;
+  /** Its colour (`fam folder color`), on this device only. */
+  color?: string | null;
   /** How deep it is: 0 at the top level. */
   depth: number;
   /** Local folder ID. */
@@ -875,6 +893,8 @@ export type FolderRow = {
   parent?: number | null;
   /** Full path from the top of the mailbox, such as `Inbox/Club`. Accepted by `fam mail list --folder`. */
   path: string;
+  /** Pinned to the top of the folder pane (`fam folder pin`), on this device only. */
+  pinned?: boolean;
   /** Graph folder ID. */
   remote_id: string;
   /** Messages in the folder on this device. */
@@ -1667,6 +1687,8 @@ export interface Commands {
   "draft.send": { input: DraftSendInput; output: WriteOutput };
   /** Change a draft */
   "draft.update": { input: DraftUpdateInput; output: WriteOutput };
+  /** Colour a mail folder in the folder pane */
+  "folder.color": { input: FolderColorInput; output: FolderRow };
   /** Create a mail folder */
   "folder.create": { input: FolderCreateInput; output: WriteOutput };
   /** Delete a mail folder (to Deleted Items) */
@@ -1675,8 +1697,12 @@ export interface Commands {
   "folder.list": { input: FolderListInput; output: FolderListOutput };
   /** Move a mail folder under another, or to the top level */
   "folder.move": { input: FolderMoveInput; output: WriteOutput };
+  /** Pin a mail folder to the top of the folder pane */
+  "folder.pin": { input: FolderPinInput; output: FolderRow };
   /** Rename a mail folder */
   "folder.rename": { input: FolderRenameInput; output: WriteOutput };
+  /** Unpin a mail folder */
+  "folder.unpin": { input: FolderPinInput; output: FolderRow };
   /** Move messages to Archive */
   "mail.archive": { input: MailArchiveInput; output: WriteOutput };
   /** List or save a message's attachments */
@@ -1751,11 +1777,14 @@ export const COMMAND_NAMES = [
   "draft.reply",
   "draft.send",
   "draft.update",
+  "folder.color",
   "folder.create",
   "folder.delete",
   "folder.list",
   "folder.move",
+  "folder.pin",
   "folder.rename",
+  "folder.unpin",
   "mail.archive",
   "mail.attachments",
   "mail.delete",

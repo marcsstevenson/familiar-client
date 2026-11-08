@@ -218,6 +218,125 @@ button {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.folder-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: var(--space-3);
+}
+
+/* Folder context menu and its dialogs */
+.folder-menu-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+}
+.folder-menu-backdrop.modal {
+  background: rgb(0 0 0 / 0.25);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  padding-top: 15vh;
+}
+.folder-menu {
+  position: fixed;
+  min-width: 200px;
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-2) 0;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.25);
+}
+.folder-menu > button {
+  border: 0;
+  background: transparent;
+  text-align: left;
+  padding: var(--space-2) var(--space-4);
+  cursor: default;
+}
+.folder-menu > button:hover,
+.folder-menu > button:focus-visible {
+  background: var(--bg-hover);
+}
+.folder-menu .danger {
+  color: var(--danger);
+}
+.folder-menu-colours {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  margin: var(--space-2) 0;
+}
+.folder-swatch {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  cursor: default;
+}
+.folder-swatch.none {
+  background: linear-gradient(135deg, transparent 45%, var(--text-muted) 45%, var(--text-muted) 55%, transparent 55%), var(--bg);
+}
+.folder-swatch.current {
+  outline: 2px solid var(--text);
+  outline-offset: 1px;
+}
+.folder-dialog {
+  width: min(420px, 90vw);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 12px 40px rgb(0 0 0 / 0.3);
+  user-select: text;
+}
+.folder-dialog p {
+  margin: 0;
+}
+.folder-dialog label {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+.folder-dialog input {
+  font: inherit;
+  color: inherit;
+  background: var(--bg-sidebar);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+}
+.folder-dialog-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+}
+.folder-dialog-buttons button {
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+}
+.folder-dialog-buttons .primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--text-on-accent);
+}
+.folder-dialog-buttons .danger-fill {
+  background: var(--danger);
+  border-color: var(--danger);
+  color: var(--text-on-accent);
+}
 .folder-item.unread .folder-name,
 .folder-count {
   font-weight: 600;
