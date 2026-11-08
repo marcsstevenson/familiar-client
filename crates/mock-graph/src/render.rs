@@ -157,7 +157,7 @@ pub(crate) fn message(rec: &MessageRecord, prefer: &Prefer) -> Value {
     } else {
         json!({ "contentType": "html", "content": html })
     };
-    json!({
+    let mut v = json!({
         "@odata.type": "#microsoft.graph.message",
         "@odata.etag": etag(rec.change_key, &m.id),
         "id": id,
@@ -188,7 +188,12 @@ pub(crate) fn message(rec: &MessageRecord, prefer: &Prefer) -> Value {
         "bccRecipients": [],
         "replyTo": [],
         "flag": { "flagStatus": if m.flagged { "flagged" } else { "notFlagged" } },
-    })
+    });
+    if let Some(meeting) = &m.meeting {
+        v["@odata.type"] = json!("#microsoft.graph.eventMessage");
+        v["meetingMessageType"] = json!(meeting.meeting_message_type);
+    }
+    v
 }
 
 pub(crate) fn removed(odata_type: &str, id: &str) -> Value {

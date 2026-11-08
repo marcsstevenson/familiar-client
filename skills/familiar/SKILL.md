@@ -57,9 +57,10 @@ Drafts get the account's signature from `config.toml` automatically: `[accounts.
 ### Add an event from an email
 
 1. Find the email and note its `id`.
-2. Preview: `fam cal add --from-mail 4182 --purpose family --dry-run --json`. The subject, date, time and place are suggested from the email, and the event links back to it. `--purpose family` picks the calendar configured for that purpose (the Family Room calendar); `--calendar "Family Room"` names one directly. `fam cal calendars --json` lists them.
-3. Override anything the email got wrong: `--start "sat 9am"`, `--minutes 90`, `--location "Parklands"`, or a subject as the first argument.
-4. Run it again without `--dry-run`. Adding events needs `write`; inviting people (`--attendee`) needs `send`.
+2. See what it suggests: `fam cal propose --from-mail 4182 --json`. A meeting request comes back as an `invitation`: answer it with `fam cal rsvp <event> accept` instead of adding it. Events from an `.ics` attachment come with exact times and repeats; `already` means it is in the calendar.
+3. Preview: `fam cal add --from-mail 4182 --purpose family --dry-run --json`. The subject, date, time and place are suggested from the email, and the event links back to it. `--purpose family` picks the calendar configured for that purpose (the Family Room calendar); `--calendar "Family Room"` names one directly. `fam cal calendars --json` lists them.
+4. Override anything the email got wrong: `--start "sat 9am"`, `--minutes 90`, `--location "Parklands"`, or a subject as the first argument.
+5. Run it again without `--dry-run`. Adding events needs `write`; inviting people (`--attendee`) needs `send`.
 
 ### Check the calendar
 

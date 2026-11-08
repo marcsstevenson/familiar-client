@@ -18,6 +18,7 @@ export const COMMAND_SURFACE = {
   "cal.delete": "palette",
   "cal.edit": "palette",
   "cal.list": "palette",
+  "cal.propose": "palette",
   "cal.rsvp": "palette",
   "config.path": "palette",
   "config.validate": "palette",

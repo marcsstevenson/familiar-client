@@ -45,7 +45,7 @@ fn store_err(e: familiar_store::Error) -> CommandError {
     CommandError::internal(format!("store: {e}"))
 }
 
-fn open(paths: &DaemonPaths) -> Result<Reader, CommandError> {
+pub(crate) fn open(paths: &DaemonPaths) -> Result<Reader, CommandError> {
     match Reader::open(&paths.store) {
         Ok(r) => Ok(r),
         Err(familiar_store::Error::NoStore(_)) => Err(CommandError::new(
@@ -284,7 +284,10 @@ pub struct CalAddInput {
 }
 
 /// The email's subject, text, when it arrived and its account's key.
-fn mail_text(r: &Reader, id: i64) -> Result<(String, String, i64, String), CommandError> {
+pub(crate) fn mail_text(
+    r: &Reader,
+    id: i64,
+) -> Result<(String, String, i64, String), CommandError> {
     let m = r
         .message(MessageId(id))
         .map_err(store_err)?

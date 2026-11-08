@@ -94,7 +94,7 @@ pub struct AttachmentContent {
 }
 
 /// Where a message lives on the server: its account key and Graph ID.
-fn locate(paths: &DaemonPaths, message: i64) -> Result<(String, String), CommandError> {
+pub(crate) fn locate(paths: &DaemonPaths, message: i64) -> Result<(String, String), CommandError> {
     let r = open_store(paths)?;
     let m = r
         .message(MessageId(message))
@@ -115,7 +115,11 @@ fn locate(paths: &DaemonPaths, message: i64) -> Result<(String, String), Command
     Ok((key, m.remote_id))
 }
 
-fn graph_get(paths: &DaemonPaths, account: &str, path: String) -> Result<Value, CommandError> {
+pub(crate) fn graph_get(
+    paths: &DaemonPaths,
+    account: &str,
+    path: String,
+) -> Result<Value, CommandError> {
     Client::connect(&paths.socket)
         .map_err(|e| {
             if e.kind == ErrorKind::DaemonUnavailable {

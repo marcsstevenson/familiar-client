@@ -198,6 +198,19 @@ Lists events from the calendars on this device for --days days (default 7) from 
 - `--from <from>`: First day: `today` (the default), `tomorrow`, `yesterday` or a date like 2026-11-05.
 - `--tz <tz>`: Time zone to show times in, IANA (Pacific/Auckland) or Windows (New Zealand Standard Time). Default: this computer's.
 
+## cal.propose
+
+Suggest calendar events from an email, without adding them. Access: `read`.
+
+```
+fam cal propose
+```
+
+Reads an email and says which calendar events it suggests, for you to check before adding them with fam cal add. A meeting request comes back as an invitation to answer with fam cal rsvp, not as a new event. Otherwise the events in its .ics attachments, or else the date, time and place found in its text. Each event says whether it is already in your calendar. Nothing is changed. Attachments and invitations are read through famd; without famd only the text is used.
+
+- `--from-mail <from-mail>` (required): The email (local message ID).
+- `--tz <tz>`: Time zone to give times in (IANA or Windows). Default: this computer's.
+
 ## cal.rsvp
 
 Answer a meeting invitation. Access: `write`.
