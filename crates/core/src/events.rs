@@ -1055,12 +1055,37 @@ fn starts_with_time(s: &str) -> bool {
 /// `Wolfbrook Arena, Christchurch`.
 fn listed_location(text: &str, today: NaiveDate) -> Option<String> {
     const SEPS: [char; 3] = ['•', '|', '·'];
-    for line in text.lines() {
-        let parts: Vec<&str> = line
-            .split(|c| SEPS.contains(&c))
-            .map(str::trim)
+    let split = |line: &str| -> Vec<String> {
+        line.split(|c| SEPS.contains(&c))
+            .map(|p| {
+                // A link's words after the venue ("Get Directions").
+                let p = p.trim();
+                p.strip_suffix("Get Directions")
+                    .unwrap_or(p)
+                    .trim()
+                    .to_string()
+            })
             .filter(|p| !p.is_empty())
-            .collect();
+            .collect()
+    };
+    // Short parts are the venue and town, until one reads as a time, a
+    // date or a price; at most two.
+    let follow = |parts: &[String], place: &mut Vec<String>| {
+        for next in parts {
+            let words: Vec<&str> = next.split_whitespace().collect();
+            let other = words.len() > 4
+                || time_words(&words).is_some()
+                || parse_date(&words, today).is_some()
+                || next.contains(['$', '€', '£']);
+            if other || place.len() >= 2 {
+                break;
+            }
+            place.push(next.clone());
+        }
+    };
+    let lines: Vec<&str> = text.lines().filter(|l| !l.trim().is_empty()).collect();
+    for (li, line) in lines.iter().enumerate() {
+        let parts = split(line);
         if parts.len() < 2 {
             continue;
         }
@@ -1089,18 +1114,16 @@ fn listed_location(text: &str, today: NaiveDate) -> Option<String> {
             {
                 place.push(here.to_string());
             }
-            // Short follow-on parts are the venue and town, until one
-            // reads as a time, a date or a price.
-            for next in &parts[i + 1..] {
-                let words: Vec<&str> = next.split_whitespace().collect();
-                let other = words.len() > 4
-                    || time_words(&words).is_some()
-                    || parse_date(&words, today).is_some()
-                    || next.contains(['$', '€', '£']);
-                if other || place.len() >= 2 {
-                    break;
+            follow(&parts[i + 1..], &mut place);
+            // `Thursday 12/11/2026 • 20:00` with the venue on the next line
+            // (Ticketmaster): `Wolfbrook Arena • Christchurch`.
+            if place.is_empty() && i + 1 == parts.len() {
+                if let Some(next) = lines.get(li + 1) {
+                    let next = split(next);
+                    if next.len() >= 2 {
+                        follow(&next, &mut place);
+                    }
                 }
-                place.push((*next).to_string());
             }
             if !place.is_empty() {
                 return Some(place.join(", "));
@@ -1343,6 +1366,18 @@ mod tests {
             .as_deref(),
             Some("Wolfbrook Arena, Christchurch")
         );
+        // Ticketmaster's reminder: the venue on the line after the time,
+        // with a "Get Directions" link after it.
+        let tm = suggest(
+            "Event Reminder: Flight of the Conchords",
+            "The wait is nearly over\nFlight of the Conchords New Zealand Tour 2026\nThursday 12/11/2026 • 20:00\nWolfbrook Arena • Christchurch Get Directions\nGet Ready for Your Event",
+            today,
+        );
+        assert_eq!(
+            tm.location.as_deref(),
+            Some("Wolfbrook Arena, Christchurch")
+        );
+        assert_eq!(tm.time, chrono::NaiveTime::from_hms_opt(20, 0, 0));
         // The current message's venue wins over quoted history.
         assert_eq!(
             suggest(
