@@ -43,6 +43,7 @@
   --accent: #1f5fc7;
   --warn: #9a4b00;
   --danger: #c42b1c;
+  --success: #187530;
   --focus: #1f5fc7;
 }
 
@@ -61,5 +62,6 @@
   --accent: #6ea2f5;
   --warn: #f0a050;
   --danger: #ff6b5e;
+  --success: #4ac26b;
   --focus: #6ea2f5;
 }
