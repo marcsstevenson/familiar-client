@@ -84,3 +84,28 @@ Thu 12 Nov 2026
 
 Times in Pacific/Auckland.
 ```
+
+## Events an email suggests
+
+`fam cal propose --from-mail <id>` (AI events plan, WP AI.1) says which
+events an email suggests, without adding anything:
+
+- **A meeting request** comes back as an `invitation` with the meeting's
+  local event ID, to answer with `fam cal rsvp`; a cancellation, to remove
+  with `fam cal delete`. Adding it again would make a second copy. If the
+  meeting hasn't synced to this device yet, there is a note to try again
+  in a few minutes and no events.
+- **`.ics` attachments** give each of their events: subject, start, end,
+  zone (`TZID`, IANA or Windows), location, description, UID and a simple
+  repeat (`FREQ`, `INTERVAL`, `BYDAY`, `UNTIL`, `COUNT`). Repeats Familiar
+  can't set (`BYMONTHDAY`, `2TU`) give the first date with a note.
+- **Otherwise** the subject, date, time and place `fam cal add --from-mail`
+  would guess.
+
+Each event's `start` and `end` are in `fam cal add`'s form
+(`2026-11-21 18:30`, or a date for all day, the end being the last day) in
+its `time_zone`, and `repeat` maps to `--repeat`, `--every`, `--on`,
+`--until` and `--count`. `already` is the ID of an event in the account's
+calendars with the same UID, or the same subject starting within a minute.
+Invitations and attachments are read through famd; without it there is a
+note and only the text is used.

@@ -158,6 +158,19 @@ pub struct Message {
     /// File attachments.
     #[serde(default)]
     pub attachments: Vec<Attachment>,
+    /// Set for a meeting request or cancellation (a Graph `eventMessage`).
+    #[serde(default)]
+    pub meeting: Option<Meeting>,
+}
+
+/// What makes a message an `eventMessage`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Meeting {
+    /// `meetingRequest`, `meetingCancelled`, `meetingAccepted`, ...
+    pub meeting_message_type: String,
+    /// The event it is about, as given by `add_event`.
+    pub event_id: String,
 }
 
 /// A file attachment.
@@ -215,6 +228,7 @@ impl Message {
             body_html: None,
             bcc: Vec::new(),
             attachments: Vec::new(),
+            meeting: None,
         }
     }
 }

@@ -1201,6 +1201,7 @@ fn route(c: &Ctx<'_>, method: &str) -> R {
         }
         ["messages"] => list_messages(c, None),
         ["messages", _] => get_message(c, segs[1], None),
+        ["messages", _, "microsoft.graph.eventmessage"] => get_event_message(c, segs[1]),
         ["messages", _, "attachments"] => list_attachments(c, segs[1]),
         ["messages", _, "attachments", _] => get_attachment(c, segs[1], segs[3]),
         ["calendars"] => {
@@ -1427,6 +1428,18 @@ fn get_message(c: &Ctx<'_>, id: &str, folder: Option<&str>) -> R {
         return Err(GraphError::not_found());
     }
     Ok(Reply::ok(c.select(render::message(rec, &c.prefer))))
+}
+
+/// `/messages/{id}/microsoft.graph.eventMessage`: 404 unless the message is
+/// one. The event is always expanded, as `$expand=event` asks.
+fn get_event_message(c: &Ctx<'_>, id: &str) -> R {
+    let st = c.st;
+    let imm = st.lookup_message(id).ok_or_else(GraphError::not_found)?;
+    let rec = &st.messages[imm];
+    let meeting = rec.msg.meeting.as_ref().ok_or_else(GraphError::not_found)?;
+    let mut v = c.select(render::message(rec, &c.prefer));
+    v["event"] = json!({ "id": meeting.event_id });
+    Ok(Reply::ok(v))
 }
 
 fn attachment_json(a: &crate::model::Attachment) -> Value {

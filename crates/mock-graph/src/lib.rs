@@ -49,8 +49,8 @@ mod synthetic;
 pub use faults::Fault;
 pub use identity::{CONSUMER_TENANT, DEFAULT_TENANT};
 pub use model::{
-    Attachment, Calendar, Contact, EmailAddress, Event, Folder, Mailbox, Message, MutationError,
-    User,
+    Attachment, Calendar, Contact, EmailAddress, Event, Folder, Mailbox, Meeting, Message,
+    MutationError, User,
 };
 pub use recorded::{RecordedExchange, Recording};
 pub use server::{Builder, LoggedRequest, MailboxHandle, MockGraph};

@@ -588,4 +588,21 @@ impl Reader {
     pub fn event_count(&self, calendar: CalendarId) -> Result<i64> {
         event_count(&self.conn, calendar)
     }
+
+    /// An account's event by server ID, in whichever calendar it is.
+    pub fn event_by_remote(&self, account: AccountId, remote_id: &str) -> Result<Option<Event>> {
+        let mut s = self.conn.prepare_cached(&format!(
+            "SELECT {EVENT_COLS} FROM events WHERE account_id = ?1 AND remote_id = ?2"
+        ))?;
+        Ok(s.query_row(params![account, remote_id], event).optional()?)
+    }
+
+    /// An account's events with this iCalendar UID, by start.
+    pub fn events_by_uid(&self, account: AccountId, uid: &str) -> Result<Vec<Event>> {
+        let mut s = self.conn.prepare_cached(&format!(
+            "SELECT {EVENT_COLS} FROM events WHERE account_id = ?1 AND ical_uid = ?2 ORDER BY start_at"
+        ))?;
+        let rows = s.query_map(params![account, uid], event)?;
+        Ok(rows.collect::<std::result::Result<_, _>>()?)
+    }
 }

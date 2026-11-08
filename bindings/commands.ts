@@ -465,6 +465,28 @@ export type CalListOutput = {
   warnings?: Array<string>;
 };
 
+export type CalProposeInput = {
+  /** The email (local message ID). */
+  from_mail: number;
+  /** Time zone to give times in (IANA or Windows). Default: this computer's. */
+  tz?: string | null;
+};
+
+export type CalProposeOutput = {
+  /** Its account. */
+  account: string;
+  /** Events to add. */
+  events: Array<ProposedEvent>;
+  /** Set when the email is a meeting request or cancellation; answer it with `fam cal rsvp` (or remove it with `fam cal delete`) instead. */
+  invitation?: Invitation | null;
+  /** The email. */
+  message: number;
+  /** What was skipped or guessed. */
+  notes: Array<string>;
+  /** Where the proposals came from: `invite`, `ics`, `heuristic` or `none`. */
+  source: string;
+};
+
 export type CalRsvpInput = {
   /** A note to the organiser. */
   comment?: string | null;
@@ -864,6 +886,21 @@ export type FolderRow = {
 export type HitSource = "local" | "online";
 
 export type Importance = "low" | "normal" | "high";
+
+export type Invitation = {
+  /** The calendar it is in, when synced. */
+  calendar?: string | null;
+  /** The meeting's local event ID, once it has synced to this device. */
+  event?: number | null;
+  /** `request` or `cancelled`. */
+  kind: string;
+  /** Your answer so far, when synced. */
+  response?: string | null;
+  /** Its subject, when synced. */
+  subject?: string | null;
+  /** When it is, in words, when synced. */
+  when?: string | null;
+};
 
 export type ListedFolder = {
   /** Account name. */
@@ -1326,6 +1363,42 @@ export type PinResult = {
   pinned: boolean;
 };
 
+export type ProposedEvent = {
+  /** All day. */
+  all_day: boolean;
+  /** The local ID of an event already in the calendar that matches it. */
+  already?: number | null;
+  /** Same form. All day: the last day. None: `fam cal add`'s default length. */
+  end?: string | null;
+  /** Location. */
+  location?: string | null;
+  /** Notes. */
+  notes?: string | null;
+  /** How it repeats. */
+  repeat?: ProposedRepeat | null;
+  /** `YYYY-MM-DD HH:MM`, or `YYYY-MM-DD` for all day, in `time_zone`. */
+  start: string;
+  /** Subject. */
+  subject: string;
+  /** IANA zone the times are in. */
+  time_zone: string;
+  /** iCalendar UID, from an `.ics`. */
+  uid?: string | null;
+};
+
+export type ProposedRepeat = {
+  /** Or this many times (`--count`). */
+  count?: number | null;
+  /** `daily`, `weekly`, `monthly` or `yearly` (`--repeat`). */
+  every: string;
+  /** Every this many (`--every`). */
+  interval: number;
+  /** Weekly: the days, such as `tue` (`--on`). */
+  on: Array<string>;
+  /** The last date, `YYYY-MM-DD` (`--until`). */
+  until?: string | null;
+};
+
 export type QueuedOp = {
   /** Account key. */
   account: string;
@@ -1570,6 +1643,8 @@ export interface Commands {
   "cal.edit": { input: CalEditInput; output: WriteOutput };
   /** List events in a date range */
   "cal.list": { input: CalListInput; output: CalListOutput };
+  /** Suggest calendar events from an email, without adding them */
+  "cal.propose": { input: CalProposeInput; output: CalProposeOutput };
   /** Answer a meeting invitation */
   "cal.rsvp": { input: CalRsvpInput; output: WriteOutput };
   /** Show which config file is used */
@@ -1662,6 +1737,7 @@ export const COMMAND_NAMES = [
   "cal.delete",
   "cal.edit",
   "cal.list",
+  "cal.propose",
   "cal.rsvp",
   "config.path",
   "config.validate",
