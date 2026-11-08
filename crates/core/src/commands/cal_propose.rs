@@ -181,7 +181,9 @@ fn invitation(
         paths,
         key,
         format!(
-            "/me/messages/{remote}/microsoft.graph.eventMessage?$select=meetingMessageType&$expand=event($select=id)"
+            // Outlook.com refuses both the cast segment and a $select of
+            // meetingMessageType; this form works there (checked live).
+            "/me/messages/{remote}?$expand=microsoft.graph.eventMessage/event($select=id)"
         ),
     )?;
     let kind = match v.get("meetingMessageType").and_then(Value::as_str) {
