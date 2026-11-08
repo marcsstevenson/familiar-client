@@ -399,10 +399,20 @@ fn ai_events(
                     .filter_map(|d| events::parse_weekday(d))
                     .map(str::to_string)
                     .collect();
-            let until = r.until.as_deref().and_then(|u| {
-                let words: Vec<&str> = u.split_whitespace().collect();
-                events::parse_date(&words, today).map(|(d, _)| day(d))
-            });
+            let until = match r.until.as_deref() {
+                None => None,
+                Some(u) => {
+                    let words: Vec<&str> = u.split_whitespace().collect();
+                    match events::parse_date(&words, today) {
+                        Some((d, _)) => Some(day(d)),
+                        // Not an endless series in its place: the first date only.
+                        None => {
+                            notes.push(format!("{who}'s repeat end for {subject:?} ({u}) is unreadable, so only the first date is proposed"));
+                            return None;
+                        }
+                    }
+                }
+            };
             Some(ProposedRepeat {
                 every: every.to_string(),
                 interval: r.interval.unwrap_or(1).max(1),
