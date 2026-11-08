@@ -239,6 +239,9 @@ export function MessageList() {
 
   return (
     <div class="message-list">
+      {/* Sort, Unread and the count show while the pointer is over the search
+          box (or they have focus), or while they aren't the defaults. */}
+      <div class="list-top" classList={{ "show-controls": unreadOnly() || sort() !== "newest" }}>
       <SearchBar />
       <div class="list-header">
         <label class="list-control">
@@ -263,6 +266,7 @@ export function MessageList() {
         <span class="list-count">
           {total().toLocaleString()} {searchQuery() ? "found" : "messages"}
         </span>
+      </div>
       </div>
       <For each={notices()}>{(n) => <p class="list-notice">{n}</p>}</For>
       <OnlineHits />

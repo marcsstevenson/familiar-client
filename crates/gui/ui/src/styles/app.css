@@ -90,6 +90,23 @@ button {
   display: grid;
   grid-template-columns: var(--folders-w) var(--list-w) 1fr;
   min-height: 0;
+  position: relative;
+}
+/* Out of the grid flow (absolute), over the border between two panes. */
+.splitter {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 7px;
+  z-index: 5;
+  cursor: col-resize;
+  touch-action: none;
+}
+.splitter:hover,
+.splitter:active,
+.splitter:focus-visible {
+  background: linear-gradient(to right, transparent 2px, var(--accent) 2px, var(--accent) 5px, transparent 5px);
+  outline: 0;
 }
 .pane {
   min-width: 0;
@@ -219,13 +236,21 @@ button {
 .message-list .list-scroller {
   flex: 1;
 }
+.list-top {
+  border-bottom: 1px solid var(--border);
+}
+.list-top .search-bar {
+  padding-bottom: var(--space-3);
+}
 .list-header {
   display: flex;
   align-items: center;
   gap: var(--space-4);
-  padding: var(--space-3) var(--space-4);
-  border-bottom: 1px solid var(--border);
+  padding: 0 var(--space-4) var(--space-3);
   font-size: var(--text-sm);
+}
+.list-top:not(:hover, :focus-within, .show-controls) .list-header {
+  display: none;
 }
 .list-control {
   display: flex;
