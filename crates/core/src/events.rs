@@ -473,7 +473,7 @@ pub fn parse_weekday(s: &str) -> Option<&'static str> {
         "sunday",
     ]
     .into_iter()
-    .find(|d| d.starts_with(&s[..s.len().min(3)]) && d.starts_with(s.as_str()))
+    .find(|d| d.starts_with(s.as_str()))
 }
 
 /// How a time reads in the event's own zone, for summaries.
@@ -1564,5 +1564,8 @@ mod tests {
         );
         assert_eq!(parse_weekday("Tues"), Some("tuesday"));
         assert_eq!(parse_weekday("x"), None);
+        // A cut inside a multi-byte letter used to panic (te reo words).
+        assert_eq!(parse_weekday("tā"), None);
+        assert_eq!(parse_weekday("Māori"), None);
     }
 }
