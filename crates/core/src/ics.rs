@@ -42,8 +42,8 @@ pub struct IcsRepeat {
     pub interval: u32,
     /// Weekly: days as `mon`, `tue`, ...
     pub on: Vec<String>,
-    /// The last date.
-    pub until: Option<NaiveDate>,
+    /// The last occurrence's latest start (`UNTIL`), as written.
+    pub until: Option<IcsTime>,
     /// Or this many times.
     pub count: Option<u32>,
 }
@@ -249,7 +249,14 @@ fn parse_rrule(v: &str) -> Result<IcsRepeat, String> {
             }
             "INTERVAL" => interval = val.parse().map_err(|_| format!("INTERVAL={val}"))?,
             "COUNT" => count = Some(val.parse().map_err(|_| format!("COUNT={val}"))?),
-            "UNTIL" => until = Some(parse_date(val).ok_or_else(|| format!("UNTIL={val}"))?),
+            "UNTIL" => {
+                let l = Line {
+                    name: "UNTIL".into(),
+                    params: Vec::new(),
+                    value: val.to_string(),
+                };
+                until = Some(parse_time(&l).ok_or_else(|| format!("UNTIL={val}"))?.0);
+            }
             "BYDAY" => {
                 for d in val.split(',') {
                     let d = d.trim().to_ascii_uppercase();
@@ -349,6 +356,12 @@ fn event(lines: &[Line], notes: &mut Vec<String>) -> Option<IcsEvent> {
         found
     });
     let end = match get("DTEND").and_then(parse_time) {
+        // An end in another zone than the start (a flight): as an instant,
+        // so it is shown in the start's zone.
+        Some((IcsTime::Local(dt), Some(z))) if tz::to_iana(z) != zone => match tz::parse_zone(z) {
+            Some(end_zone) => Some(IcsTime::Utc(tz::local_to_utc(dt, end_zone).naive_utc())),
+            None => Some(IcsTime::Local(dt)),
+        },
         Some((e, _)) => Some(e),
         None => get("DURATION")
             .and_then(|l| parse_duration(&l.value))
@@ -475,7 +488,10 @@ mod tests {
         let nets = c.events[0].repeat.as_ref().unwrap();
         assert_eq!(nets.every, "weekly");
         assert_eq!(nets.on, ["tue", "thu"]);
-        assert_eq!(nets.until, NaiveDate::from_ymd_opt(2027, 4, 13));
+        assert_eq!(
+            nets.until.unwrap().local_in("Pacific/Auckland").0,
+            NaiveDate::from_ymd_opt(2027, 4, 13).unwrap()
+        );
         assert_eq!(c.events[1].repeat, None);
         assert_eq!(c.events[1].zone, None);
         assert_eq!(c.notes.len(), 2, "{:?}", c.notes);
@@ -496,6 +512,20 @@ mod tests {
         let c = parse("BEGIN:VEVENT\nSUMMARY:No start\nEND:VEVENT\n");
         assert!(c.events.is_empty());
         assert_eq!(c.notes.len(), 1);
+    }
+
+    #[test]
+    fn ends_in_another_zone_and_utc_until() {
+        let ics = "BEGIN:VEVENT\nSUMMARY:Flight\nDTSTART;TZID=America/New_York:20261123T090000\nDTEND;TZID=America/Los_Angeles:20261123T120000\nEND:VEVENT\nBEGIN:VEVENT\nSUMMARY:Swim\nDTSTART;TZID=Pacific/Auckland:20270201T090000\nRRULE:FREQ=DAILY;UNTIL=20270204T200000Z\nEND:VEVENT\n";
+        let c = parse(ics);
+        let (_, t) = c.events[0].end.unwrap().local_in("America/New_York");
+        assert_eq!(t, NaiveTime::from_hms_opt(15, 0, 0));
+        // 20:00 UTC on the 4th is 9 am on the 5th in Auckland.
+        let until = c.events[1].repeat.as_ref().unwrap().until.unwrap();
+        assert_eq!(
+            until.local_in("Pacific/Auckland").0,
+            NaiveDate::from_ymd_opt(2027, 2, 5).unwrap()
+        );
     }
 
     #[test]

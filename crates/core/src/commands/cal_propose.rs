@@ -199,9 +199,11 @@ fn invitation(
 
 fn from_ics(e: ics::IcsEvent, zone: &str) -> ProposedEvent {
     let all_day = matches!(e.start, ics::IcsTime::Date(_));
-    // A `Z` time is shown in the viewer's zone; a TZID time keeps its own.
+    // A TZID time keeps its zone. A `Z` time is shown in the viewer's zone,
+    // unless it repeats: its days and times are UTC's, so it stays in UTC.
     let time_zone = match (e.start, &e.zone) {
         (ics::IcsTime::Local(_), Some(z)) => z.clone(),
+        (ics::IcsTime::Utc(_), _) if e.repeat.is_some() => "UTC".to_string(),
         _ => zone.to_string(),
     };
     let (sd, st) = e.start.local_in(&time_zone);
@@ -219,14 +221,14 @@ fn from_ics(e: ics::IcsEvent, zone: &str) -> ProposedEvent {
         start: stamp(sd, st),
         end,
         all_day,
-        time_zone,
+        time_zone: time_zone.clone(),
         location: e.location,
         notes: e.description,
         repeat: e.repeat.map(|r| ProposedRepeat {
             every: r.every.into(),
             interval: r.interval,
             on: r.on,
-            until: r.until.map(day),
+            until: r.until.map(|u| day(u.local_in(&time_zone).0)),
             count: r.count,
         }),
         uid: e.uid,
