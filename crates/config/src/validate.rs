@@ -158,6 +158,14 @@ pub fn check(c: &Config) -> Vec<Problem> {
                 ));
             }
         }
+        if let Some(f) = &a.processed_folder
+            && (f.trim().is_empty() || f.contains('/'))
+        {
+            p.push(Problem::error(
+                format!("{base}.processed_folder"),
+                "must be a folder name, not empty and without '/'",
+            ));
+        }
     }
 
     for (key, value) in [("past", &c.calendar.past), ("future", &c.calendar.future)] {

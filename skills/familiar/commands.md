@@ -594,6 +594,21 @@ Pins a message so its body stays on this device even outside the sync window, do
 - `MESSAGE` (required): The message's local ID.
 - `--unpin`: Unpin instead: the body becomes an ordinary cached body again.
 
+## mail.process
+
+Move messages to their account's processed folder. Access: `write`.
+
+```
+fam mail process <MESSAGES>...
+```
+
+Moves messages to the folder set as processed_folder for their account in config.toml, on this device at once and queued for the server. The folder is created at the top level if the account doesn't have it yet.
+
+- `--dry-run`: Only show what would change.
+- `MESSAGES` (required, repeatable): Local message IDs.
+- `--wait`: Wait until the server has the change (needs famd).
+- `--wait-secs <wait-secs>`: Seconds --wait waits at most (default 60).
+
 ## mail.read
 
 Mark messages read or unread. Access: `write`.

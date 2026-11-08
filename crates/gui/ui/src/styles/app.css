@@ -268,7 +268,7 @@ button {
 .list-row:hover {
   background: var(--bg-hover);
 }
-.row-delete {
+.row-action {
   position: absolute;
   right: var(--space-3);
   top: 50%;
@@ -282,8 +282,15 @@ button {
   color: var(--text-muted);
   cursor: pointer;
 }
-.list-row:hover .row-delete {
+.list-row:hover .row-action {
   display: block;
+}
+/* Left of the bin. */
+.row-process {
+  right: calc(var(--space-3) + 48px);
+}
+.row-process:hover {
+  color: var(--accent);
 }
 .row-delete:hover {
   color: var(--danger);

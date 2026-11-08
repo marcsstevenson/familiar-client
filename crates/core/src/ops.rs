@@ -232,6 +232,14 @@ pub enum WriteRequest {
         /// The destination folder.
         to: String,
     },
+    /// Move messages to their account's processed folder (named per account
+    /// in config), creating it at the top level when it doesn't exist.
+    Process {
+        /// Local message IDs.
+        messages: Vec<i64>,
+        /// The processed folder's name, per account key.
+        folders: std::collections::BTreeMap<String, String>,
+    },
     /// Move messages to each account's Archive folder.
     Archive {
         /// Local message IDs.
@@ -371,6 +379,7 @@ impl WriteRequest {
             WriteRequest::MarkRead { .. } => "mail.read",
             WriteRequest::Flag { .. } => "mail.flag",
             WriteRequest::Move { .. } => "mail.move",
+            WriteRequest::Process { .. } => "mail.process",
             WriteRequest::Archive { .. } => "mail.archive",
             WriteRequest::Delete { .. } => "mail.delete",
             WriteRequest::FolderCreate { .. } => "folder.create",
@@ -755,6 +764,62 @@ pub fn plan(tx: &WriteTx<'_>, req: &WriteRequest) -> Result<Vec<Planned>, Comman
                 let folders = tx.folders(m.account).map_err(store_err)?;
                 let dest = need_folder(&folders, to, &key)?;
                 push_move(&mut out, &m, dest, &key, "move");
+            }
+        }
+        WriteRequest::Process {
+            messages: ids,
+            folders: names,
+        } => {
+            // Grouped by account, so a folder created here is the one made
+            // just before its moves (see `submit`).
+            let mut by_account: Vec<(AccountId, Vec<familiar_store::Message>)> = Vec::new();
+            for m in messages(ids)? {
+                match by_account.iter_mut().find(|(a, _)| *a == m.account) {
+                    Some((_, v)) => v.push(m),
+                    None => by_account.push((m.account, vec![m])),
+                }
+            }
+            for (account, ms) in by_account {
+                let key = key_of(account);
+                let name = names
+                    .iter()
+                    .find(|(k, _)| k.eq_ignore_ascii_case(&key))
+                    .map(|(_, n)| n.trim())
+                    .ok_or_else(|| {
+                        CommandError::usage(format!("{key} has no processed_folder in config.toml"))
+                    })?;
+                let folders = tx.folders(account).map_err(store_err)?;
+                if let Some(dest) = find_folder(&folders, name, &key)? {
+                    for m in &ms {
+                        push_move(&mut out, m, dest, &key, "process");
+                    }
+                    continue;
+                }
+                out.push(Planned {
+                    delay_secs: 0,
+                    account,
+                    account_key: key.clone(),
+                    summary: format!("create folder {name:?} under the top level"),
+                    payload: OpPayload::CreateFolder {
+                        folder: 0,
+                        parent: None,
+                        name: name.to_string(),
+                    },
+                });
+                for m in &ms {
+                    out.push(Planned {
+                        delay_secs: 0,
+                        account,
+                        account_key: key.clone(),
+                        summary: format!("process {:?} to {name}", short(&m.subject)),
+                        // 0: the folder created just before.
+                        payload: OpPayload::MoveMessage {
+                            message: m.id.0,
+                            to: 0,
+                            from: m.folder.0,
+                        },
+                    });
+                }
             }
         }
         WriteRequest::Archive { messages: ids } => {
@@ -1684,11 +1749,17 @@ pub fn submit(
             });
             continue;
         }
-        // A send planned with its draft refers to the draft made just before.
+        // A send planned with its draft refers to the draft made just before,
+        // and a move planned with its folder to the folder made just before.
         if let OpPayload::SendDraft { message, .. } = &mut p.payload {
             if *message == 0 {
                 *message =
                     last_item.ok_or_else(|| CommandError::internal("send without a draft"))?;
+            }
+        }
+        if let OpPayload::MoveMessage { to, .. } = &mut p.payload {
+            if *to == 0 {
+                *to = last_item.ok_or_else(|| CommandError::internal("move without a folder"))?;
             }
         }
         let item = apply_local(tx, &mut p.payload, p.account).map_err(store_err)?;

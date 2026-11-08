@@ -460,3 +460,63 @@ async fn passing_failures_retry_and_refusals_undo() {
     }
     env.stop().await;
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn process_creates_the_folder_once_then_moves_into_it() {
+    let mut env = Env::new(50).await;
+    env.start(policy());
+    env.until("first sync", LIMIT, |e| e.settled(30)).await;
+    let msgs = inbox(&env, 2);
+    let mbox = || env.mock.mailbox(KEY);
+    let process = |ids: Vec<i64>, folder: Option<&str>| WriteRequest::Process {
+        messages: ids,
+        folders: folder
+            .map(|f| (KEY.to_string(), f.to_string()))
+            .into_iter()
+            .collect(),
+    };
+
+    // Not set for the account: refused, nothing changes.
+    let err = submit(&env, process(vec![msgs[0].id.0], None), waiting())
+        .await
+        .unwrap_err();
+    assert_eq!(err.kind, ErrorKind::Usage, "{err:?}");
+    assert!(folder_named(&env, "Processed").is_none());
+
+    // The first one creates the folder, then moves into it.
+    let out = submit(
+        &env,
+        process(vec![msgs[0].id.0], Some("Processed")),
+        waiting(),
+    )
+    .await
+    .unwrap();
+    let kinds: Vec<&str> = out.ops.iter().map(|o| o.kind.as_str()).collect();
+    assert_eq!(kinds, ["create_folder", "move_message"], "{out:?}");
+    assert!(out.ops.iter().all(|o| o.state == "done"), "{out:?}");
+    let f = folder_named(&env, "Processed").unwrap();
+    assert!(!f.remote_id.starts_with(LOCAL_REMOTE_PREFIX));
+    assert_eq!(
+        mbox().message(&msgs[0].remote_id).unwrap().folder_id,
+        f.remote_id
+    );
+
+    // The next one finds it (by name, any case).
+    let out = submit(
+        &env,
+        process(vec![msgs[1].id.0], Some("processed")),
+        waiting(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(out.ops.len(), 1, "{out:?}");
+    assert_eq!(out.ops[0].kind, "move_message");
+    assert_eq!(
+        mbox().message(&msgs[1].remote_id).unwrap().folder_id,
+        f.remote_id
+    );
+    assert_eq!(
+        env.reader().message(msgs[1].id).unwrap().unwrap().folder,
+        f.id
+    );
+}

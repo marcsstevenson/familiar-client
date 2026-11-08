@@ -7,7 +7,7 @@ import { onGlobalKey, setKeyOverrides } from "./actions/registry";
 import { type DaemonState, type UiInfo, watchDaemon } from "./api";
 import { ReadingPane } from "./reading/ReadingPane";
 import { Palette } from "./palette/Palette";
-import { notice, setSearchQuery, setSelectedFolder, setSelectedMessage } from "./state";
+import { notice, processedFolders, setSearchQuery, setSelectedFolder, setSelectedMessage } from "./state";
 import { FolderTree } from "./folders/FolderTree";
 import { MessageList } from "./list/MessageList";
 import { TitleBar } from "./TitleBar";
@@ -33,6 +33,7 @@ export function App(props: { info: UiInfo }) {
   // The palette: closed, open on the list, or open on one command's form.
   const [palette, setPalette] = createSignal<{ initial?: string } | null>(null);
   setKeyOverrides(props.info.keys);
+  Object.assign(processedFolders, props.info.processed);
   registerBuiltinActions((initial) => setPalette({ initial }));
   onMount(async () => {
     window.addEventListener("keydown", onGlobalKey);

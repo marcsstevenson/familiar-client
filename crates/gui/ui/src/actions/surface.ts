@@ -34,6 +34,7 @@ export const COMMAND_SURFACE = {
   "folder.move": "palette",
   "folder.rename": "palette",
   "mail.archive": "palette",
+  "mail.process": "palette",
   "mail.attachments": "palette",
   "mail.delete": "palette",
   "mail.fetch": "palette",

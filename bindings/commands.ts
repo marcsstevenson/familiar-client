@@ -1085,6 +1085,17 @@ export type MailPinInput = {
   unpin?: boolean;
 };
 
+export type MailProcessInput = {
+  /** Only show what would change. */
+  dry_run?: boolean;
+  /** Local message IDs. */
+  messages: Array<number>;
+  /** Wait until the server has the change (needs famd). */
+  wait?: boolean;
+  /** Seconds --wait waits at most (default 60). */
+  wait_secs?: number | null;
+};
+
 export type MailReadInput = {
   /** Only show what would change. */
   dry_run?: boolean;
@@ -1682,6 +1693,8 @@ export interface Commands {
   "mail.move": { input: MailMoveInput; output: WriteOutput };
   /** Keep a message's body on this device */
   "mail.pin": { input: MailPinInput; output: PinResult };
+  /** Move messages to their account's processed folder */
+  "mail.process": { input: MailProcessInput; output: WriteOutput };
   /** Mark messages read or unread */
   "mail.read": { input: MailReadInput; output: WriteOutput };
   /** Search mail across all accounts */
@@ -1751,6 +1764,7 @@ export const COMMAND_NAMES = [
   "mail.list",
   "mail.move",
   "mail.pin",
+  "mail.process",
   "mail.read",
   "mail.search",
   "mail.send",
