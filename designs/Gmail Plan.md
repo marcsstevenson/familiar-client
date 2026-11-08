@@ -231,7 +231,7 @@ All of this is one new phase, **Phase G**, with its own gate. Each package is si
 
 | WP | Work | Depends on | Done when |
 | --- | --- | --- | --- |
-| G.0 | **Google project and sign-in test (Marc, about 15 minutes, with a guide from Claude).** Create a Google Cloud project, enable the Gmail, Calendar and People APIs, set up the consent screen as External and publish it to production without verification, create a desktop OAuth client. Then a throwaway spike (`spikes/google-auth`) signs in with PKCE and loopback, calls `users.getProfile`, `labels.list`, `history.list`, `sendAs.list`, `calendarList.list` and `people.connections.list`, and refreshes once. Also confirm the tier of `gmail.settings.basic` and whether device code accepts any of the scopes | — | A results table in this file; the token survives a refresh the next day; Marc has seen exactly what the warning screen looks like |
+| G.0 | **Google project and sign-in test (Marc, about 15 minutes, with a guide from Claude).** Create a Google Cloud project, enable the Gmail, Calendar and People APIs, set up the consent screen as External and publish it to production without verification, create a desktop OAuth client. Then a throwaway spike (`spikes/google-auth`, guide in `docs/google-sign-in-test-guide.md`) signs in with PKCE and loopback, calls `users.getProfile` (which also gives the mailbox's message count), `labels.list`, `history.list`, `messages.list`, `sendAs.list`, `calendarList.list`, `people.connections.list` and `otherContacts.list`, and refreshes once. The consent screen also shows whether `gmail.settings.basic` is restricted | — | A results table in this file; the consent screen shows "In production" (so refresh tokens don't expire after 7 days); Marc has seen exactly what the warning screen looks like |
 | G.1 | **Provider boundary.** The `Provider` enum and `ProviderError` in `famd`; Graph folder planning moved into `provider-graph`; Graph JSON for ops moved out of `ops.rs`; `fam api` sent to the account's provider | Phase 3 gate | Pure refactor: every existing test passes unchanged, and no behaviour changes on Marc's PC |
 | G.2 | **Store: messages in many folders.** `message_folders` migration, triggers, keyset paging, `folder:` search on all folders, a virtual All Mail folder | Phase 3 gate | 500k benchmark and GUI perf job inside their budgets on a Graph-only store; multi-label tests pass |
 | G.3 | **Google sign-in.** `familiar-auth` gains the Google flow from the spike: PKCE with loopback, refresh, token import for headless machines; `[app.google]` and `provider = "gmail"` in config and `fam config validate`; `docs/gmail-setup.md` | G.0 | `fam auth login --account gmail` works and survives a reboot on Marc's PC |
@@ -239,8 +239,8 @@ All of this is one new phase, **Phase G**, with its own gate. Each package is si
 | G.5 | **Gmail mail read.** `familiar-provider-gmail`: labels to folders, first sync (metadata in batches, Inbox's newest first), bodies via raw MIME, `history.list` polling, history-expired resync, quota-unit scheduler, server search translation | G.1, G.2, G.3, G.4 | Passes against the mock, then a full read-only sync of Marc's Gmail with times, disk and memory recorded |
 | G.6 | **Gmail mail writes.** Mark read, flag, archive, move, trash, label create/rename/delete through the existing op queue | G.5 | Passes against the mock, then in the `Familiar Test` label |
 | G.7 | **Compose, drafts and send-as.** MIME building, replies in thread, drafts round-trip, attachments, send-as aliases read from Gmail, refusing unverified From addresses | G.6 | A send to Marc from each send-as address works; a draft made in Familiar opens in Gmail on the web |
-| G.8 | **Google Calendar.** Calendar list, window rounds with expanded events, writes, RSVP, recurrence, purposes, create from email | G.1, G.3, G.4 | A family event created from a real Gmail message shows in Google Calendar |
-| G.9 | **Google contacts.** Connections and other contacts into the existing tables for autocomplete | G.1, G.3, G.4 | `fam contacts search` finds Gmail contacts |
+| G.8 | **Google Calendar** (after the Phase G gate). Calendar list, window rounds with expanded events, writes, RSVP, recurrence, purposes, create from email | Phase G gate | A family event created from a real Gmail message shows in Google Calendar |
+| G.9 | **Google contacts** (after the Phase G gate). Connections and other contacts into the existing tables for autocomplete | Phase G gate | `fam contacts search` finds Gmail contacts |
 | G.10 | **GUI touches.** Labels shown as folders (a message in two labels appears in both), All Mail, a Gmail badge on the account, "Archive" wording for Gmail, send-as identities in compose | G.6, G.7 | A week of Gmail use in the app alongside the Microsoft accounts |
 | G.11 | **Gmail filters as server rules** | G.6, WP 4.3 | `fam rules plan/apply` keeps Gmail filters in sync with config |
 
@@ -249,11 +249,11 @@ G.0 ──► G.3 ──┐
    └──► G.4 ──┤
 G.1 ──────────┼──► G.5 ──► G.6 ──► G.7 ──► G.10
 G.2 ──────────┘
-G.1, G.3, G.4 ──► G.8, G.9 (parallel with G.5–G.7)
+Phase G gate ──► G.8, G.9
 G.6 + WP 4.3 ──► G.11
 ```
 
-**Phase G gate:** Marc's Gmail account syncs completely, search is fast, the agent gate tasks (find a thread, save a draft, create a family event from an email) work on it through `fam`, and Marc uses it in the desktop app for a week.
+**Phase G gate:** Marc's Gmail account syncs completely, search is fast, the mail gate tasks (find a thread, save a draft) work on it through `fam`, and Marc uses it in the desktop app for a week. Calendar and contacts (G.8, G.9) follow the gate; G.0 and G.3 still ask for their scopes, so adding them needs no second sign-in.
 
 ## Phasing
 
@@ -261,7 +261,7 @@ Gmail is on the design doc's "Later" list, and Phase 3's gate (a week of daily m
 
 1. **Now:** WP G.0 only. It needs about 15 minutes of Marc's time and no Familiar code, and its answer (does the unverified production app work for restricted scopes, and do tokens last) decides whether the rest of the plan holds.
 2. **After the Phase 3 gate:** G.1 and G.2, the two refactors, while Familiar is otherwise stable.
-3. **Then:** G.3 to G.10, before or alongside Phase 4, as Marc prefers. G.11 waits for WP 4.3.
+3. **Then:** G.3 to G.7 and G.10 (mail), before or alongside Phase 4, as Marc prefers. G.8 and G.9 (calendar and contacts) after the Phase G gate. G.11 waits for WP 4.3.
 
 If Gmail matters more to Marc than Phase 4's calendar views and rules, Phase G can go straight after Phase 3; nothing in it depends on Phase 4 apart from G.11.
 
@@ -277,13 +277,19 @@ If Gmail matters more to Marc than Phase 4's calendar views and rules, Phase G c
 | Gmail's threading differs from Outlook's | Some threads group differently across accounts | Accepted: each account shows its own provider's threads, matching its web client |
 | Labels confuse folder-shaped commands (a move out of a view of All Mail, say) | Surprising results | Rules written down in this plan; moves from All Mail only add the target label |
 
-## Open questions for Marc
+## Decisions and open questions
 
-- **Which Gmail account or accounts?** A personal `@gmail.com`, a Google Workspace account (and is Marc its admin?), or both. Roughly how many messages, and how far back?
-- **Calendar and contacts too, or mail first?** The plan includes both; dropping them makes G.0 lighter (fewer scopes) and removes G.8 and G.9.
+**Answered by Marc (8 Nov 2026):**
+
+- **Account:** one personal `@gmail.com` account. Route B (Marc's own unverified production project) applies; the Workspace "Internal" route doesn't.
+- **Scope:** mail first; calendar and contacts later (G.8 and G.9 move after the Phase G gate).
+
+**Still open:**
+
 - **Public Gmail support?** Is "bring your own Google project" acceptable for the open source release, or should verification with CASA be budgeted for later?
 - **Inbox categories:** show all Inbox mail (the plan's default), or only Primary, as Gmail does on the web?
 - **When:** G.0 now and the rest after the Phase 3 gate, or a different order?
+- **Mailbox size:** G.0 reports the message count, which sets the first-sync estimate.
 
 ## Sources
 
