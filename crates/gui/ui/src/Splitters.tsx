@@ -16,7 +16,12 @@ function load(): Widths {
   try {
     const w = JSON.parse(localStorage.getItem(KEY) ?? "null") as Partial<Widths> | null;
     if (w && Number.isFinite(w.folders) && Number.isFinite(w.list)) {
-      return { folders: Math.max(MIN.folders, w.folders!), list: Math.max(MIN.list, w.list!) };
+      // Widths saved in a wider window are cut back so the reading pane (and
+      // both splitters) still fit in this one.
+      const room = Math.max(MIN.folders + MIN.list, window.innerWidth - MIN_READING);
+      const folders = Math.min(Math.max(MIN.folders, w.folders!), room - MIN.list);
+      const list = Math.min(Math.max(MIN.list, w.list!), room - folders);
+      return { folders, list };
     }
   } catch {
     // Defaults below.
