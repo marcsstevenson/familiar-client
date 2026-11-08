@@ -474,6 +474,14 @@ fn ai_tool<'a>(
 
 /// The local ID of an event already in the account's calendars that
 /// matches: the same UID, or the same subject starting within a minute.
+/// The same subject, ignoring case, or one inside the other: a ticket
+/// email's "Flight of the Conchords" is the calendar's "Flight of the
+/// Conchords – New Zealand Tour 2026".
+fn same_subject(a: &str, b: &str) -> bool {
+    let (a, b) = (a.trim().to_lowercase(), b.trim().to_lowercase());
+    !a.is_empty() && !b.is_empty() && (a.contains(&b) || b.contains(&a))
+}
+
 fn already(r: &Reader, account: AccountId, p: &ProposedEvent) -> Result<Option<i64>, CommandError> {
     if let Some(uid) = &p.uid {
         if let Some(e) = r
@@ -510,7 +518,7 @@ fn already(r: &Reader, account: AccountId, p: &ProposedEvent) -> Result<Option<i
         .find(|e| {
             // The range finds events that overlap; only the same start counts.
             (e.data.start_at - start).abs() <= 60
-                && e.data.subject.trim().eq_ignore_ascii_case(p.subject.trim())
+                && same_subject(&e.data.subject, &p.subject)
                 && e.data.is_all_day == p.all_day
         })
         .map(|e| e.id.0))
@@ -762,5 +770,21 @@ impl Command for CalPropose {
             lines.push(format!("Note: {n}"));
         }
         lines.join("\n")
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::same_subject;
+
+    #[test]
+    fn a_shorter_subject_matches_a_longer_one() {
+        assert!(same_subject(
+            "Flight of the Conchords – New Zealand Tour 2026",
+            "flight of the conchords"
+        ));
+        assert!(same_subject("Dentist", "Dentist"));
+        assert!(!same_subject("Dentist", "Haircut"));
+        assert!(!same_subject("", "Dentist"));
     }
 }
