@@ -34,6 +34,9 @@ export type UiInfo = {
   views: { name: string; query: string }[];
   /** config.toml's processed_folder, by account key. */
   processed: Record<string, string>;
+  /** config.toml's [ai] tool when [ai] is on, and the accounts it covers. */
+  ai_tool: string | null;
+  ai_accounts: string[];
   /** Run the timing script (FAMILIAR_BENCH_OUT is set). */
   bench: boolean;
 };

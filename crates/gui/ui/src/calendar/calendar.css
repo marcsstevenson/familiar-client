@@ -1,0 +1,178 @@
+/* Add to calendar dialog. Colours and sizes come from styles/tokens.css. */
+.event-dialog {
+  width: min(760px, 94vw);
+  max-height: 84vh;
+}
+.event-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-5);
+  overflow-y: auto;
+}
+.event-body:has(.event-scroll) {
+  overflow: hidden;
+  min-height: 0;
+}
+.event-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding-right: var(--space-2);
+}
+.event-body h2 {
+  margin: 0;
+  font-size: var(--text-xl);
+  font-weight: 600;
+}
+.event-body p {
+  margin: 0;
+}
+.event-body input:not([type="checkbox"]),
+.event-body select,
+.event-body textarea {
+  font: inherit;
+  color: inherit;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+}
+.event-body button:not(.primary) {
+  font: inherit;
+  color: inherit;
+  background: var(--bg-sidebar);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-3) var(--space-5);
+}
+.event-body button.event-link {
+  align-self: flex-start;
+  border: 0;
+  background: none;
+  padding: 0;
+  color: var(--accent);
+  font-size: var(--text-sm);
+}
+.event-body .muted {
+  color: var(--text-muted);
+}
+.event-body .warn {
+  color: var(--warn);
+}
+.event-note {
+  font-size: var(--text-sm);
+}
+.event-wait {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.spinner {
+  width: 14px;
+  height: 14px;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+  }
+}
+.event-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.event-item {
+  display: flex;
+  gap: var(--space-4);
+  align-items: flex-start;
+  padding-bottom: var(--space-4);
+  border-bottom: 1px solid var(--border);
+}
+.event-item.off .event-fields {
+  opacity: 0.6;
+}
+.event-tick {
+  margin-top: var(--space-3);
+}
+.event-fields {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  min-width: 0;
+}
+.event-subject {
+  font-weight: 600;
+}
+.event-when,
+.event-repeat,
+.event-repeat-editor,
+.event-days,
+.event-meta,
+.event-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+.event-zone {
+  width: 150px;
+}
+.event-repeat {
+  font-size: var(--text-sm);
+}
+.event-repeat-editor {
+  padding: var(--space-3);
+  background: var(--bg-sidebar);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-sm);
+}
+.event-repeat-editor input[type="number"] {
+  width: 56px;
+}
+.event-check,
+.event-days label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+.event-meta {
+  font-size: var(--text-sm);
+}
+.event-meta q {
+  font-style: italic;
+}
+.event-body .spacer {
+  flex: 1;
+}
+.event-calendar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+.event-clashes {
+  margin: 0;
+  padding-left: var(--space-5);
+  font-size: var(--text-sm);
+}
+.event-invite {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}

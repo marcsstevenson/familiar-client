@@ -7,7 +7,8 @@ import { onGlobalKey, setKeyOverrides } from "./actions/registry";
 import { type DaemonState, type UiInfo, watchDaemon } from "./api";
 import { ReadingPane } from "./reading/ReadingPane";
 import { Palette } from "./palette/Palette";
-import { notice, processedFolders, setSearchQuery, setSelectedFolder, setSelectedMessage } from "./state";
+import { EventDialog } from "./calendar/EventDialog";
+import { aiSettings, eventDialog, notice, processedFolders, setEventDialog, setSearchQuery, setSelectedFolder, setSelectedMessage } from "./state";
 import { FolderTree } from "./folders/FolderTree";
 import { MessageList } from "./list/MessageList";
 import { Splitters, paneColumns } from "./Splitters";
@@ -35,6 +36,8 @@ export function App(props: { info: UiInfo }) {
   const [palette, setPalette] = createSignal<{ initial?: string } | null>(null);
   setKeyOverrides(props.info.keys);
   Object.assign(processedFolders, props.info.processed);
+  aiSettings.tool = props.info.ai_tool;
+  aiSettings.accounts = props.info.ai_accounts;
   registerBuiltinActions((initial) => setPalette({ initial }));
   onMount(async () => {
     window.addEventListener("keydown", onGlobalKey);
@@ -42,6 +45,7 @@ export function App(props: { info: UiInfo }) {
     const stopUi = await listen<UiCommand>("ui_command", (e) => {
       const c = e.payload;
       setPalette(null);
+      setEventDialog(null);
       setSearchQuery(null);
       setSelectedFolder(c.folder);
       setSelectedMessage(c.kind === "open" ? c.message : null);
@@ -74,6 +78,9 @@ export function App(props: { info: UiInfo }) {
         <span class="statusbar-spacer" />
         <span>Familiar {props.info.version}</span>
       </footer>
+      <Show when={eventDialog()}>
+        {(d) => <EventDialog message={d().message} from={d().from} onClose={() => setEventDialog(null)} />}
+      </Show>
       <Show when={palette()}>
         {(p) => <Palette initial={p().initial} onClose={() => setPalette(null)} />}
       </Show>

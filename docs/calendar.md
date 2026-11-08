@@ -109,3 +109,27 @@ its `time_zone`, and `repeat` maps to `--repeat`, `--every`, `--on`,
 calendars with the same UID, or the same subject starting within a minute.
 Invitations and attachments are read through famd; without it there is a
 note and only the text is used.
+
+### Add to calendar in the app
+
+The reading pane's **Add to calendar** button (Ctrl+Shift+A) runs
+`fam cal propose` on the open message and shows what it found:
+
+- Each event can be changed before it is added: subject, date, times, all
+  day, zone, location and repeat. The repeat is shown in words with how many
+  times it happens; **change** opens the repeat editor. Events already in a
+  calendar start unticked.
+- One calendar for all of them, picked from every writable calendar on
+  every account. It starts on the calendar last used for that sender, else
+  the receiving account's main calendar. Under it are the calendar's other
+  events on each of those days.
+- **Add** runs `fam cal add --from-mail` once per ticked event, and the
+  dialog then offers **Undo**, which deletes them again.
+- A meeting request shows the meeting with **Accept**, **Tentative** and
+  **Decline** (`fam cal rsvp`, with `--no-reply` when "Tell the organiser"
+  is unticked) instead.
+
+When `[ai]` is on (see [ai.md](ai.md)), the dialog says which tool the email
+may go to while it waits. Closing it then leaves the tool to finish or time
+out on its own.
+

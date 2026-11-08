@@ -65,3 +65,13 @@ export const [searchQuery, setSearchQuery] = createSignal<string | null>(null);
 /** Server-only search results for the current search, when asked for. */
 export type OnlineHit = { subject: string; from: string; received_at: string; account: string };
 export const [onlineHits, setOnlineHits] = createSignal<OnlineHit[] | null>(null);
+
+/** The message the Add to calendar dialog is open for, with its sender's
+ * address (for remembering the calendar used for that sender). */
+export const [eventDialog, setEventDialog] = createSignal<{ message: number; from: string } | null>(null);
+
+/** The open message's sender address, set by the reading pane. */
+export const [readingFrom, setReadingFrom] = createSignal<string>("");
+
+/** [ai] from config.toml: the tool, and the accounts whose mail may go to it. */
+export const aiSettings: { tool: string | null; accounts: string[] } = { tool: null, accounts: [] };

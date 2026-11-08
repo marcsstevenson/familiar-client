@@ -74,6 +74,7 @@ Actions and their default keys (`ui/src/actions/builtin.ts`):
 | `toggle_read` | `u` | | `fam mail read` (or `--unread`) |
 | `mark_read`, `mark_unread` | | Ctrl+Q, Ctrl+U | `fam mail read` / `--unread` |
 | `move` | | Ctrl+Shift+V | The palette's Move form |
+| `add_to_calendar` | Ctrl+Shift+A | | Add to calendar: `fam cal propose`, then `fam cal add` or `fam cal rsvp` |
 | `reply`, `reply_all`, `forward` | `r`, `a`, `f` | Ctrl+R, Ctrl+Shift+R, Ctrl+F | Open a compose window replying to or forwarding the selected message |
 | `compose` | `c` | Ctrl+N | New message |
 | `search` | `/` | Ctrl+E, F3 | Go to the search box |
