@@ -94,7 +94,7 @@ Familiar parses the JSON with serde and the same date parser `cal add` uses. An 
 
 ```toml
 [ai]
-# "auto" (default) finds claude, then codex, on PATH. "none" turns it off.
+# "auto" (default) finds claude on PATH. "none" turns it off. Codex: see below.
 # Nothing is sent until enabled = true.
 enabled = true
 tool = "auto"            # "auto" | "claude" | "codex" | "none"
@@ -117,7 +117,7 @@ codex exec - --sandbox read-only --skip-git-repo-check \
 ```
 
 - `--tools ""` and `--strict-mcp-config` give Claude no tools and no MCP servers, so it can only answer. `--setting-sources ""` stops a user's or project's `CLAUDE.md`, hooks and settings from changing the run. `claude -p --output-format json` puts the schema-checked object in `structured_output`.
-- Codex has no "no tools" switch, so it runs read-only in an empty directory. Its schema-checked answer is the last message.
+- Codex has no "no tools" switch. Read-only mode still lets it read files and run commands anywhere the user can, so an email with injected instructions could get it to read other local files and send them to OpenAI. Until Codex can be run with its tools off, `auto` picks only Claude, and `tool = "codex"` is accepted only with a config line saying the user understands this (`codex_tools_ok = true`). WP AI.2 checks whether a current Codex can turn its shell tool off; if it can, that replaces the extra setting. Its schema-checked answer is the last message.
 - `FAMILIAR_AGENT=ai-propose` is set in the child's environment. The AI has no reason to call `fam`, but if it ever did, it would be an agent under `[agent]` grants (default read and draft, so it could not create events), and the attempt would be in the audit log.
 - The exact flags are checked against the installed versions in WP AI.2; both tools change quickly. A tool that exits non-zero, times out or is missing falls back to the heuristic with a note, and the tool's stderr is logged.
 
@@ -180,7 +180,7 @@ fam cal propose --from-mail <id> [--ai auto|claude|codex|none] [--json]
 ## Privacy and safety
 
 - **Off until enabled.** `[ai] enabled = true` is the user's own choice. The dialog says, under the spinner, which tool the email is going to.
-- **What is sent.** Subject, sender, date and text of one message, only when the user presses Add to calendar. No attachments, no other mail, no calendar data.
+- **What is sent.** Subject, sender, date and text of one message, only when the user presses Add to calendar. No attachments, no other mail, no calendar data. This holds for Claude, which runs with no tools; Codex can read local files (see Running the AI tool).
 - **Work accounts.** Parklands mail sent to a personal Claude or ChatGPT account may break the club's or a future employer's rules. `[ai]` takes `accounts = ["hotmail"]` to limit which accounts it's used for; the default is every account.
 - **Prompt injection.** The email can only change proposal text, which is shown before anything is created, and the AI has no tools. The instructions tell it to ignore instructions in the mail, but the dialog is the real defence.
 - **Audit.** Each create is already in the audit log with source `gui`. The propose step adds nothing there, since it changes nothing; the GUI logs the message id, tool, duration and event count, not the content.
@@ -219,7 +219,7 @@ This is calendar work, so it belongs with Phase 4 and folds in WP 4.2's side pan
 
 ## Open questions for Marc
 
-1. **Which tool do you want to use first?** The plan supports both; Claude Code is what's on your PC today.
+1. **Is Claude enough?** The plan makes Claude the default and keeps Codex behind an extra setting, because Codex can't yet be run without tools.
 2. **Should Parklands mail be sent to the AI?** The plan's default is every account; `accounts = ["hotmail"]` keeps club mail local.
 3. **PDF tickets and booking PDFs.** Both tools can read a PDF if given the file. That means writing the attachment to a temporary file and giving the AI read access to it, which is more to send and more to go wrong. Worth it, or `.ics` and body text only for now?
 4. **Meeting invitations.** Outlook invitations arrive as meeting requests, which Exchange usually puts on the calendar as tentative already. Should "Add to calendar" on one of those become "Accept / Tentative / Decline" (the existing `cal rsvp`), or is that a separate feature?
