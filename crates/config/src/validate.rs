@@ -313,6 +313,25 @@ pub fn check(c: &Config) -> Vec<Problem> {
             }
         }
     }
+    let tool = c.ai.tool.as_str();
+    let is_path = tool.contains('/') || tool.contains('\\');
+    if !is_path && !crate::model::AI_TOOLS.contains(&tool) {
+        p.push(Problem::error(
+            "ai.tool",
+            format!(
+                "unknown tool `{tool}`; expected one of {}, or a path to the program",
+                crate::model::AI_TOOLS.join(", ")
+            ),
+        ));
+    }
+    if c.ai.timeout_seconds == 0 {
+        p.push(Problem::error("ai.timeout_seconds", "must be 1 or more"));
+    }
+    for (i, name) in c.ai.accounts.iter().flatten().enumerate() {
+        if !c.accounts.contains_key(name) {
+            p.push(unknown_account(format!("ai.accounts[{i}]"), name));
+        }
+    }
     if !c.agent.allow.iter().any(|a| a == "read") {
         p.push(Problem::warning(
             "agent.allow",

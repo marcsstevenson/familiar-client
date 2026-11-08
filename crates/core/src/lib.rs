@@ -2,6 +2,7 @@
 //! Command definitions and shared types. Every surface (CLI, MCP, GUI, local API) is generated from the registry here.
 
 pub mod agent;
+pub mod ai;
 pub mod commands;
 pub mod compose;
 pub mod daemon;

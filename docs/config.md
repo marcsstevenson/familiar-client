@@ -40,6 +40,7 @@ Your own config has your signatures in it, so keep it in a private repo, not in 
 | `[[rules]]` | `name`, `account`, `run` (`server`, `local`), `enabled` (default true), `when`, `then`. Conditions and actions are checked by the rules engine later. |
 | `[keys]` | `<action> = "<key>"` |
 | `[agent]` | `allow` (default `["read", "draft"]`; may add `write`) |
+| `[ai]` | `enabled` (default `false`), `tool` (`auto`, `claude`, `codex`, `none` or a path), `model`, `timeout_seconds` (`90`), `accounts`. See [ai.md](ai.md). |
 | `[agent.accounts.<name>]` | `allow`: more access on that account, e.g. `["send", "delete"]` |
 
 ## Writing back

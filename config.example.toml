@@ -95,3 +95,10 @@ allow = ["read", "draft"]
 # Send, delete and rule changes are granted per account, for example:
 # [agent.accounts.home]
 # allow = ["send"]
+
+# An AI tool on this computer that finds events in emails for "Add to
+# calendar" (fam cal propose). Off until enabled: the email's text is sent
+# to the tool's maker. See docs/ai.md.
+# [ai]
+# enabled = true
+# tool = "auto"          # Claude, else Codex, from PATH

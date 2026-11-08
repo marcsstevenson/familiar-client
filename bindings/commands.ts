@@ -468,6 +468,8 @@ export type CalListOutput = {
 export type CalProposeInput = {
   /** The email (local message ID). */
   from_mail: number;
+  /** Don't ask the AI tool, even when [ai] is enabled. */
+  no_ai?: boolean;
   /** Time zone to give times in (IANA or Windows). Default: this computer's. */
   tz?: string | null;
 };
@@ -483,7 +485,7 @@ export type CalProposeOutput = {
   message: number;
   /** What was skipped or guessed. */
   notes: Array<string>;
-  /** Where the proposals came from: `invite`, `ics`, `heuristic` or `none`. */
+  /** Where the proposals came from: `invite`, `ics`, `ai:claude`, `ai:codex`, `heuristic` or `none`. */
   source: string;
 };
 
@@ -1370,6 +1372,8 @@ export type ProposedEvent = {
   already?: number | null;
   /** Same form. All day: the last day. None: `fam cal add`'s default length. */
   end?: string | null;
+  /** The words in the email it came from, when the AI found it. */
+  evidence?: string | null;
   /** Location. */
   location?: string | null;
   /** Notes. */

@@ -201,14 +201,15 @@ fn parse_duration(v: &str) -> Option<Duration> {
             _ => {
                 let n: i64 = num.parse().ok()?;
                 num.clear();
-                total += match (c, in_time) {
-                    ('W', false) => Duration::weeks(n),
-                    ('D', false) => Duration::days(n),
-                    ('H', true) => Duration::hours(n),
-                    ('M', true) => Duration::minutes(n),
-                    ('S', true) => Duration::seconds(n),
+                let part = match (c, in_time) {
+                    ('W', false) => Duration::try_weeks(n),
+                    ('D', false) => Duration::try_days(n),
+                    ('H', true) => Duration::try_hours(n),
+                    ('M', true) => Duration::try_minutes(n),
+                    ('S', true) => Duration::try_seconds(n),
                     _ => return None,
-                };
+                }?;
+                total = total.checked_add(&part)?;
             }
         }
     }
@@ -284,12 +285,12 @@ fn parse_rrule(v: &str) -> Result<IcsRepeat, String> {
     })
 }
 
-fn add(t: IcsTime, d: Duration) -> IcsTime {
-    match t {
-        IcsTime::Date(x) => IcsTime::Date(x + d),
-        IcsTime::Local(x) => IcsTime::Local(x + d),
-        IcsTime::Utc(x) => IcsTime::Utc(x + d),
-    }
+fn add(t: IcsTime, d: Duration) -> Option<IcsTime> {
+    Some(match t {
+        IcsTime::Date(x) => IcsTime::Date(x.checked_add_signed(d)?),
+        IcsTime::Local(x) => IcsTime::Local(x.checked_add_signed(d)?),
+        IcsTime::Utc(x) => IcsTime::Utc(x.checked_add_signed(d)?),
+    })
 }
 
 /// Reads a calendar file. Events without a usable start are left out, with
@@ -365,7 +366,7 @@ fn event(lines: &[Line], notes: &mut Vec<String>) -> Option<IcsEvent> {
         Some((e, _)) => Some(e),
         None => get("DURATION")
             .and_then(|l| parse_duration(&l.value))
-            .map(|d| add(start, d)),
+            .and_then(|d| add(start, d)),
     };
     // A changed or moved occurrence of a series sent on its own: the series
     // itself, or the person's copy of it, carries the change.
@@ -535,5 +536,6 @@ mod tests {
         assert_eq!(parse_duration("P2W"), Some(Duration::weeks(2)));
         assert_eq!(parse_duration("-PT15M"), None);
         assert_eq!(parse_duration("PT"), Some(Duration::zero()));
+        assert_eq!(parse_duration("P9223372036854775807D"), None);
     }
 }
