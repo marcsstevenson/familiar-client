@@ -56,8 +56,16 @@
   border-bottom: 1px solid var(--border);
   font-size: var(--text-sm);
 }
-.reading-banner.quiet {
+.reading-trusted {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  margin-top: var(--space-2);
   color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+.reading-header:not(:hover, :focus-within) .reading-trusted {
+  display: none;
 }
 .reading-banner.warn {
   color: var(--warn);
