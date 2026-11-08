@@ -73,9 +73,10 @@ export function EventDialog(props: { message: number; from: string; onClose: () 
           const [date = "", tz = ""] = k.split("|");
           try {
             const out = await run("cal.list", { from: date, days: 1, account: c.account, calendar: c.name, tz });
-            return { date, events: out.events.filter((e) => !e.cancelled) };
+            // Warnings mean the day isn't fully synced here, so "nothing" isn't known.
+            return { date, events: out.events.filter((e) => !e.cancelled), known: (out.warnings ?? []).length === 0 };
           } catch {
-            return { date, events: [] };
+            return { date, events: [], known: false };
           }
         }),
       ),
@@ -320,14 +321,12 @@ export function EventDialog(props: { message: number; from: string; onClose: () 
                             />
                           </Show>
                           <span>to</span>
-                          <Show when={d.allDay || d.endDate !== d.startDate}>
-                            <input
-                              type="date"
-                              aria-label="End date"
-                              value={d.endDate}
-                              onInput={(e) => set(i(), "endDate", e.currentTarget.value)}
-                            />
-                          </Show>
+                          <input
+                            type="date"
+                            aria-label="End date"
+                            value={d.endDate}
+                            onInput={(e) => set(i(), "endDate", e.currentTarget.value)}
+                          />
                           <Show when={!d.allDay}>
                             <input
                               type="time"
@@ -421,7 +420,9 @@ export function EventDialog(props: { message: number; from: string; onClose: () 
                         <li>
                           {dateWords(c.date)} in {calendar()?.name}:{" "}
                           {c.events.length === 0
-                            ? "nothing else"
+                            ? c.known
+                              ? "nothing else"
+                              : "not synced on this computer, so not checked"
                             : c.events
                                 .map((e) => `${e.all_day ? "all day" : e.start.slice(11, 16)} ${e.subject}`)
                                 .join(", ")}
