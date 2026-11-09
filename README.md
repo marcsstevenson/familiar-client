@@ -1,3 +1,5 @@
+<p align="center"><img src="crates/gui/icons/icon.svg" alt="Familiar icon: a violet kea" width="128"></p>
+
 # Familiar
 
 A local-first mail and calendar client for Microsoft accounts (Outlook.com, Hotmail and Microsoft 365). It's a Rust engine with a sync daemon (`famd`), a command line (`fam`), an MCP server and a Tauri desktop app, all built on one core.
