@@ -317,7 +317,11 @@ fn ai_tool<'a>(
     let Some(cfg) = cfg else {
         return Err("there is no config.toml".into());
     };
-    if !cfg.accounts.get(account).is_some_and(|a| a.spam_check) {
+    if !cfg
+        .accounts
+        .get(account)
+        .is_some_and(|a| a.spam_check || a.spam_auto)
+    {
         return Err(format!(
             "the AI isn't asked for {account}'s mail: add spam_check = true to [accounts.{account}] in config.toml"
         ));
@@ -382,6 +386,56 @@ fn body(r: &Reader, m: &familiar_store::Message) -> (String, Option<String>, boo
         },
         None => (m.preview.clone(), None, false),
     }
+}
+
+/// How far back the background check looks: mail that arrived in the
+/// last day. Older mail is only checked on request.
+pub const AUTO_WINDOW: i64 = 24 * 3600;
+
+/// Messages per folder the background check looks through each round.
+const AUTO_PAGE: usize = 100;
+
+/// The messages famd's background check should look at now, newest first:
+/// in Inbox or Junk Email of a `spam_auto` account, arrived within
+/// [`AUTO_WINDOW`] of `now`, with the body synced, and not checked yet.
+pub fn auto_candidates(
+    paths: &DaemonPaths,
+    cfg: &familiar_config::Config,
+    now: i64,
+) -> Result<Vec<i64>, CommandError> {
+    let keys: Vec<&String> = cfg
+        .accounts
+        .iter()
+        .filter(|(_, a)| a.spam_auto)
+        .map(|(k, _)| k)
+        .collect();
+    if keys.is_empty() {
+        return Ok(Vec::new());
+    }
+    let r = open(paths)?;
+    let saved = Saved::load(&paths.data_dir);
+    let mut out = Vec::new();
+    for key in keys {
+        let Some(account) = r.account_by_key(key).map_err(store_err)? else {
+            continue;
+        };
+        let done = saved.0.get(key.as_str());
+        for f in r.folders(account.id).map_err(store_err)? {
+            if !matches!(f.well_known.as_deref(), Some("inbox" | "junkemail")) {
+                continue;
+            }
+            for m in r.messages(f.id, None, AUTO_PAGE).map_err(store_err)? {
+                if m.received_at < now - AUTO_WINDOW {
+                    break;
+                }
+                if m.body.is_some() && !done.is_some_and(|d| d.contains_key(&m.remote_id)) {
+                    out.push((m.received_at, m.id.0));
+                }
+            }
+        }
+    }
+    out.sort_unstable_by(|a, b| b.cmp(a));
+    Ok(out.into_iter().map(|(_, id)| id).collect())
 }
 
 /// Runs `fam mail check-spam` against the store and famd at `paths`.

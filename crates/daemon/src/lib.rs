@@ -8,6 +8,7 @@
 //!   body fetch, server search, sync now, the consistency check, stop).
 //! - [`indexer`]: keeps the search index beside the store up to date.
 //! - [`check`]: the store-versus-server consistency check (WP 1.12).
+//! - [`spam`]: the background spam and scam check (`spam_auto`).
 //! - [`ipc`]: the per-user socket or named pipe those requests arrive on.
 //!
 //! [`Daemon::start`] runs all of it on the current Tokio runtime; the
@@ -21,6 +22,7 @@ pub mod ipc;
 pub mod ops;
 pub mod policy;
 pub mod service;
+pub mod spam;
 
 use std::collections::HashMap;
 use std::sync::Arc;
@@ -75,6 +77,8 @@ pub struct DaemonOptions {
     pub page_size: Option<usize>,
     /// What agent sessions may do (WP 2.6).
     pub agent: AgentGrants,
+    /// The background spam and scam check; `None` leaves it off.
+    pub spam: Option<spam::SpamAuto>,
 }
 
 /// Where famd gets the agent grants from.
@@ -107,6 +111,7 @@ impl DaemonOptions {
             clock: system_clock(),
             page_size: None,
             agent: AgentGrants::Fixed(familiar_core::agent::Grants::default()),
+            spam: None,
         }
     }
 }
@@ -247,6 +252,14 @@ impl Daemon {
         tasks.extend(runners.into_iter().map(|r| tokio::spawn(r.run())));
         if let Some(t) = indexer::spawn(&opts.paths.index, w.clone(), rx.clone()) {
             tasks.push(t);
+        }
+        if let Some(s) = opts.spam {
+            tasks.push(spam::spawn(
+                s,
+                opts.paths.clone(),
+                opts.clock.clone(),
+                rx.clone(),
+            ));
         }
         let socket = opts.paths.socket.clone();
         let svc = service.clone();

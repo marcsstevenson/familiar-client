@@ -333,10 +333,17 @@ pub fn check(c: &Config) -> Vec<Problem> {
         }
     }
     for (key, a) in &c.accounts {
-        if !a.spam_check {
+        if !a.spam_check && !a.spam_auto {
             continue;
         }
-        let path = format!("accounts.{key}.spam_check");
+        let path = format!(
+            "accounts.{key}.{}",
+            if a.spam_auto {
+                "spam_auto"
+            } else {
+                "spam_check"
+            }
+        );
         if !c.ai.enabled {
             p.push(Problem::warning(
                 path,

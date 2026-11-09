@@ -31,6 +31,9 @@ processed_folder = "Processed"
 # Offer "Check for spam or scam" on this account's mail (`fam mail
 # check-spam`). The AI grade also needs [ai] enabled = true.
 # spam_check = true
+# Also check new Inbox and Junk mail in the background (famd), one message
+# at a time; each check is one call to the AI tool.
+# spam_auto = true
 
 [accounts.hotmail.signature]
 new = '''

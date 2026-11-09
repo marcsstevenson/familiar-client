@@ -32,7 +32,7 @@ Your own config has your signatures in it, so keep it in a private repo, not in 
 | --- | --- |
 | top level | `version` (required, 1) |
 | `[app]` | `client_id` (defaults to Familiar's own, `c6057b6a-a692-47dd-b34e-12629372e32a`), `theme` (`system`, `light`, `dark`), `send_delay_seconds` (default 10) |
-| `[accounts.<name>]` | `email`, `tenant` (both required), `display_name`, `aliases` (other addresses to send from), `processed_folder` (where the Processed tick and `fam mail process` move messages; created at the top level when missing; off when unset), `spam_check` (offer the spam and scam check on this account's mail, `false` by default; see [spam.md](spam.md)) |
+| `[accounts.<name>]` | `email`, `tenant` (both required), `display_name`, `aliases` (other addresses to send from), `processed_folder` (where the Processed tick and `fam mail process` move messages; created at the top level when missing; off when unset), `spam_check` (offer the spam and scam check on this account's mail, `false` by default; see [spam.md](spam.md)), `spam_auto` (also check new Inbox and Junk mail in the background; implies `spam_check`; `false` by default) |
 | `[accounts.<name>.signature]` | `new`, `reply`, as HTML |
 | `[calendar.purposes]` | `<purpose> = { account, calendar }` |
 | `[sync]` | `window` (`1y`), `headers` (`all`), `older_bodies` (`on-demand`, `none`), `cache_limit` (`2GB`), `attachments` (`on-demand`, `window`) |
