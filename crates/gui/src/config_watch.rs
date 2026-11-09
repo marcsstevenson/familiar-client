@@ -37,8 +37,14 @@ fn modified(path: &Path) -> Option<SystemTime> {
 /// famd closes its socket first and lets go of the store once its sync and
 /// queued operations finish, so this waits for the store too. The app's own
 /// keeper may start a new famd meanwhile; that one has read the new config.
+/// Async, so the wait runs off the window's thread.
 #[tauri::command]
-pub fn restart_app(app: AppHandle) {
+pub async fn restart_app(app: AppHandle) {
+    let _ = tauri::async_runtime::spawn_blocking(stop_famd).await;
+    app.restart();
+}
+
+fn stop_famd() {
     if let Ok(paths) = DaemonPaths::resolve() {
         let answers =
             || Client::connect_with_timeout(&paths.socket, Duration::from_millis(500)).is_ok();
@@ -55,5 +61,4 @@ pub fn restart_app(app: AppHandle) {
             waiting(&|| !familiar_store::Writer::is_held(&paths.store) || answers());
         }
     }
-    app.restart();
 }
