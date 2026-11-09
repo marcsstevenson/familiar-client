@@ -27,18 +27,22 @@ const checkedWords = (at: number) =>
   new Date(at * 1000).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" });
 
 export function SpamDialog(props: { message: number; saved?: SpamResult; onClose: () => void }) {
-  // Bumped by "Check again".
+  // Read once: the props go stale when the dialog closes, and the check and
+  // the reports can outlive it.
+  const message = props.message;
+  // Bumped by "Check again". A saved result is read again so the folder (and
+  // so the report buttons) is where the message is now.
   const [round, setRound] = createSignal(props.saved ? 0 : 1);
   const [result] = createResource(round, async (n) => {
-    if (n === 0 && props.saved) return props.saved;
-    const r = await run("mail.check-spam", { message: props.message });
-    if (r.ai) rememberSpam(props.message, r);
+    if (n === 0) return run("mail.check-spam", { message, saved: true });
+    const r = await run("mail.check-spam", { message });
+    if (r.ai) rememberSpam(message, r);
     return r;
   });
 
   function report(label: string, input: { not_junk?: boolean; phishing?: boolean }) {
     props.onClose();
-    void removeFromList(props.message, label, () => run("mail.report", { messages: [props.message], ...input }));
+    void removeFromList(message, label, () => run("mail.report", { messages: [message], ...input }));
   }
 
   const marks: Record<string, string> = { scam: "!!", spam: "!", safe: "✓" };

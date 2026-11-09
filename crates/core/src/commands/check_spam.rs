@@ -402,6 +402,11 @@ pub fn check_at(
             )
         })?;
     let (key, remote) = locate(paths, input.message)?;
+    let folder = r.folder(m.folder).map_err(store_err)?;
+    let folder_name = folder
+        .as_ref()
+        .map(|f| f.well_known.clone().unwrap_or_else(|| f.name.clone()))
+        .unwrap_or_default();
     if input.saved {
         return Saved::load(&paths.data_dir)
             .0
@@ -409,8 +414,9 @@ pub fn check_at(
             .and_then(|a| a.get(&remote))
             .cloned()
             .map(|mut o| {
-                // The local ID can change; the remote ID is what's kept.
+                // The local ID and folder can change; the remote ID is what's kept.
                 o.message = input.message;
+                o.folder = folder_name.clone();
                 o
             })
             .ok_or_else(|| {
@@ -423,7 +429,6 @@ pub fn check_at(
                 )
             });
     }
-    let folder = r.folder(m.folder).map_err(store_err)?;
     let in_sent = folder
         .as_ref()
         .and_then(|f| f.well_known.as_deref())
@@ -431,10 +436,7 @@ pub fn check_at(
     let mut out = CheckSpamOutput {
         message: input.message,
         account: key.clone(),
-        folder: folder
-            .as_ref()
-            .map(|f| f.well_known.clone().unwrap_or_else(|| f.name.clone()))
-            .unwrap_or_default(),
+        folder: folder_name,
         facts: Vec::new(),
         ai: None,
         checked_at: now,
