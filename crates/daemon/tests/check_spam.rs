@@ -11,6 +11,7 @@ use std::time::Duration;
 
 use common::{Env, KEY, fast_policy};
 use familiar_config::Config;
+#[cfg(unix)]
 use familiar_config::model::Account;
 use familiar_core::commands::check_spam::{CheckSpamInput, CheckSpamOutput, check_at};
 use familiar_mock_graph::{EmailAddress, Message};
