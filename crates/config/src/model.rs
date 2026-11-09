@@ -105,6 +105,10 @@ pub struct Account {
     /// The folder "processed" messages go to (`fam mail process`, the tick in
     /// the desktop app). Off when unset; created at the top level when missing.
     pub processed_folder: Option<String>,
+    /// Offer "Check for spam or scam" on this account's mail (`fam mail
+    /// check-spam`), which asks the `[ai]` tool. Off by default.
+    #[serde(default)]
+    pub spam_check: bool,
     /// Signatures for this account.
     pub signature: Option<Signature>,
 }

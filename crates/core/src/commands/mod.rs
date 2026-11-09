@@ -8,6 +8,7 @@ pub mod auth;
 pub mod cal;
 pub mod cal_propose;
 pub mod cal_write;
+pub mod check_spam;
 pub mod config;
 pub mod contacts;
 pub mod draft;

@@ -40,6 +40,7 @@ export const COMMAND_SURFACE = {
   "mail.process": "palette",
   "mail.report": "palette",
   "mail.attachments": "palette",
+  "mail.check-spam": "palette",
   "mail.delete": "palette",
   "mail.fetch": "palette",
   "mail.flag": "palette",

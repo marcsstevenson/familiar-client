@@ -55,6 +55,9 @@ struct UiInfo {
     ai_tool: Option<String>,
     /// The accounts whose mail `[ai]` may send to that tool.
     ai_accounts: Vec<String>,
+    /// The accounts with `spam_check = true`: their messages' menu offers
+    /// "Check for spam or scam".
+    spam_accounts: Vec<String>,
     /// True when `FAMILIAR_BENCH_OUT` names a file: the front end then runs
     /// its timing script and reports with `bench_report`.
     bench: bool,
@@ -82,6 +85,16 @@ fn ui_info() -> UiInfo {
         ),
         _ => (None, Vec::new()),
     };
+    let spam_accounts = config
+        .as_ref()
+        .map(|c| {
+            c.accounts
+                .iter()
+                .filter(|(_, a)| a.spam_check)
+                .map(|(k, _)| k.clone())
+                .collect()
+        })
+        .unwrap_or_default();
     let (theme, keys, views, processed) = match config {
         Some(c) => (
             theme_name(c.app.theme),
@@ -109,6 +122,7 @@ fn ui_info() -> UiInfo {
         processed,
         ai_tool,
         ai_accounts,
+        spam_accounts,
         config_error,
         bench: std::env::var_os(BENCH_ENV).is_some(),
     }

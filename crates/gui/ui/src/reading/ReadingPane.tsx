@@ -8,7 +8,8 @@
 // marks it read.
 import { For, Show, createEffect, createSignal, on } from "solid-js";
 import { run } from "../api";
-import { selectedMessage, setEventDialog, setReadingFrom } from "../state";
+import { rememberSpam, selectedMessage, setEventDialog, setReadingFrom, setSpamDialog, spamResults, spamSettings } from "../state";
+import { gradeLevel, gradeWords } from "../spam/SpamDialog";
 import { resolvedTheme } from "../theme";
 import { Attachments } from "./Attachments";
 import { CopyButton } from "./CopyButton";
@@ -105,6 +106,22 @@ export function ReadingPane() {
   };
 
   // How long opening took, for the performance checks (WP 3.7).
+  // A spam check saved for the open message (spam_check accounts only).
+  createEffect(
+    on(view, (v) => {
+      const m = v?.message;
+      if (!m || !spamSettings.accounts.includes(m.account) || m.id in spamResults()) return;
+      run("mail.check-spam", { message: m.id, saved: true }).then(
+        (r) => rememberSpam(m.id, r),
+        () => rememberSpam(m.id, null),
+      );
+    }),
+  );
+  const spam = () => {
+    const m = view()?.message;
+    return m ? (spamResults()[m.id] ?? null) : null;
+  };
+
   const loaded = () => {
     pane.dataset.openMs = (performance.now() - openedAt).toFixed(1);
   };
@@ -197,6 +214,14 @@ export function ReadingPane() {
                     </button>
                   </Show>
                 </div>
+              </Show>
+              <Show when={spam()}>
+                {(r) => (
+                  <div class="reading-banner" role="note">
+                    <span class={`reading-spam spam-${gradeLevel(r())}`}>Checked: {gradeWords(r())}</span>
+                    <button onClick={() => setSpamDialog({ message: m().id, saved: r() })}>Details</button>
+                  </div>
+                )}
               </Show>
               <Show when={m().has_attachments}>
                 <Attachments message={m().id} onStatus={setStatus} />

@@ -541,6 +541,20 @@ Lists a message's attachments with their names, types and sizes, read from the s
 - `--name <name>`: Only the attachment with this name or ID (with --save).
 - `--save <save>`: Save the attachments into this folder. A file that already exists is kept and the new one gets a number, like `report (2).pdf`.
 
+## mail.check-spam
+
+Check how likely an email is to be spam or a scam. Access: `read`.
+
+```
+fam mail check-spam <MESSAGE>
+```
+
+Shows what the mail server recorded about the email (SPF, DKIM, DMARC, Outlook's spam level and folder), how well you know the sender, and what its links and attachments look like. With spam_check = true on the account and [ai] enabled in config.toml, the AI tool (Claude or Codex) also grades it: spam and scam from 0 to 100, with reasons. Nothing on the server is changed; the graded result is kept on this device (--saved shows it again). Report it with fam mail report. Headers and attachments are read through famd.
+
+- `MESSAGE` (required): The message's local ID.
+- `--no-ai`: Only the facts: don't send the email to the AI tool.
+- `--saved`: Don't check: show the result saved by an earlier check, if any.
+
 ## mail.delete
 
 Move messages to Deleted Items. Access: `delete`.

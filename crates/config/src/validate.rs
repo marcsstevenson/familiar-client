@@ -332,6 +332,28 @@ pub fn check(c: &Config) -> Vec<Problem> {
             p.push(unknown_account(format!("ai.accounts[{i}]"), name));
         }
     }
+    for (key, a) in &c.accounts {
+        if !a.spam_check {
+            continue;
+        }
+        let path = format!("accounts.{key}.spam_check");
+        if !c.ai.enabled {
+            p.push(Problem::warning(
+                path,
+                "needs `[ai] enabled = true`; until then only the facts are shown",
+            ));
+        } else if c
+            .ai
+            .accounts
+            .as_ref()
+            .is_some_and(|list| !list.iter().any(|x| x == key))
+        {
+            p.push(Problem::warning(
+                path,
+                "this account isn't in `[ai] accounts`, so its mail isn't sent; only the facts are shown",
+            ));
+        }
+    }
     if !c.agent.allow.iter().any(|a| a == "read") {
         p.push(Problem::warning(
             "agent.allow",

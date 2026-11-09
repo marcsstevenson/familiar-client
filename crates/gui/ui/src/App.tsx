@@ -9,7 +9,8 @@ import { type DaemonState, type UiInfo, watchDaemon } from "./api";
 import { ReadingPane } from "./reading/ReadingPane";
 import { Palette } from "./palette/Palette";
 import { EventDialog } from "./calendar/EventDialog";
-import { aiSettings, eventDialog, notice, processedFolders, setEventDialog, setSearchQuery, setSelectedFolder, setSelectedMessage } from "./state";
+import { aiSettings, eventDialog, notice, processedFolders, setEventDialog, setSearchQuery, setSelectedFolder, setSelectedMessage, setSpamDialog, spamDialog, spamSettings } from "./state";
+import { SpamDialog } from "./spam/SpamDialog";
 import { FolderTree } from "./folders/FolderTree";
 import { MessageList } from "./list/MessageList";
 import { Splitters, paneColumns } from "./Splitters";
@@ -41,6 +42,7 @@ export function App(props: { info: UiInfo }) {
   Object.assign(processedFolders, props.info.processed);
   aiSettings.tool = props.info.ai_tool;
   aiSettings.accounts = props.info.ai_accounts;
+  spamSettings.accounts = props.info.spam_accounts;
   registerBuiltinActions((initial) => setPalette({ initial }));
   onMount(async () => {
     window.addEventListener("keydown", onGlobalKey);
@@ -49,6 +51,7 @@ export function App(props: { info: UiInfo }) {
       const c = e.payload;
       setPalette(null);
       setEventDialog(null);
+      setSpamDialog(null);
       setSearchQuery(null);
       setSelectedFolder(c.folder);
       setSelectedMessage(c.kind === "open" ? c.message : null);
@@ -93,6 +96,9 @@ export function App(props: { info: UiInfo }) {
       </footer>
       <Show when={eventDialog()}>
         {(d) => <EventDialog message={d().message} from={d().from} onClose={() => setEventDialog(null)} />}
+      </Show>
+      <Show when={spamDialog()}>
+        {(d) => <SpamDialog message={d().message} saved={d().saved} onClose={() => setSpamDialog(null)} />}
       </Show>
       <Show when={palette()}>
         {(p) => <Palette initial={p().initial} onClose={() => setPalette(null)} />}
