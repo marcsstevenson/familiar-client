@@ -142,6 +142,17 @@ button {
   white-space: nowrap;
   overflow: hidden;
 }
+.statusbar-button {
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text);
+  font-size: inherit;
+  padding: 0 var(--space-3);
+}
+.statusbar-button:hover {
+  background: var(--bg-hover);
+}
 .statusbar-spacer {
   flex: 1;
 }
