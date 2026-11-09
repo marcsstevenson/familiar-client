@@ -128,7 +128,7 @@ When the window opens, the app looks for famd on its socket. If nothing answers,
 
 ## Window and themes
 
-On Windows and Linux the window has no system frame and the app draws its own title bar with the window buttons. On macOS the system traffic lights sit over the left end of the app's bar. The cog next to the pencil opens config.toml (the path `fam config path` prints) in the system's default app for `.toml` files, or Notepad on Windows when there is none; changes take effect when the app restarts.
+On Windows and Linux the window has no system frame and the app draws its own title bar with the window buttons. On macOS the system traffic lights sit over the left end of the app's bar. The cog next to the pencil opens config.toml (the path `fam config path` prints) in the system's default app for `.toml` files, or Notepad on Windows when there is none; the app and famd read it only when they start, so when the file changes the status bar offers Restart, which stops famd and restarts the app (which starts famd again).
 
 Colours, spacing and type sizes are tokens in `ui/src/styles/tokens.css`, with one light and one dark set; `theme.ts` resolves `system` and sets `data-theme` to `light` or `dark`. The theme starts from `[app] theme` (`system`, `light` or `dark`); the button in the title bar cycles through them for the session. In the dark theme, message bodies show dark too, as in Outlook: light backgrounds turn dark and dark text turns light, each keeping its hue (`ui/src/reading/dark.ts`); pictures and emoji are left as they are. The ☀ button by the subject shows that message as sent, until another message opens.
 

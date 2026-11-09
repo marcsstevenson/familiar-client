@@ -1,5 +1,6 @@
 // The three-pane window: folders, message list, reading pane, and a status bar.
 // Each pane is its own component folder; they share selection through state.ts.
+import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { Show, createSignal, onCleanup, onMount } from "solid-js";
 import { registerBuiltinActions } from "./actions/builtin";
@@ -33,6 +34,8 @@ type UiCommand =
 export function App(props: { info: UiInfo }) {
   const [daemon, setDaemon] = createSignal<DaemonState>({ state: "starting" });
   // The palette: closed, open on the list, or open on one command's form.
+  // config.toml changed since the app started: offer a restart.
+  const [configChanged, setConfigChanged] = createSignal(false);
   const [palette, setPalette] = createSignal<{ initial?: string } | null>(null);
   setKeyOverrides(props.info.keys);
   Object.assign(processedFolders, props.info.processed);
@@ -50,10 +53,12 @@ export function App(props: { info: UiInfo }) {
       setSelectedFolder(c.folder);
       setSelectedMessage(c.kind === "open" ? c.message : null);
     });
+    const stopConfig = await listen("config_changed", () => setConfigChanged(true));
     onCleanup(() => {
       window.removeEventListener("keydown", onGlobalKey);
       stopDaemon();
       stopUi();
+      stopConfig();
     });
   });
   return (
@@ -73,6 +78,14 @@ export function App(props: { info: UiInfo }) {
         <span classList={{ warn: daemon().state === "unavailable" }}>{daemonText(daemon())}</span>
         <Show when={props.info.config_error}>
           {(e) => <span class="warn">Config: {e()}</span>}
+        </Show>
+        <Show when={configChanged()}>
+          <span>
+            config.toml changed.{" "}
+            <button class="statusbar-button" onClick={() => void invoke("restart_app")}>
+              Restart
+            </button>
+          </span>
         </Show>
         <Show when={notice()}>{(n) => <span classList={{ warn: n().error }}>{n().text}</span>}</Show>
         <span class="statusbar-spacer" />

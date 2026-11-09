@@ -8,6 +8,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod compose;
+mod config_watch;
 mod daemon;
 mod list;
 mod reading;
@@ -244,6 +245,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             ui_info,
             open_config,
+            config_watch::restart_app,
             run,
             daemon_state,
             reading::reading_open,
@@ -287,6 +289,7 @@ fn main() {
             std::thread::spawn(move || list::watch_store(&handle));
             let registry = std::sync::Arc::clone(&app.state::<std::sync::Arc<Registry>>());
             ui_socket::start(app.handle().clone(), registry);
+            config_watch::watch(app.handle().clone());
             Ok(())
         })
         .run(tauri::generate_context!())

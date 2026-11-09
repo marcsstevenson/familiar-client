@@ -38,6 +38,15 @@ pub struct GcReport {
 }
 
 impl Writer {
+    /// True while a writer (famd) holds the store at `root`.
+    pub fn is_held(root: &Path) -> bool {
+        let Ok(lock) = File::options().write(true).open(StorePaths::new(root).lock) else {
+            return false;
+        };
+        // Taking the lock here releases it again when `lock` is dropped.
+        !matches!(lock.try_lock_exclusive(), Ok(true))
+    }
+
     /// Opens (creating if needed) the store at `root`, takes the writer
     /// lock, runs pending migrations and returns ops that were in flight
     /// when the last writer stopped to the queue.
