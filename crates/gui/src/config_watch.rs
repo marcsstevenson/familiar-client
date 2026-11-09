@@ -34,6 +34,9 @@ fn modified(path: &Path) -> Option<SystemTime> {
 }
 
 /// Stops famd, so it starts again with the new config, then restarts the app.
+/// famd closes its socket first and lets go of the store once its sync and
+/// queued operations finish, so this waits for the store too. The app's own
+/// keeper may start a new famd meanwhile; that one has read the new config.
 #[tauri::command]
 pub fn restart_app(app: AppHandle) {
     if let Ok(paths) = DaemonPaths::resolve() {
@@ -43,9 +46,13 @@ pub fn restart_app(app: AppHandle) {
         {
             let _: Result<serde_json::Value, _> = client.call(METHOD_STOP, &serde_json::json!({}));
             let start = Instant::now();
-            while answers() && start.elapsed() < Duration::from_secs(5) {
-                std::thread::sleep(Duration::from_millis(100));
-            }
+            let waiting = |done: &dyn Fn() -> bool| {
+                while !done() && start.elapsed() < Duration::from_secs(30) {
+                    std::thread::sleep(Duration::from_millis(100));
+                }
+            };
+            waiting(&|| !answers());
+            waiting(&|| !familiar_store::Writer::is_held(&paths.store) || answers());
         }
     }
     app.restart();

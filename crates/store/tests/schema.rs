@@ -66,7 +66,9 @@ fn newer_store_is_refused_by_writer_and_reader() {
 #[test]
 fn second_writer_is_refused_until_first_closes() {
     let dir = tempfile::tempdir().unwrap();
+    assert!(!Writer::is_held(dir.path()));
     let w = Writer::open(dir.path()).unwrap();
+    assert!(Writer::is_held(dir.path()));
     assert!(matches!(
         Writer::open(dir.path()),
         Err(Error::WriterLocked(_))
@@ -74,6 +76,7 @@ fn second_writer_is_refused_until_first_closes() {
     // Readers don't need the lock.
     Reader::open(dir.path()).unwrap();
     drop(w);
+    assert!(!Writer::is_held(dir.path()));
     Writer::open(dir.path()).unwrap();
 }
 
