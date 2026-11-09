@@ -16,5 +16,8 @@ fn main() {
         )
         .expect("write placeholder index.html");
     }
+    // tauri-build only re-runs when tauri.conf.json or capabilities change, so
+    // a new icon would otherwise keep the stale embedded Windows resource.
+    println!("cargo:rerun-if-changed=icons");
     tauri_build::build();
 }
