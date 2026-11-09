@@ -11,6 +11,7 @@ import { run } from "../api";
 import { selectedMessage, setEventDialog, setReadingFrom } from "../state";
 import { resolvedTheme } from "../theme";
 import { Attachments } from "./Attachments";
+import { CopyButton } from "./CopyButton";
 import { type MailFetchOutput, type ReadView, errorText, openLink, openMessage, trustSender } from "./api";
 import { mismatch } from "./links";
 import { type HoverLink, MessageFrame } from "./MessageFrame";
@@ -124,7 +125,12 @@ export function ReadingPane() {
             <div class="reading-message">
               <header class="reading-header">
                 <div class="reading-title">
-                  <h1 class="reading-subject">{m().subject || "(no subject)"}</h1>
+                  <h1 class="reading-subject reading-copyable">
+                    {m().subject || "(no subject)"}
+                    <Show when={m().subject}>
+                      <CopyButton text={() => m().subject} label="Copy subject" />
+                    </Show>
+                  </h1>
                   <button
                     class="reading-calendar"
                     title="Add the events in this email to a calendar (Ctrl+Shift+A)"
@@ -144,11 +150,20 @@ export function ReadingPane() {
                     </button>
                   </Show>
                 </div>
-                <div class="reading-from">{who(m().from)}</div>
+                <div class="reading-from reading-copyable">
+                  {who(m().from)}
+                  <Show when={m().from.addr}>
+                    <CopyButton text={() => m().from.addr} label="Copy sender address" />
+                  </Show>
+                </div>
                 <div class="reading-meta">
                   <Show when={m().to.length > 0}>
-                    <span>
+                    <span class="reading-copyable">
                       To: <For each={m().to}>{(a, i) => <>{i() > 0 ? ", " : ""}{who(a)}</>}</For>
+                      <CopyButton
+                        text={() => m().to.map((a) => a.addr).join(", ")}
+                        label={m().to.length > 1 ? "Copy recipient addresses" : "Copy recipient address"}
+                      />
                     </span>
                   </Show>
                   <Show when={m().cc.length > 0}>

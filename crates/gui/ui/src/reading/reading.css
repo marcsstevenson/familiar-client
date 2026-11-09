@@ -185,3 +185,39 @@
   font-family: var(--font-mono);
   font-size: var(--text-sm);
 }
+/* Copy icons beside subject, sender and recipients: hidden until the
+   pointer is over that field, or the icon has keyboard focus. */
+.reading button.reading-copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  margin-left: var(--space-2);
+  padding: 0;
+  vertical-align: middle;
+  color: var(--text-muted);
+  border-color: transparent;
+  opacity: 0;
+  transition: opacity var(--duration-fast);
+}
+.reading-copyable:hover .reading-copy,
+.reading .reading-copy:focus-visible,
+.reading .reading-copy.copied {
+  opacity: 1;
+}
+.reading button.reading-copy:hover {
+  color: var(--accent);
+}
+.reading button.reading-copy.copied {
+  color: var(--success);
+}
+.reading-copy svg {
+  width: 14px;
+  height: 14px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.3;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
