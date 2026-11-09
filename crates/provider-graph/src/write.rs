@@ -82,14 +82,12 @@ impl MailApi {
 
     /// Reports a message as `junk`, `phish` or `notJunk` (Graph's
     /// `reportAction`), which teaches the mail filter, and asks Graph to move
-    /// it: into Junk Email, or out of it for `notJunk`. Returns it as it is
-    /// now. Graph has this only on beta, so it goes to the beta endpoint.
-    pub async fn report_message(
-        &self,
-        id: &str,
-        action: &str,
-        priority: Priority,
-    ) -> Result<GraphMessage> {
+    /// it: into Junk Email for `junk`, out of it for `notJunk`. Outlook.com
+    /// deletes a message reported as `phish` (into the hidden Recoverable
+    /// Items). Graph has this only on beta, so it goes to the beta endpoint.
+    /// The answer isn't a whole message (it has no `id`), so it is ignored;
+    /// sync picks up where the message went.
+    pub async fn report_message(&self, id: &str, action: &str, priority: Priority) -> Result<()> {
         let base = self.client().base_url();
         let beta = match base.strip_suffix("/v1.0") {
             Some(root) => format!("{root}/beta"),
@@ -99,15 +97,14 @@ impl MailApi {
             "{beta}{}",
             self.path(&format!("/messages/{id}/reportMessage"))
         );
-        let v = self
-            .client()
+        self.client()
             .post(
                 &url,
                 &json!({ "IsMessageMoveRequested": true, "ReportAction": action }),
                 priority,
             )
-            .await?;
-        Ok(serde_json::from_value(v)?)
+            .await
+            .map(|_| ())
     }
 
     /// Deletes a message for good (Recoverable Items). Familiar's "delete"

@@ -89,7 +89,7 @@ pub(super) fn route(
             update_message(st, segs[segs.len() - 1], body, prefer)
         }
         ("POST", ["messages", _, "move"]) => move_message(st, segs[1], body, prefer),
-        ("POST", ["messages", _, "reportmessage"]) => report_message(st, segs[1], body, prefer),
+        ("POST", ["messages", _, "reportmessage"]) => report_message(st, segs[1], body),
         ("POST", ["messages"]) | ("POST", ["mailfolders", _, "messages"]) => {
             create_draft(st, body, prefer)
         }
@@ -331,8 +331,9 @@ fn move_message(st: &mut MailboxState, id: &str, body: &Value, prefer: &Prefer) 
 }
 
 /// Beta `reportMessage`: junk and phish go to Junk Email, notJunk to the
-/// Inbox, when `IsMessageMoveRequested` is true.
-fn report_message(st: &mut MailboxState, id: &str, body: &Value, prefer: &Prefer) -> R {
+/// Inbox, when `IsMessageMoveRequested` is true. Like Outlook.com, it
+/// answers without the message's `id`.
+fn report_message(st: &mut MailboxState, id: &str, body: &Value) -> R {
     let imm = st
         .lookup_message(id)
         .ok_or_else(GraphError::not_found)?
@@ -347,7 +348,9 @@ fn report_message(st: &mut MailboxState, id: &str, body: &Value, prefer: &Prefer
         st.move_message(&imm, &dest)
             .map_err(|_| GraphError::not_found())?;
     }
-    Ok(Reply::ok(message_reply(st, &imm, prefer)))
+    Ok(Reply::ok(
+        serde_json::json!({ "@odata.type": "#microsoft.graph.message" }),
+    ))
 }
 
 // --- folders ----------------------------------------------------------------

@@ -114,7 +114,7 @@ export function MessageMenu(props: { row: Row; x: number; y: number; onClose: ()
         <button
           role="menuitem"
           class="danger"
-          title="Tell your mail provider this is a scam, and move it out of the way"
+          title="Tell your mail provider this is a scam; Outlook then deletes it"
           onClick={() => leave("Reported as phishing", () => run("mail.report", { messages: ids, phishing: true }))}
         >
           Report phishing (scam)
