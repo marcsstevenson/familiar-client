@@ -238,6 +238,14 @@ fn command(
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
+    // The desktop app has no console, so Windows would open a console
+    // window for the tool while it runs.
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt as _;
+        const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+        c.creation_flags(CREATE_NO_WINDOW);
+    }
     let out = match tool.kind {
         ToolKind::Claude => {
             c.args([
