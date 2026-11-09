@@ -118,7 +118,7 @@ Message list or reading pane: right-click -> "Check for spam or scam"
 
 All cheap, local and deterministic. Each fact has a name, a value and whether it points towards spam, scam or neither.
 
-- **Authentication**, from the *first* (topmost) `Authentication-Results` whose authserv-id is the provider's (`mx.microsoft.com` for Microsoft accounts, `mx.google.com` later for Gmail), per RFC 8601: `spf`, `dkim`, `dmarc`, `compauth` and its reason. Others, and anything named `-Original` or `-Untrusted`, are ignored.
+- **Authentication**, from the *first* (topmost) `Authentication-Results`, which is the one the receiving server added last: `spf`, `dkim`, `dmarc`, `compauth` and its reason. Lower copies, and anything named `-Original` or `-Untrusted`, are ignored. The authserv-id is not required: both of Marc's accounts send `mx.microsoft.com 1;`, but Microsoft's documented Exchange examples start straight at `spf=`, and the topmost position is what matters.
 - **Provider verdict:** SCL, BCL, `CAT`, `SFV`, `dest`, and the folder the message is in now (Junk or not).
 - **Identity:** From display name vs address (a display name containing an email address, or a domain, that isn't the From address's); Reply-To domain different from From; From domain in punycode (`xn--`); the From domain's registered part within edit distance 2 of a domain you correspond with but not equal to it (the "one letter off" check, against your own correspondents, so no brand list is needed).
 - **Relationship**, from the store's `correspondents` and `contacts` (WP 2.5): how many times you have written to this address and to this domain, whether it is a contact, how many messages you've received from it before, and whether you've marked it a trusted image sender.
@@ -235,13 +235,13 @@ What the mail server and your mailbox say
 
 - **What is sent:** one message's subject, sender, Reply-To, date, plain text (with link hosts), attachment names, and the facts list, only when you click Check. No raw headers, no attachment contents, no other mail. With Codex, the caveat in `docs/ai.md` stands: read-only Codex can read local files.
 - **Prompt injection:** the AI has no tools (Claude), so an email can only change the AI's answer. The facts are computed by Familiar and shown separately, so injection can lower the AI's number but not hide "DMARC failed" or "Reply-To on another domain". Nothing is moved or deleted without a click.
-- **Spoofed headers:** only the receiving server's results are read (step 2), so a sender's fake `Authentication-Results` or `-Untrusted` copies don't count.
+- **Spoofed headers:** only the topmost results, the receiving server's, are read (step 2), so a sender's fake `Authentication-Results` or `-Untrusted` copies don't count.
 - **Links are never fetched**, by Familiar or the AI. Fetching a phishing link can confirm your address to the sender or reach a malicious page.
 - **Audit:** the check changes nothing, so nothing goes in the audit log; a Move to Junk is a `gui` write as usual. The GUI log line has the message id, tool, duration and grade, not content.
 
 ## Testing
 
-- **Unit:** header parsing with fixtures cut from the two live messages above (Hotmail Junk, Parklands Inbox), plus a forged `Authentication-Results` lower in the headers, a Gmail-style one, and missing headers. Display-name, Reply-To, punycode and lookalike checks. Link extraction from HTML (text vs host, IP hosts, shorteners). Answer checking with good, out-of-range and broken JSON.
+- **Unit:** header parsing with fixtures cut from the two live messages above (Hotmail Junk, Parklands Inbox), plus a forged `Authentication-Results` lower in the headers, an Exchange one with no authserv-id (`spf=pass ...; compauth=pass reason=100`), a Gmail-style one, and missing headers. Display-name, Reply-To, punycode and lookalike checks. Link extraction from HTML (text vs host, IP hosts, shorteners). Answer checking with good, out-of-range and broken JSON.
 - **Mock Graph:** `internetMessageHeaders` on mock messages, served on `$select=internetMessageHeaders`, so `fam mail check-spam --no-ai` is tested end to end through famd.
 - **Fake AI:** the existing fake-tool setup from WP AI.2 (fixed JSON, timeout, non-zero exit) drives every path without a model.
 - **GUI:** the Playwright harness with an IPC stub: right-click a row, Check, see the dialog, Move to Junk, check the `mail.move` call.
