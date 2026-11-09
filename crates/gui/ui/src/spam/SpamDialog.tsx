@@ -80,56 +80,58 @@ export function SpamDialog(props: { message: number; saved?: SpamResult; onClose
           <Match when={result()}>
             {(r) => (
               <div class="event-body">
-                <div class="spam-head">
-                  <h2 class={`spam-grade spam-${gradeLevel(r())}`}>{gradeWords(r())}</h2>
+                <div class="event-scroll">
+                  <div class="spam-head">
+                    <h2 class={`spam-grade spam-${gradeLevel(r())}`}>{gradeWords(r())}</h2>
+                    <Show when={r().ai}>
+                      {(g) => (
+                        <span class="muted">
+                          Spam {g().spam}% · Scam {g().scam}% · checked by {g().tool === "codex" ? "Codex" : "Claude"},{" "}
+                          {checkedWords(r().checked_at)}
+                        </span>
+                      )}
+                    </Show>
+                  </div>
                   <Show when={r().ai}>
                     {(g) => (
-                      <span class="muted">
-                        Spam {g().spam}% · Scam {g().scam}% · checked by {g().tool === "codex" ? "Codex" : "Claude"},{" "}
-                        {checkedWords(r().checked_at)}
-                      </span>
+                      <>
+                        <Show when={g().summary}>
+                          <p>{g().summary}</p>
+                        </Show>
+                        <Show when={g().reasons.length > 0}>
+                          <ul class="spam-reasons">
+                            <For each={g().reasons}>
+                              {(reason) => (
+                                <li>
+                                  <span class="spam-signal">{reason.signal}</span>
+                                  <span class="spam-evidence">“{reason.evidence}”</span>
+                                </li>
+                              )}
+                            </For>
+                          </ul>
+                        </Show>
+                        <Show when={g().advice}>{(a) => <p class="spam-advice">{a()}</p>}</Show>
+                      </>
                     )}
                   </Show>
+                  <section class="spam-facts" aria-label="What the mail server and your mailbox say">
+                    <h3>What the mail server and your mailbox say</h3>
+                    <ul>
+                      <For each={r().facts}>
+                        {(f) => (
+                          <li class={f.points ? `spam-fact-${f.points}` : undefined}>
+                            <span class="spam-mark" aria-hidden="true">
+                              {marks[f.points] ?? ""}
+                            </span>
+                            <span>{f.detail}</span>
+                          </li>
+                        )}
+                      </For>
+                    </ul>
+                  </section>
+                  <For each={r().notes}>{(n) => <p class="muted">{n}</p>}</For>
                 </div>
-                <Show when={r().ai}>
-                  {(g) => (
-                    <>
-                      <Show when={g().summary}>
-                        <p>{g().summary}</p>
-                      </Show>
-                      <Show when={g().reasons.length > 0}>
-                        <dl class="spam-reasons">
-                          <For each={g().reasons}>
-                            {(reason) => (
-                              <>
-                                <dt>{reason.signal}</dt>
-                                <dd>“{reason.evidence}”</dd>
-                              </>
-                            )}
-                          </For>
-                        </dl>
-                      </Show>
-                      <Show when={g().advice}>{(a) => <p class="spam-advice">{a()}</p>}</Show>
-                    </>
-                  )}
-                </Show>
-                <section class="spam-facts" aria-label="What the mail server and your mailbox say">
-                  <h3>What the mail server and your mailbox say</h3>
-                  <ul>
-                    <For each={r().facts}>
-                      {(f) => (
-                        <li class={f.points ? `spam-fact-${f.points}` : undefined}>
-                          <span class="spam-mark" aria-hidden="true">
-                            {marks[f.points] ?? ""}
-                          </span>
-                          {f.detail}
-                        </li>
-                      )}
-                    </For>
-                  </ul>
-                </section>
-                <For each={r().notes}>{(n) => <p class="muted">{n}</p>}</For>
-                <div class="event-actions">
+                <div class="event-actions spam-actions">
                   <button onClick={props.onClose}>Close</button>
                   <Show when={round() === 0}>
                     <button onClick={() => setRound(1)}>Check again</button>

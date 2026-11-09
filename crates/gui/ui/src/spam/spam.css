@@ -1,6 +1,14 @@
 /* Spam and scam check dialog and banner. Colours come from styles/tokens.css. */
 .spam-dialog {
   width: min(640px, 94vw);
+  overflow: hidden;
+}
+.spam-dialog .event-scroll {
+  overflow-x: hidden;
+}
+.spam-actions {
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--border);
 }
 .spam-head {
   display: flex;
@@ -17,17 +25,26 @@
   color: var(--success);
 }
 .spam-reasons {
-  display: grid;
-  grid-template-columns: max-content 1fr;
-  gap: var(--space-2) var(--space-4);
+  list-style: none;
   margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
 }
-.spam-reasons dt {
+.spam-reasons li {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  min-width: 0;
+}
+.spam-signal {
   font-weight: 600;
 }
-.spam-reasons dd {
-  margin: 0;
-  overflow-wrap: anywhere;
+.spam-evidence {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  overflow-wrap: break-word;
 }
 .spam-advice {
   font-weight: 600;
@@ -47,10 +64,16 @@
   font-size: var(--text-sm);
 }
 .spam-facts li {
-  overflow-wrap: anywhere;
+  display: flex;
+  align-items: baseline;
+  min-width: 0;
+  overflow-wrap: break-word;
+}
+.spam-facts li > span:last-child {
+  min-width: 0;
 }
 .spam-mark {
-  display: inline-block;
+  flex: none;
   width: 1.6em;
   font-weight: 700;
 }
