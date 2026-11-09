@@ -38,6 +38,7 @@ export const COMMAND_SURFACE = {
   "folder.unpin": "palette",
   "mail.archive": "palette",
   "mail.process": "palette",
+  "mail.report": "palette",
   "mail.attachments": "palette",
   "mail.delete": "palette",
   "mail.fetch": "palette",

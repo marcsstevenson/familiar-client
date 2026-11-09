@@ -1129,6 +1129,21 @@ export type MailReadInput = {
   wait_secs?: number | null;
 };
 
+export type MailReportInput = {
+  /** Only show what would change. */
+  dry_run?: boolean;
+  /** Local message IDs. */
+  messages: Array<number>;
+  /** Report them as not junk, moving them from Junk Email to the Inbox. */
+  not_junk?: boolean;
+  /** Report them as phishing (a scam) instead of junk. */
+  phishing?: boolean;
+  /** Wait until the server has the report (needs famd). */
+  wait?: boolean;
+  /** Seconds --wait waits at most (default 60). */
+  wait_secs?: number | null;
+};
+
 export type MailSearchInput = {
   /** The next-page token from a previous search. */
   after?: string | null;
@@ -1723,6 +1738,8 @@ export interface Commands {
   "mail.process": { input: MailProcessInput; output: WriteOutput };
   /** Mark messages read or unread */
   "mail.read": { input: MailReadInput; output: WriteOutput };
+  /** Report messages as junk, phishing or not junk */
+  "mail.report": { input: MailReportInput; output: WriteOutput };
   /** Search mail across all accounts */
   "mail.search": { input: MailSearchInput; output: MailSearchOutput };
   /** Write and send a message */
@@ -1795,6 +1812,7 @@ export const COMMAND_NAMES = [
   "mail.pin",
   "mail.process",
   "mail.read",
+  "mail.report",
   "mail.search",
   "mail.send",
   "mail.thread",

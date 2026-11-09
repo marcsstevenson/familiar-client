@@ -37,13 +37,15 @@ fn str_field<'a>(body: &'a Value, name: &str) -> Result<&'a str, GraphError> {
         .ok_or_else(|| bad_request(format!("The property '{name}' is required.")))
 }
 
-/// Splits `/v1.0/me/...` or `/v1.0/users/<me>/...` into segments after the user.
+/// Splits `/v1.0/me/...` or `/v1.0/users/<me>/...` into segments after the
+/// user. Writes also take `/beta/`, for `reportMessage`.
 fn segments<'a>(st: &MailboxState, path: &'a str) -> Result<Vec<&'a str>, GraphError> {
-    let Some(rest) = strip_prefix_ci(path, "/v1.0/") else {
+    let Some(rest) = strip_prefix_ci(path, "/v1.0/").or_else(|| strip_prefix_ci(path, "/beta/"))
+    else {
         return Err(GraphError::new(
             400,
             "BadRequest",
-            "Invalid version: the mock serves /v1.0 only.",
+            "Invalid version: the mock serves /v1.0 (and /beta for writes) only.",
         ));
     };
     let segs: Vec<&str> = rest.split('/').filter(|s| !s.is_empty()).collect();
@@ -87,6 +89,7 @@ pub(super) fn route(
             update_message(st, segs[segs.len() - 1], body, prefer)
         }
         ("POST", ["messages", _, "move"]) => move_message(st, segs[1], body, prefer),
+        ("POST", ["messages", _, "reportmessage"]) => report_message(st, segs[1], body, prefer),
         ("POST", ["messages"]) | ("POST", ["mailfolders", _, "messages"]) => {
             create_draft(st, body, prefer)
         }
@@ -325,6 +328,26 @@ fn move_message(st: &mut MailboxState, id: &str, body: &Value, prefer: &Prefer) 
     st.move_message(&imm, &dest)
         .map_err(|_| GraphError::not_found())?;
     Ok(created(message_reply(st, &imm, prefer)))
+}
+
+/// Beta `reportMessage`: junk and phish go to Junk Email, notJunk to the
+/// Inbox, when `IsMessageMoveRequested` is true.
+fn report_message(st: &mut MailboxState, id: &str, body: &Value, prefer: &Prefer) -> R {
+    let imm = st
+        .lookup_message(id)
+        .ok_or_else(GraphError::not_found)?
+        .to_string();
+    let dest = match str_field(body, "ReportAction")? {
+        "junk" | "phish" => "junkemail",
+        "notJunk" => "inbox",
+        other => return Err(bad_request(format!("Invalid ReportAction '{other}'."))),
+    };
+    if body["IsMessageMoveRequested"].as_bool() == Some(true) {
+        let dest = st.resolve_folder(dest).ok_or_else(GraphError::not_found)?;
+        st.move_message(&imm, &dest)
+            .map_err(|_| GraphError::not_found())?;
+    }
+    Ok(Reply::ok(message_reply(st, &imm, prefer)))
 }
 
 // --- folders ----------------------------------------------------------------

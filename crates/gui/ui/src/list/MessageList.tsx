@@ -6,6 +6,7 @@ import { listNav, processMessage, processedFolders, removeFromList, setDragged, 
 import { OnlineHits, SearchBar } from "./SearchBar";
 import { type Row, type Sort, listIndexOf, listOpen, listRows, onStoreChanged } from "./api";
 import { shortDate } from "./format";
+import { MessageMenu } from "./MessageMenu";
 
 export const ROW_H = 64;
 const PAGE = 100;
@@ -29,6 +30,15 @@ export function MessageList() {
   const [error, setError] = createSignal<string | null>(null);
   const [rev, setRev] = createSignal(0);
   const [notices, setNotices] = createSignal<string[]>([]);
+  // The message whose context menu is open, and where.
+  const [menu, setMenu] = createSignal<{ row: Row; x: number; y: number } | null>(null);
+  const openMenu = (row: Row, e: MouseEvent) => {
+    e.preventDefault();
+    // From the keyboard (menu key, Shift+F10) there is no pointer: open by the row.
+    const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const keyboard = e.clientX === 0 && e.clientY === 0;
+    setMenu({ row: { ...row }, x: keyboard ? r.left + 24 : e.clientX, y: keyboard ? r.bottom : e.clientY });
+  };
 
   // Pages of rows for the current view generation.
   let pages = new Map<number, Row[]>();
@@ -289,10 +299,11 @@ export function MessageList() {
         </Show>
         <div class="list-spacer" style={{ height: `${total() * ROW_H}px` }}>
           <For each={visible()}>
-            {(i) => <ListRow index={i} row={rowAt(i)} selected={selIndex() === i} onSelect={select} unified={selectedFolder() === null || searchQuery() !== null} />}
+            {(i) => <ListRow index={i} row={rowAt(i)} selected={selIndex() === i} onSelect={select} onMenu={openMenu} unified={selectedFolder() === null || searchQuery() !== null} />}
           </For>
         </div>
       </div>
+      <Show when={menu()}>{(m) => <MessageMenu row={m().row} x={m().x} y={m().y} onClose={() => setMenu(null)} />}</Show>
     </div>
   );
 }
@@ -303,6 +314,7 @@ function ListRow(props: {
   selected: boolean;
   unified: boolean;
   onSelect: (i: number) => void;
+  onMenu: (row: Row, e: MouseEvent) => void;
 }) {
   return (
     <div
@@ -313,6 +325,9 @@ function ListRow(props: {
       aria-selected={props.selected}
       style={{ transform: `translateY(${props.index * ROW_H}px)` }}
       onMouseDown={() => props.onSelect(props.index)}
+      onContextMenu={(e) => {
+        if (props.row) props.onMenu(props.row, e);
+      }}
       draggable={props.row !== undefined}
       onDragStart={(e) => {
         const r = props.row;

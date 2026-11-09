@@ -55,6 +55,21 @@ export function registerBuiltinActions(openPalette: (prefill?: string) => void):
     },
   });
   registerAction({
+    id: "report_junk",
+    title: "Report junk (spam)",
+    enabled: hasMessage,
+    cli: () => `fam mail report ${selectedMessage()}`,
+    run: () => onSelectedLeaves("Reported as junk", (id) => run("mail.report", { messages: [id] })),
+  });
+  registerAction({
+    id: "report_phishing",
+    title: "Report phishing (scam)",
+    enabled: hasMessage,
+    cli: () => `fam mail report ${selectedMessage()} --phishing`,
+    run: () =>
+      onSelectedLeaves("Reported as phishing", (id) => run("mail.report", { messages: [id], phishing: true })),
+  });
+  registerAction({
     id: "delete",
     title: "Delete",
     key: "#",
