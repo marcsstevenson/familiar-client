@@ -294,7 +294,9 @@ impl Saved {
     /// Writes the file to `data_dir` through a temporary file.
     pub fn save(&self, data_dir: &Path) -> std::io::Result<()> {
         std::fs::create_dir_all(data_dir)?;
-        let tmp = data_dir.join(format!("{FILE}.tmp"));
+        // A temporary file of its own, so two checks saving at once can't
+        // rename each other's half-written file.
+        let tmp = data_dir.join(format!("{FILE}.{}.tmp", std::process::id()));
         std::fs::write(
             &tmp,
             serde_json::to_vec(self).map_err(std::io::Error::other)?,

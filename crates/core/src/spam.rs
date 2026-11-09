@@ -279,8 +279,7 @@ fn attr(tag: &str, name: &str) -> Option<String> {
 
 /// The host of an http(s) URL, and whether it has a `user@` part.
 fn url_host(url: &str) -> Option<(String, bool)> {
-    let url = url.trim().replace("&amp;", "&");
-    let lower = url.to_ascii_lowercase();
+    let lower = url.trim().to_ascii_lowercase();
     let rest = lower
         .strip_prefix("https://")
         .or_else(|| lower.strip_prefix("http://"))?;
@@ -322,7 +321,11 @@ pub fn links(html: &str) -> Vec<Link> {
             .find("</a")
             .map_or(html.len(), |e| body_start + e);
         from = body_end;
-        let Some((host, userinfo)) = attr(tag, "href").and_then(|h| url_host(&h)) else {
+        // Character references (`https&#58;//`) decoded as a browser would.
+        let Some((host, userinfo)) = attr(tag, "href")
+            .map(|h| familiar_search::text::html_to_text(&h))
+            .and_then(|h| url_host(&h))
+        else {
             continue;
         };
         let text = familiar_search::text::html_to_text(&html[body_start..body_end]);
@@ -773,9 +776,11 @@ mod tests {
             <a href="https://bit.ly/3abc">Track parcel</a>
             <a href="mailto:jo@example.com">jo@example.com</a>
             <a name="top">anchor</a>
-            <a href="https://www.anz.co.nz/help">anz.co.nz/help</a>"#;
+            <a href="https://www.anz.co.nz/help">anz.co.nz/help</a>
+            <a href="https&#58;//evil.example/login">www.anz.co.nz</a>"#;
         let l = links(html);
-        assert_eq!(l.len(), 5, "{l:?}");
+        assert_eq!(l.len(), 6, "{l:?}");
+        assert_eq!(l[5].host, "evil.example");
         assert_eq!(l[0].host, "anz-secure-verify.top");
         assert_eq!(l[0].text, "www.anz.co.nz");
         assert!(l[2].userinfo);
@@ -788,7 +793,7 @@ mod tests {
         assert_eq!(value(&f, "link_ip"), Some("192.168.0.9"));
         assert_eq!(value(&f, "link_userinfo"), Some("evil.example"));
         assert_eq!(value(&f, "link_shortener"), Some("bit.ly"));
-        assert_eq!(f.iter().filter(|x| x.name == "link_mismatch").count(), 1);
+        assert_eq!(f.iter().filter(|x| x.name == "link_mismatch").count(), 2);
         assert_eq!(value(&f, "link_domains"), Some("5"));
     }
 
