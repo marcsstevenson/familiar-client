@@ -520,3 +520,70 @@ async fn process_creates_the_folder_once_then_moves_into_it() {
         f.id
     );
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn report_moves_to_junk_and_back_through_beta_report_message() {
+    use familiar_core::ops::Report;
+    let mut env = Env::new(50).await;
+    env.start(policy());
+    env.until("first sync", LIMIT, |e| e.settled(30)).await;
+    let msgs = inbox(&env, 2);
+    let mbox = || env.mock.mailbox(KEY);
+    let junk = env
+        .reader()
+        .folders(env.account())
+        .unwrap()
+        .into_iter()
+        .find(|f| f.well_known.as_deref() == Some("junkemail"))
+        .unwrap();
+    let report = |id: i64, report: Report| WriteRequest::Report {
+        messages: vec![id],
+        report,
+    };
+
+    // Not junk only makes sense in Junk Email.
+    let err = submit(&env, report(msgs[0].id.0, Report::NotJunk), waiting())
+        .await
+        .unwrap_err();
+    assert_eq!(err.kind, ErrorKind::Usage, "{err:?}");
+
+    // Junk and phishing both land in Junk Email, here and on the server.
+    for (m, r, action) in [
+        (&msgs[0], Report::Junk, "\"junk\""),
+        (&msgs[1], Report::Phishing, "\"phish\""),
+    ] {
+        let out = submit(&env, report(m.id.0, r), waiting()).await.unwrap();
+        assert_eq!(out.ops.len(), 1, "{out:?}");
+        assert_eq!(out.ops[0].kind, "report_message");
+        assert_eq!(out.ops[0].state, "done", "{out:?}");
+        assert_eq!(
+            mbox().message(&m.remote_id).unwrap().folder_id,
+            junk.remote_id
+        );
+        assert_eq!(env.reader().message(m.id).unwrap().unwrap().folder, junk.id);
+        let sent = env
+            .mock
+            .requests()
+            .into_iter()
+            .rfind(|q| q.path.ends_with("/reportMessage"))
+            .unwrap();
+        assert!(sent.path.starts_with("/beta/"), "{}", sent.path);
+        assert!(sent.body.contains(action), "{}", sent.body);
+    }
+
+    // Junk again: already there, nothing to send.
+    let out = submit(&env, report(msgs[0].id.0, Report::Junk), waiting())
+        .await
+        .unwrap();
+    assert!(out.ops.is_empty(), "{out:?}");
+
+    // Not junk goes back to the Inbox.
+    let out = submit(&env, report(msgs[0].id.0, Report::NotJunk), waiting())
+        .await
+        .unwrap();
+    assert_eq!(out.ops[0].state, "done", "{out:?}");
+    assert_eq!(
+        env.reader().message(msgs[0].id).unwrap().unwrap().folder,
+        msgs[0].folder
+    );
+}

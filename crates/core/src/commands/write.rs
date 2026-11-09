@@ -388,6 +388,71 @@ impl Command for MailArchive {
     }
 }
 
+/// `fam mail report`.
+pub struct MailReport;
+
+/// Input for `fam mail report`.
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct MailReportInput {
+    /// Local message IDs.
+    #[schemars(extend("x-positional" = 0))]
+    pub messages: Vec<i64>,
+    /// Report them as phishing (a scam) instead of junk.
+    #[serde(default)]
+    pub phishing: bool,
+    /// Report them as not junk, moving them from Junk Email to the Inbox.
+    #[serde(default)]
+    pub not_junk: bool,
+    /// Only show what would change.
+    #[serde(default)]
+    pub dry_run: bool,
+    /// Wait until the server has the report (needs famd).
+    #[serde(default)]
+    pub wait: bool,
+    /// Seconds --wait waits at most (default 60).
+    #[serde(default)]
+    pub wait_secs: Option<u32>,
+}
+
+impl Command for MailReport {
+    type Input = MailReportInput;
+    type Output = WriteOutput;
+    const SPEC: CommandSpec = CommandSpec {
+        path: &["mail", "report"],
+        summary: "Report messages as junk, phishing or not junk",
+        description: "Reports messages to the mail provider as junk (the default), phishing (--phishing) or not junk (--not-junk), which trains its filter. Junk and phishing go to Junk Email; not junk goes back to the Inbox. The move shows on this device at once and the report is queued for the server.",
+        access: Access::Write,
+        errors: WRITE_ERRORS,
+    };
+
+    fn run(&self, _ctx: &Context<'_>, i: MailReportInput) -> Result<WriteOutput, CommandError> {
+        let report = match (i.phishing, i.not_junk) {
+            (false, false) => ops::Report::Junk,
+            (true, false) => ops::Report::Phishing,
+            (false, true) => ops::Report::NotJunk,
+            (true, true) => {
+                return Err(CommandError::usage(
+                    "give --phishing or --not-junk, not both",
+                ));
+            }
+        };
+        run_write(
+            WriteRequest::Report {
+                messages: i.messages,
+                report,
+            },
+            i.dry_run,
+            i.wait,
+            i.wait_secs,
+        )
+    }
+
+    fn render_text(&self, o: &WriteOutput) -> String {
+        o.render()
+    }
+}
+
 /// `fam mail process`.
 pub struct MailProcess;
 

@@ -13,6 +13,7 @@ until the server has them.
 | `fam mail flag <ids>... [--clear]` | Flag, or clear the flag | write |
 | `fam mail move <ids>... --to <folder>` | Move to a folder of the same account | write |
 | `fam mail archive <ids>...` | Move to Archive | write |
+| `fam mail report <ids>... [--phishing \| --not-junk]` | Report to the provider as junk (default), phishing or not junk; see below | write |
 | `fam mail delete <ids>... [--permanent --yes]` | Move to Deleted Items; `--permanent` deletes items already there for good | delete |
 | `fam folder create <name> [--parent <folder>]` | Create a folder | write |
 | `fam folder rename <folder> <name>` | Rename | write |
@@ -42,6 +43,23 @@ Exit codes: a refused change under `--wait` is `server` (12); a `--wait`
 that times out is `offline` (7) and the change stays queued; `--wait`
 without famd is `daemon_unavailable` (11) and nothing changes; a permanent
 delete without `--yes` is `confirmation_required` (10).
+
+## Reporting junk and phishing
+
+`fam mail report` (and the message list's right-click menu) follows the
+provider's own report process, so its filter learns from it:
+
+- **Outlook (Graph).** Graph's `reportMessage` action with `ReportAction`
+  `junk`, `phish` or `notJunk` and `IsMessageMoveRequested: true`. Graph has
+  it only on the beta endpoint, so the runner posts to `/beta` (everything
+  else stays on v1.0). The server moves the message: junk and phishing into
+  Junk Email, not junk back to the Inbox. Locally the message moves there at
+  once; if Graph picks another folder (a work tenant may put phishing
+  elsewhere), the next sync moves it there. Not junk is only for messages in Junk Email; junk on a
+  message already there does nothing.
+- **Gmail (later).** The op payload (`report_message` with a provider-neutral
+  `Report`) is the seam. Gmail has no report API beyond its labels: junk and
+  phishing add `SPAM` and remove `INBOX`, not junk does the reverse.
 
 ## Compose and send (WP 2.3)
 

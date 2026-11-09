@@ -80,6 +80,36 @@ impl MailApi {
         Ok(serde_json::from_value(v)?)
     }
 
+    /// Reports a message as `junk`, `phish` or `notJunk` (Graph's
+    /// `reportAction`), which teaches the mail filter, and asks Graph to move
+    /// it: into Junk Email, or out of it for `notJunk`. Returns it as it is
+    /// now. Graph has this only on beta, so it goes to the beta endpoint.
+    pub async fn report_message(
+        &self,
+        id: &str,
+        action: &str,
+        priority: Priority,
+    ) -> Result<GraphMessage> {
+        let base = self.client().base_url();
+        let beta = match base.strip_suffix("/v1.0") {
+            Some(root) => format!("{root}/beta"),
+            None => base.to_string(),
+        };
+        let url = format!(
+            "{beta}{}",
+            self.path(&format!("/messages/{id}/reportMessage"))
+        );
+        let v = self
+            .client()
+            .post(
+                &url,
+                &json!({ "IsMessageMoveRequested": true, "ReportAction": action }),
+                priority,
+            )
+            .await?;
+        Ok(serde_json::from_value(v)?)
+    }
+
     /// Deletes a message for good (Recoverable Items). Familiar's "delete"
     /// moves to Deleted Items instead; this is for items already there.
     pub async fn delete_message(&self, id: &str, priority: Priority) -> Result<()> {

@@ -222,7 +222,7 @@ pub fn required(tx: &WriteTx<'_>, p: &OpPayload) -> Vec<Access> {
         OpPayload::MoveMessage { to, .. } if folder_is(*to, "deleteditems") => {
             vec![Access::Delete]
         }
-        OpPayload::MoveMessage { .. } => vec![Access::Write],
+        OpPayload::MoveMessage { .. } | OpPayload::ReportMessage { .. } => vec![Access::Write],
         OpPayload::DeleteMessage { .. } | OpPayload::DeleteFolder { .. } => vec![Access::Delete],
         OpPayload::CreateDraft(_) | OpPayload::UpdateDraft(_) => vec![Access::Draft],
         OpPayload::SendDraft { .. } => vec![Access::Send],

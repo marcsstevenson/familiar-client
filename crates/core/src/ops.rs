@@ -63,6 +63,18 @@ pub enum OpPayload {
         /// Local folder ID it came from.
         from: i64,
     },
+    /// Report a message as junk, phishing or not junk. The server moves it
+    /// (out of Junk Email for not junk); locally it moves to `to` at once.
+    ReportMessage {
+        /// Local message ID.
+        message: i64,
+        /// What it is reported as.
+        report: Report,
+        /// Local folder ID it is expected to land in.
+        to: i64,
+        /// Local folder ID it came from.
+        from: i64,
+    },
     /// Delete a message for good. Applied locally once the server has it.
     DeleteMessage {
         /// Local message ID.
@@ -138,6 +150,7 @@ impl OpPayload {
             OpPayload::SetRead { .. } => "set_read",
             OpPayload::SetFlag { .. } => "set_flag",
             OpPayload::MoveMessage { .. } => "move_message",
+            OpPayload::ReportMessage { .. } => "report_message",
             OpPayload::DeleteMessage { .. } => "delete_message",
             OpPayload::CreateFolder { .. } => "create_folder",
             OpPayload::RenameFolder { .. } => "rename_folder",
@@ -160,6 +173,7 @@ impl OpPayload {
             OpPayload::SetRead { message, .. }
             | OpPayload::SetFlag { message, .. }
             | OpPayload::MoveMessage { message, .. }
+            | OpPayload::ReportMessage { message, .. }
             | OpPayload::DeleteMessage { message }
             | OpPayload::SendDraft { message, .. } => message_target(MessageId(*message)),
             OpPayload::CreateDraft(d) => message_target(MessageId(d.message)),
@@ -178,7 +192,7 @@ impl OpPayload {
     /// Whether the op needs local folder `f` to exist on the server.
     pub fn uses_folder(&self, f: i64) -> bool {
         match self {
-            OpPayload::MoveMessage { to, .. } => *to == f,
+            OpPayload::MoveMessage { to, .. } | OpPayload::ReportMessage { to, .. } => *to == f,
             OpPayload::CreateFolder { parent, .. } => *parent == Some(f),
             OpPayload::RenameFolder { folder, .. } | OpPayload::DeleteFolder { folder, .. } => {
                 *folder == f
@@ -205,6 +219,39 @@ fn event_or_series(event: i64, series: Option<&str>) -> String {
 
 // ---------------------------------------------------------------------------
 // Requests
+
+/// What a message is reported as. Provider-neutral: Graph sends it with
+/// `reportMessage`; a Gmail provider would add or remove the `SPAM` label.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum Report {
+    /// Junk (spam): it goes to Junk Email.
+    Junk,
+    /// Phishing (a scam): it goes to Junk Email, or wherever the server puts it.
+    Phishing,
+    /// Not junk: out of Junk Email back to the Inbox.
+    NotJunk,
+}
+
+impl Report {
+    /// In words, for op summaries.
+    pub fn label(self) -> &'static str {
+        match self {
+            Report::Junk => "junk",
+            Report::Phishing => "phishing",
+            Report::NotJunk => "not junk",
+        }
+    }
+
+    /// Graph's `reportAction`.
+    pub fn graph_action(self) -> &'static str {
+        match self {
+            Report::Junk => "junk",
+            Report::Phishing => "phish",
+            Report::NotJunk => "notJunk",
+        }
+    }
+}
 
 /// A write as a command asks for it, before it is split into ops.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, JsonSchema)]
@@ -244,6 +291,13 @@ pub enum WriteRequest {
     Archive {
         /// Local message IDs.
         messages: Vec<i64>,
+    },
+    /// Report messages as junk, phishing or not junk.
+    Report {
+        /// Local message IDs.
+        messages: Vec<i64>,
+        /// What they are reported as.
+        report: Report,
     },
     /// Move messages to Deleted Items, or delete them for good with
     /// `permanent` (only for messages already in Deleted Items).
@@ -381,6 +435,7 @@ impl WriteRequest {
             WriteRequest::Move { .. } => "mail.move",
             WriteRequest::Process { .. } => "mail.process",
             WriteRequest::Archive { .. } => "mail.archive",
+            WriteRequest::Report { .. } => "mail.report",
             WriteRequest::Delete { .. } => "mail.delete",
             WriteRequest::FolderCreate { .. } => "folder.create",
             WriteRequest::FolderRename { .. } => "folder.rename",
@@ -830,6 +885,48 @@ pub fn plan(tx: &WriteTx<'_>, req: &WriteRequest) -> Result<Vec<Planned>, Comman
                     CommandError::new(ErrorKind::NotFound, format!("{key} has no Archive folder"))
                 })?;
                 push_move(&mut out, &m, dest, &key, "archive");
+            }
+        }
+        WriteRequest::Report {
+            messages: ids,
+            report,
+        } => {
+            for m in messages(ids)? {
+                let key = key_of(m.account);
+                let folders = tx.folders(m.account).map_err(store_err)?;
+                let junk = well_known(&folders, "junkemail").ok_or_else(|| {
+                    CommandError::new(
+                        ErrorKind::NotFound,
+                        format!("{key} has no Junk Email folder"),
+                    )
+                })?;
+                let in_junk = m.folder == junk.id;
+                let to = match report {
+                    // Already there: nothing to tell the server.
+                    Report::Junk if in_junk => continue,
+                    Report::Junk | Report::Phishing => junk,
+                    Report::NotJunk if !in_junk => {
+                        return Err(CommandError::usage(format!(
+                            "message {} isn't in Junk Email, so it can't be reported as not junk",
+                            m.id.0
+                        )));
+                    }
+                    Report::NotJunk => well_known(&folders, "inbox").ok_or_else(|| {
+                        CommandError::new(ErrorKind::NotFound, format!("{key} has no Inbox"))
+                    })?,
+                };
+                out.push(Planned {
+                    delay_secs: 0,
+                    account: m.account,
+                    account_key: key,
+                    summary: format!("report {:?} as {}", short(&m.subject), report.label()),
+                    payload: OpPayload::ReportMessage {
+                        message: m.id.0,
+                        report: *report,
+                        to: to.id.0,
+                        from: m.folder.0,
+                    },
+                });
             }
         }
         WriteRequest::Delete {
@@ -1556,7 +1653,8 @@ fn apply_inner(
         OpPayload::SetFlag {
             message, flagged, ..
         } => tx.set_flagged(MessageId(*message), *flagged),
-        OpPayload::MoveMessage { message, to, .. } => {
+        OpPayload::MoveMessage { message, to, .. }
+        | OpPayload::ReportMessage { message, to, .. } => {
             tx.move_message(MessageId(*message), FolderId(*to))
         }
         OpPayload::DeleteMessage { .. } => Ok(()),
@@ -1613,7 +1711,8 @@ pub fn undo_local(tx: &WriteTx<'_>, p: &OpPayload) -> familiar_store::Result<()>
         OpPayload::SetFlag { message, prev, .. } => {
             gone(tx.set_flagged(MessageId(*message), *prev))
         }
-        OpPayload::MoveMessage { message, from, .. } => {
+        OpPayload::MoveMessage { message, from, .. }
+        | OpPayload::ReportMessage { message, from, .. } => {
             if tx.folder(FolderId(*from))?.is_some() {
                 gone(tx.move_message(MessageId(*message), FolderId(*from)))
             } else {

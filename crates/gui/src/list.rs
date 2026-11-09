@@ -3,7 +3,7 @@
 //! message IDs of the open view, and the front end asks for the rows on
 //! screen by position. Sorting happens here, never in the web view.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Mutex;
 use std::time::Duration;
 
@@ -81,6 +81,8 @@ pub struct Row {
     has_attachments: bool,
     /// 0 low, 1 normal, 2 high.
     importance: i64,
+    /// In its account's Junk Email folder (the menu offers Not junk).
+    in_junk: bool,
 }
 
 /// The open view. One window, one list.
@@ -95,7 +97,27 @@ struct Inner {
     searcher: Option<familiar_search::Searcher>,
     ids: Vec<MessageId>,
     accounts: HashMap<i64, String>,
+    /// Every account's Junk Email folder.
+    junk: HashSet<FolderId>,
     generation: u64,
+}
+
+/// Account keys by ID, and every account's Junk Email folder.
+fn accounts_and_junk(
+    r: &Reader,
+) -> familiar_store::Result<(HashMap<i64, String>, HashSet<FolderId>)> {
+    let mut accounts = HashMap::new();
+    let mut junk = HashSet::new();
+    for a in r.accounts()? {
+        junk.extend(
+            r.folders(a.id)?
+                .into_iter()
+                .filter(|f| f.well_known.as_deref() == Some("junkemail"))
+                .map(|f| f.id),
+        );
+        accounts.insert(a.id.0, a.key);
+    }
+    Ok((accounts, junk))
 }
 
 fn store_error(e: impl std::fmt::Display) -> CommandError {
@@ -151,12 +173,9 @@ impl Inner {
             .map_err(store_error)?;
         let capped = ids.len() > MAX_SEARCH;
         ids.truncate(MAX_SEARCH);
-        self.accounts = reader
-            .accounts()
-            .map_err(store_error)?
-            .into_iter()
-            .map(|a| (a.id.0, a.key))
-            .collect();
+        let (accounts, junk) = reader.snapshot(accounts_and_junk).map_err(store_error)?;
+        self.accounts = accounts;
+        self.junk = junk;
         self.ids = ids;
         Ok(Opened {
             total: self.ids.len(),
@@ -184,13 +203,12 @@ impl Lists {
         if let Some(q) = spec.query.as_deref() {
             return g.search(q, spec.unread_only);
         }
-        let (ids, accounts) = g
+        let (ids, accounts, junk) = g
             .reader()?
             .snapshot(|r| {
-                let mut accounts = HashMap::new();
                 let mut inboxes = Vec::new();
-                for a in r.accounts()? {
-                    if spec.folders.is_empty() {
+                if spec.folders.is_empty() {
+                    for a in r.accounts()? {
                         inboxes.extend(
                             r.folders(a.id)?
                                 .into_iter()
@@ -198,18 +216,19 @@ impl Lists {
                                 .map(|f| f.id),
                         );
                     }
-                    accounts.insert(a.id.0, a.key);
                 }
+                let (accounts, junk) = accounts_and_junk(r)?;
                 let folders: Vec<FolderId> = if spec.folders.is_empty() {
                     inboxes
                 } else {
                     spec.folders.iter().map(|f| FolderId(*f)).collect()
                 };
-                Ok((sorted_ids(r, &folders, spec)?, accounts))
+                Ok((sorted_ids(r, &folders, spec)?, accounts, junk))
             })
             .map_err(store_error)?;
         g.ids = ids;
         g.accounts = accounts;
+        g.junk = junk;
         Ok(Opened {
             total: g.ids.len(),
             notices: Vec::new(),
@@ -250,6 +269,7 @@ impl Lists {
                 is_flagged: m.is_flagged,
                 has_attachments: m.has_attachments,
                 importance: m.importance,
+                in_junk: g.junk.contains(&m.folder),
             })
             .collect())
     }

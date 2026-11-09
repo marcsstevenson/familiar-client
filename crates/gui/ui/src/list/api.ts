@@ -25,6 +25,8 @@ export type Row = {
   is_flagged: boolean;
   has_attachments: boolean;
   importance: number;
+  /** In its account's Junk Email folder. */
+  in_junk: boolean;
 };
 
 // Each open is numbered, so Rust can ignore an older open that takes its lock late.

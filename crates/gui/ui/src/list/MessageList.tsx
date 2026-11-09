@@ -6,6 +6,7 @@ import { listNav, processMessage, processedFolders, removeFromList, setDragged, 
 import { OnlineHits, SearchBar } from "./SearchBar";
 import { type Row, type Sort, listIndexOf, listOpen, listRows, onStoreChanged } from "./api";
 import { shortDate } from "./format";
+import { MessageMenu } from "./MessageMenu";
 
 export const ROW_H = 64;
 const PAGE = 100;
@@ -29,6 +30,26 @@ export function MessageList() {
   const [error, setError] = createSignal<string | null>(null);
   const [rev, setRev] = createSignal(0);
   const [notices, setNotices] = createSignal<string[]>([]);
+  // The message whose context menu is open, and where.
+  const [menu, setMenu] = createSignal<{ row: Row; x: number; y: number } | null>(null);
+  // On the listbox, where focus is: a right click opens the menu for the row
+  // under the pointer (selecting it), the menu key or Shift+F10 for the
+  // selected row.
+  const openMenu = (e: MouseEvent) => {
+    e.preventDefault();
+    const keyboard = e.clientX === 0 && e.clientY === 0;
+    const under = (e.target as HTMLElement).closest(".list-row")?.id.match(/^msg-(\d+)$/);
+    if (!keyboard && under) select(Number(under[1]));
+    const i = keyboard ? selIndex() : under ? Number(under[1]) : null;
+    const row = i === null ? undefined : rowAt(i);
+    if (i === null || !row) return;
+    const r = document.getElementById(`msg-${i}`)?.getBoundingClientRect();
+    setMenu({
+      row: { ...row },
+      x: keyboard && r ? r.left + 24 : e.clientX,
+      y: keyboard && r ? r.bottom : e.clientY,
+    });
+  };
 
   // Pages of rows for the current view generation.
   let pages = new Map<number, Row[]>();
@@ -282,6 +303,7 @@ export function MessageList() {
           prefetch();
         }}
         onKeyDown={onKeyDown}
+        onContextMenu={openMenu}
       >
         <Show when={error()}>{(e) => <p class="pane-note">{e()}</p>}</Show>
         <Show when={!error() && total() === 0}>
@@ -293,6 +315,10 @@ export function MessageList() {
           </For>
         </div>
       </div>
+      <Show when={menu()}>{(m) => <MessageMenu row={m().row} x={m().x} y={m().y} onClose={() => {
+        setMenu(null);
+        scroller.focus();
+      }} />}</Show>
     </div>
   );
 }

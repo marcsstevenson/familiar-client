@@ -665,6 +665,23 @@ Marks messages read (or unread with --unread) on this device at once and queues 
 - `--wait`: Wait until the server has the change (needs famd).
 - `--wait-secs <wait-secs>`: Seconds --wait waits at most (default 60).
 
+## mail.report
+
+Report messages as junk, phishing or not junk. Access: `write`.
+
+```
+fam mail report <MESSAGES>...
+```
+
+Reports messages to the mail provider as junk (the default), phishing (--phishing) or not junk (--not-junk), which trains its filter. Junk and phishing go to Junk Email; not junk goes back to the Inbox. The move shows on this device at once and the report is queued for the server.
+
+- `--dry-run`: Only show what would change.
+- `MESSAGES` (required, repeatable): Local message IDs.
+- `--not-junk`: Report them as not junk, moving them from Junk Email to the Inbox.
+- `--phishing`: Report them as phishing (a scam) instead of junk.
+- `--wait`: Wait until the server has the report (needs famd).
+- `--wait-secs <wait-secs>`: Seconds --wait waits at most (default 60).
+
 ## mail.search
 
 Search mail across all accounts. Access: `read`.
