@@ -27,6 +27,8 @@ export type Row = {
   importance: number;
   /** In its account's Junk Email folder. */
   in_junk: boolean;
+  /** "Likely scam · 92%" when a saved spam check is 50%+ outside Junk Email. */
+  spam_warning: string | null;
 };
 
 // Each open is numbered, so Rust can ignore an older open that takes its lock late.

@@ -83,6 +83,9 @@ pub struct Row {
     importance: i64,
     /// In its account's Junk Email folder (the menu offers Not junk).
     in_junk: bool,
+    /// The spam check's headline and score ("Likely scam · 92%") when a
+    /// saved grade is 50% or more and the message isn't in Junk Email.
+    spam_warning: Option<String>,
 }
 
 /// The open view. One window, one list.
@@ -249,27 +252,47 @@ impl Lists {
         let want = g.ids[start..end].to_vec();
         let found = g.reader()?.messages_by_ids(&want).map_err(store_error)?;
         let mut by_id: HashMap<MessageId, Message> = found.into_iter().map(|m| (m.id, m)).collect();
+        // Saved spam checks: a small file on this device, read per page so a
+        // grade famd saves in the background shows on the next scroll.
+        let spam = DaemonPaths::resolve()
+            .map(|p| familiar_core::commands::check_spam::Saved::load(&p.data_dir))
+            .unwrap_or_default();
         // A message deleted since the view opened is skipped; the store-changed
         // event reopens the view straight after.
         Ok(want
             .iter()
             .filter_map(|id| by_id.remove(id))
-            .map(|m| Row {
-                id: m.id.0,
-                account: g.accounts.get(&m.account.0).cloned().unwrap_or_default(),
-                from: if m.from.name.is_empty() {
-                    m.from.addr
+            .map(|m| {
+                let account = g.accounts.get(&m.account.0).cloned().unwrap_or_default();
+                let in_junk = g.junk.contains(&m.folder);
+                let spam_warning = if in_junk {
+                    None
                 } else {
-                    m.from.name
-                },
-                subject: m.subject,
-                preview: m.preview,
-                received_at: m.received_at,
-                is_read: m.is_read,
-                is_flagged: m.is_flagged,
-                has_attachments: m.has_attachments,
-                importance: m.importance,
-                in_junk: g.junk.contains(&m.folder),
+                    spam.0
+                        .get(&account)
+                        .and_then(|a| a.get(&m.remote_id))
+                        .and_then(|o| o.ai.as_ref())
+                        .filter(|a| a.spam.max(a.scam) >= 50)
+                        .map(|a| format!("{} · {}%", a.headline, a.spam.max(a.scam)))
+                };
+                Row {
+                    id: m.id.0,
+                    account,
+                    from: if m.from.name.is_empty() {
+                        m.from.addr
+                    } else {
+                        m.from.name
+                    },
+                    subject: m.subject,
+                    preview: m.preview,
+                    received_at: m.received_at,
+                    is_read: m.is_read,
+                    is_flagged: m.is_flagged,
+                    has_attachments: m.has_attachments,
+                    importance: m.importance,
+                    in_junk,
+                    spam_warning,
+                }
             })
             .collect())
     }
