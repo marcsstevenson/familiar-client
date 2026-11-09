@@ -198,9 +198,14 @@ fn document(body: &str) -> String {
 }
 
 /// Readable defaults that a message's own styles can override.
+///
+/// Long words wrap with `overflow-wrap:break-word`, not `anywhere`: `anywhere`
+/// also lowers a table cell's minimum width to one character, so mail laid out
+/// in tables (price grids, columns beside a fixed-width cell) had its cells
+/// squeezed until text such as "$89" stacked one character per line.
 const BASE_CSS: &str = "html{color-scheme:light}\
 body{margin:0;padding:16px 20px;font:14px/1.5 system-ui,-apple-system,'Segoe UI',sans-serif;\
-color:#1d2430;background:#fff;overflow-wrap:anywhere}\
+color:#1d2430;background:#fff;overflow-wrap:break-word}\
 img{max-width:100%}img:not([src$='#blocked']){height:auto}\
 img[src$='#blocked']{background:#e4e8ef;min-width:16px;min-height:16px}\
 pre.plain{white-space:pre-wrap;font:inherit;margin:0}\
