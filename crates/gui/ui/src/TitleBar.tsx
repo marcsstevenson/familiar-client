@@ -2,10 +2,18 @@
 // buttons; on macOS the system's traffic lights sit over the left end.
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Show } from "solid-js";
+import { invoke } from "@tauri-apps/api/core";
+import { isCommandError } from "./api";
 import { openCompose } from "./compose/spec";
+import { notify } from "./state";
 import { cycleTheme, theme } from "./theme";
 
 const THEME_LABEL = { system: "Theme: system", light: "Theme: light", dark: "Theme: dark" } as const;
+
+/** Opens config.toml in the default editor; errors go to the status bar. */
+function openConfig() {
+  invoke<string>("open_config").catch((e) => notify(isCommandError(e) ? e.message : String(e), true));
+}
 
 /** `title` names a compose window; without it this is the main window's bar. */
 export function TitleBar(props: { platform: string; title?: string }) {
@@ -19,6 +27,9 @@ export function TitleBar(props: { platform: string; title?: string }) {
       <Show when={props.title === undefined}>
         <button class="titlebar-tool" title="New message (Ctrl+N)" aria-label="New message" onClick={() => void openCompose({ kind: "new" })}>
           ✎
+        </button>
+        <button class="titlebar-tool" title="Open config.toml" aria-label="Open config.toml" onClick={openConfig}>
+          ⚙
         </button>
       </Show>
       <div class="titlebar-spacer" data-tauri-drag-region />

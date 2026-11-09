@@ -181,6 +181,25 @@ fn daemon_state(state: tauri::State<'_, daemon::Shared>) -> daemon::DaemonState 
     state.get()
 }
 
+/// Opens config.toml in the system's default app for `.toml` files. Windows
+/// often has none, so it falls back to Notepad there. Returns the path.
+#[tauri::command]
+fn open_config() -> Result<String, CommandError> {
+    let (path, _) = familiar_config::paths::resolve(None)
+        .ok_or_else(|| CommandError::internal("no home folder to look for config.toml in"))?;
+    if !path.exists() {
+        return Err(CommandError::usage(format!(
+            "there is no config file at {}",
+            path.display()
+        )));
+    }
+    let opened = open::that_detached(&path);
+    #[cfg(windows)]
+    let opened = opened.or_else(|_| open::with_detached(&path, "notepad"));
+    opened.map_err(|e| CommandError::internal(format!("couldn't open {}: {e}", path.display())))?;
+    Ok(path.display().to_string())
+}
+
 /// Opens a message list view; see [`list::Lists::open`].
 #[tauri::command]
 async fn list_open(
@@ -224,6 +243,7 @@ fn main() {
         .manage(std::sync::Arc::new(list::Lists::default()))
         .invoke_handler(tauri::generate_handler![
             ui_info,
+            open_config,
             run,
             daemon_state,
             reading::reading_open,
