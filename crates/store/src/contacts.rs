@@ -271,7 +271,71 @@ fn people(
     Ok(out)
 }
 
+/// What an account's mail says about one sender.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize)]
+pub struct SenderHistory {
+    /// Messages received from the address (counting any being looked at).
+    pub received: i64,
+    /// Messages sent to the address.
+    pub sent: i64,
+    /// Messages sent to anyone at its domain.
+    pub domain_sent: i64,
+    /// The address is one of the account's contacts.
+    pub contact: bool,
+}
+
 impl Reader {
+    /// What the account's mail says about `addr`: how often you have heard
+    /// from it and written to it (and to its domain), and whether it is a
+    /// contact.
+    pub fn sender_history(&self, account: AccountId, addr: &str) -> Result<SenderHistory> {
+        let c = &self.conn;
+        let (received, sent) = c
+            .prepare_cached(
+                "SELECT received, sent FROM correspondents WHERE account_id = ?1 AND addr = ?2",
+            )?
+            .query_row(params![account, addr], |r| Ok((r.get(0)?, r.get(1)?)))
+            .or_else(|e| match e {
+                rusqlite::Error::QueryReturnedNoRows => Ok((0, 0)),
+                e => Err(e),
+            })?;
+        let domain = addr.rsplit_once('@').map_or("", |(_, d)| d);
+        let domain_sent = if domain.is_empty() {
+            0
+        } else {
+            c.prepare_cached(
+                "SELECT COALESCE(SUM(sent), 0) FROM correspondents
+                  WHERE account_id = ?1 AND addr LIKE ?2 ESCAPE '\\'",
+            )?
+            .query_row(
+                params![account, format!("%@{}", like_escape(domain))],
+                |r| r.get(0),
+            )?
+        };
+        let contact = c
+            .prepare_cached(
+                "SELECT EXISTS (SELECT 1 FROM contacts ct JOIN contact_addresses ca ON ca.contact_id = ct.id
+                                 WHERE ct.account_id = ?1 AND ca.addr = ?2)",
+            )?
+            .query_row(params![account, addr], |r| r.get(0))?;
+        Ok(SenderHistory {
+            received,
+            sent,
+            domain_sent,
+            contact,
+        })
+    }
+
+    /// The domains the account has written to, lower case.
+    pub fn sent_domains(&self, account: AccountId) -> Result<Vec<String>> {
+        let mut s = self.conn.prepare_cached(
+            "SELECT DISTINCT lower(substr(addr, instr(addr, '@') + 1)) FROM correspondents
+              WHERE account_id = ?1 AND sent > 0 AND instr(addr, '@') > 0",
+        )?;
+        let rows = s.query_map([account], |r| r.get(0))?;
+        Ok(rows.collect::<rusqlite::Result<_>>()?)
+    }
+
     /// An account's contacts, by name.
     pub fn contacts(&self, account: AccountId) -> Result<Vec<Contact>> {
         contacts_of(&self.conn, account)

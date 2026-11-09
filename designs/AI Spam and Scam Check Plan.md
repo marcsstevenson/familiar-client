@@ -1,6 +1,6 @@
 # AI Spam and Scam Check Plan
 
-9 Nov 2026 · Companion to the [Development Plan](Development%20Plan.md) and the [AI Event Inference Plan](AI%20Event%20Inference%20Plan.md), whose AI runner it reuses
+9 Nov 2026 (Marc's answers added the same day) · Companion to the [Development Plan](Development%20Plan.md) and the [AI Event Inference Plan](AI%20Event%20Inference%20Plan.md), whose AI runner it reuses
 
 ## Summary
 
@@ -13,7 +13,7 @@ The key decisions proposed are:
 - **Same runner as the events feature.** `crates/core/src/ai.rs` already runs `claude -p` with no tools and a JSON schema (or `codex exec` read-only), with a timeout, from an empty folder. The spam check is a second schema and prompt for that runner, nothing new to install.
 - **CLI first.** A new read-only command, `fam mail check-spam <id>`, prints the result as JSON. The context menu calls it, so the feature keeps CLI parity and can be tested without the GUI.
 - **On per account, and off until turned on.** `spam_check = true` on an `[accounts.<name>]` table, and `[ai] enabled = true` as for events. The menu item only appears on those accounts' messages.
-- **Nothing happens without a click.** The result offers Move to Junk (or Move to Inbox when the message is already in Junk). Familiar never moves, deletes or reports anything on its own.
+- **Nothing happens without a click.** The result offers Report junk, Report phishing, or Not junk when the message is already in Junk, through `fam mail report` (PR #39), which moves the message and tells Microsoft. Familiar never moves, deletes or reports anything on its own.
 
 ## Research: how spam and scams are detected
 
@@ -85,7 +85,7 @@ Phishing and scams are a different problem from spam. Spam is unwanted; a scam i
 | Identity and link deception, risky attachments | Partly Microsoft | **New:** cheap checks in Rust, given to the AI as facts |
 | What the email asks for | Nobody, for consumer mail | **New:** the AI reading |
 | URL reputation, domain age | Microsoft (partly, Defender for Office 365 only in paid plans) | Not in v1: sends links to a third party, adds network calls (see Later) |
-| Feedback | Microsoft, from Junk actions | Move to Junk in v1; Report junk (`markAsJunk`) as a follow-up |
+| Feedback | Microsoft, from Junk actions | `fam mail report` (Graph `reportMessage`: junk, phishing, not junk), PR #39 |
 
 ## What the providers stamp on Marc's mail (checked 9 Nov 2026)
 
@@ -105,8 +105,8 @@ Message list or reading pane: right-click -> "Check for spam or scam"
        2. facts:     parse auth results + Microsoft verdict; links, attachments, sender relationship from the store
        3. AI:        ai::ask(spam schema, prompt = facts + email text)       (claude, no tools; or codex read-only)
        4. answer:    { facts, ai: { spam, scam, category, summary, reasons }, notes }
-  -> Result dialog: headline, reasons with quotes, the facts, [Move to Junk] / [Move to Inbox], [Close]
-  -> Move runs the existing mail.move (source gui), with undo
+  -> Result dialog: headline, reasons with quotes, the facts, [Report junk] [Report phishing] / [Not junk], [Close]
+  -> Report runs mail.report (source gui), which moves the message and reports it to Microsoft
 ```
 
 ### Step 1: headers
@@ -121,7 +121,7 @@ All cheap, local and deterministic. Each fact has a name, a value and whether it
 - **Authentication**, from the *first* (topmost) `Authentication-Results`, which is the one the receiving server added last: `spf`, `dkim`, `dmarc`, `compauth` and its reason. Lower copies, and anything named `-Original` or `-Untrusted`, are ignored. The authserv-id is not required: both of Marc's accounts send `mx.microsoft.com 1;`, but Microsoft's documented Exchange examples start straight at `spf=`, and the topmost position is what matters.
 - **Provider verdict:** SCL, BCL, `CAT`, `SFV`, `dest`, and the folder the message is in now (Junk or not).
 - **Identity:** From display name vs address (a display name containing an email address, or a domain, that isn't the From address's); Reply-To domain different from From; From domain in punycode (`xn--`); the From domain's registered part within edit distance 2 of a domain you correspond with but not equal to it (the "one letter off" check, against your own correspondents, so no brand list is needed).
-- **Relationship**, from the store's `correspondents` and `contacts` (WP 2.5): how many times you have written to this address and to this domain, whether it is a contact, how many messages you've received from it before, and whether you've marked it a trusted image sender.
+- **Relationship**, from the store's `correspondents` and `contacts` (WP 2.5): how many times you have written to this address and to this domain, whether it is a contact, and how many messages you've received from it before.
 - **Links**, from the HTML body: each distinct link with visible text and real host; flags for text that names a different host than the target, bare IP hosts, `xn--` hosts, known URL shorteners (a short fixed list), and the number of distinct link domains. Links are never fetched.
 - **Attachments:** names and types, with risky types flagged (the list in the research above).
 - **List headers:** `List-Unsubscribe` and `List-Unsubscribe-Post` present (legitimate bulk mail has them; their absence on a "newsletter" is a mild signal).
@@ -201,10 +201,7 @@ fam mail check-spam <id> [--no-ai] [--json]
 
 ## The context menu and result dialog
 
-There is no message context menu yet. WP S.3 adds one to message list rows and the reading pane header, built like `folders/FolderMenu.tsx`. For now it holds:
-
-- **Check for spam or scam** (only on `spam_check` accounts)
-- **Move to Junk** / **Move to Inbox** (when in Junk), so the menu isn't a single item; other message actions can move into it later.
+PR #39 added the first message context menu (`list/MessageMenu.tsx`), with Report junk, Report phishing and Not junk. WP S.3 adds **Check for spam or scam** to it, for `spam_check` accounts.
 
 The result opens in a small dialog, with a spinner and Cancel while the AI runs (Cancel kills the child, which the events dialog doesn't do yet; this adds it to the shared runner path):
 
@@ -224,11 +221,11 @@ What the mail server and your mailbox say
   You've never written to this address or domain. Not a contact.
   Reply-To is on another domain (gmail.com).
 
-                                          [ Close ]  [ Move to Junk ]
+                         [ Close ]  [ Report junk ]  [ Report phishing ]
 ```
 
-- The result is kept in memory for the session, per message: reopening the message shows a one-line banner ("Checked: likely scam, 92%") in the reading header, with a link to reopen the dialog. It is not stored, so it doesn't survive a restart (see open questions).
-- Move to Junk runs `mail.move <id> junkemail` (source `gui`), with undo, like dragging it there.
+- The result is saved on this device (`spam_checks.json` in the data directory, keyed by account and the message's server ID, like `folders.json`), so it survives a restart. Reopening the message shows a one-line banner ("Checked: likely scam, 92%") in the reading header, with a link to reopen the dialog. `fam mail check-spam <id> --saved` reads it back.
+- Report runs `mail.report` (source `gui`): Report junk and Report phishing move the message to Junk and report it to Microsoft; Not junk moves it back to the Inbox.
 - With `[ai]` off or the tool missing, the dialog still opens with the facts and a note saying the AI isn't set up, with the snippet to add.
 
 ## Privacy and safety
@@ -237,14 +234,14 @@ What the mail server and your mailbox say
 - **Prompt injection:** the AI has no tools (Claude), so an email can only change the AI's answer. The facts are computed by Familiar and shown separately, so injection can lower the AI's number but not hide "DMARC failed" or "Reply-To on another domain". Nothing is moved or deleted without a click.
 - **Spoofed headers:** only the topmost results, the receiving server's, are read (step 2), so a sender's fake `Authentication-Results` or `-Untrusted` copies don't count.
 - **Links are never fetched**, by Familiar or the AI. Fetching a phishing link can confirm your address to the sender or reach a malicious page.
-- **Audit:** the check changes nothing, so nothing goes in the audit log; a Move to Junk is a `gui` write as usual. The GUI log line has the message id, tool, duration and grade, not content.
+- **Audit:** the check changes nothing on the server, so nothing goes in the audit log; a report is a `gui` write as usual. The GUI log line has the message id, tool, duration and grade, not content.
 
 ## Testing
 
 - **Unit:** header parsing with fixtures cut from the two live messages above (Hotmail Junk, Parklands Inbox), plus a forged `Authentication-Results` lower in the headers, an Exchange one with no authserv-id (`spf=pass ...; compauth=pass reason=100`), a Gmail-style one, and missing headers. Display-name, Reply-To, punycode and lookalike checks. Link extraction from HTML (text vs host, IP hosts, shorteners). Answer checking with good, out-of-range and broken JSON.
 - **Mock Graph:** `internetMessageHeaders` on mock messages, served on `$select=internetMessageHeaders`, so `fam mail check-spam --no-ai` is tested end to end through famd.
 - **Fake AI:** the existing fake-tool setup from WP AI.2 (fixed JSON, timeout, non-zero exit) drives every path without a model.
-- **GUI:** the Playwright harness with an IPC stub: right-click a row, Check, see the dialog, Move to Junk, check the `mail.move` call.
+- **GUI:** the Playwright harness with an IPC stub: right-click a row, Check, see the dialog, Report junk, check the `mail.report` call.
 - **Live, by hand (WP S.4):** on Marc's PC, a set of real messages through Claude: a dozen from Junk, a dozen ordinary Inbox messages (newsletters, receipts, Parklands mail), and any scams Marc has kept. Compare with Outlook's verdict and note false positives in the PR. Not in CI.
 
 ## Work packages
@@ -253,7 +250,7 @@ What the mail server and your mailbox say
 | --- | --- | --- | --- |
 | S.1 | **Facts without AI.** `spam_check` config key, header fetch via famd, `spam.rs` facts (auth, verdict, identity, relationship, links, attachments), `fam mail check-spam --no-ai`, registry, mock headers, `docs/spam.md` | AI.2 (done) | `fam mail check-spam <id> --no-ai --json` gives the right facts for the fixtures and through the mock |
 | S.2 | **AI grade.** Spam schema and prompt, answer checking, bands, skip for agents/MCP, fake-AI tests | S.1 | The fake AI drives every path; Claude grades the live sample |
-| S.3 | **Context menu and dialog.** Message context menu on rows and reading header, result dialog, Cancel kills the child, session banner, Move to Junk/Inbox, `spam_accounts` in `ui_info` | S.1 (S.2 for the AI half) | A right-click on a Hotmail message shows a graded result and can move it to Junk with undo |
+| S.3 | **Menu item and dialog.** Check in the message context menu, result dialog, Cancel, saved-result banner, Report junk/phishing/Not junk through `mail.report`, `spam_accounts` in `ui_info` | S.1 (S.2 for the AI half), PR #39 | A right-click on a Hotmail message shows a graded result and can report it |
 | S.4 | **Live check on Marc's PC.** Real Junk and Inbox mail through Claude, then Codex; prompt adjusted from what's seen | S.2, S.3 | Marc checks a week of suspicious mail and agrees with the grades |
 
 S.1 is useful on its own (the facts alone answer "why is this in Junk?"). S.2 and S.3 can run in parallel once S.1 is in.
@@ -261,7 +258,6 @@ S.1 is useful on its own (the facts alone answer "why is this in Junk?"). S.2 an
 ## Later, not in this plan
 
 - **Check new mail automatically** for `spam_check` accounts, in the background, with a badge on the row. Needs the result stored (a device-local file like `folders.json`, since famd is the store's only writer) and a decision on how much mail to send to the AI. Worth doing only after S.4 shows the grades are good.
-- **Report junk** with Graph's `markAsJunk`/`markAsNotJunk` (moves *and* blocks or unblocks the sender, and teaches Outlook), as a new op-queue write with undo.
 - **URL reputation** through Google Safe Browsing (free, non-commercial, but each URL goes to Google) for links the facts already flag.
 - **Gmail:** the same facts from `mx.google.com` results once the Gmail plan's provider exists; Gmail has no SCL, so the verdict line is just the folder.
 
@@ -269,18 +265,19 @@ S.1 is useful on its own (the facts alone answer "why is this in Junk?"). S.2 an
 
 | Risk | Likelihood | What happens | Mitigation |
 | --- | --- | --- | --- |
-| AI calls a real message a scam | Medium | Marc moves a good message to Junk | Nothing moves without a click; facts shown beside the grade; undo |
+| AI calls a real message a scam | Medium | Marc reports a good message | Nothing happens without a click; facts shown beside the grade; Not junk moves it back |
 | A scam talks the AI into a low grade | Medium | "Looks fine" on a scam | Facts are computed outside the AI and shown regardless; instructions to ignore the email's claims |
 | Grades cluster high (overconfidence) | High | Everything suspicious reads 85 to 95% | Bands, not raw numbers, carry the meaning; S.4 tunes the prompt |
 | Header names or formats change | Low | Missing facts | Parsing fails open with a note; fixtures from live mail |
 | AI CLI flags change | High over a year | No AI grade, facts only | Shared runner with events; failure logged with stderr |
 | Mail sent to a third party unexpectedly | Low (opt-in, per click) | Privacy breach | Off by default, per account, sent only on click, tool named in the dialog |
 
-## Open questions for Marc
+## Decisions (Marc, 9 Nov 2026)
 
-1. **Two numbers or one?** The plan shows spam and scam separately, headline the higher. One combined number is simpler but hides whether it's junk or dangerous.
-2. **Move to Junk only, or also block the sender?** Move to Junk is in v1; Report junk (block and teach Outlook) is listed as later.
-3. **Remember results across restarts?** v1 keeps them for the session only.
+1. **Two numbers**, spam and scam, with the headline from the higher.
+2. **Report, not just move.** The dialog reports junk or phishing to Microsoft (and Not junk from Junk), using `fam mail report` from PR #39.
+3. **Results are remembered** across restarts, in `spam_checks.json` on this device.
+4. **Build all four work packages now.**
 
 ## Sources
 

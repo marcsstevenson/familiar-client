@@ -13,6 +13,7 @@ pub mod ics;
 pub mod ops;
 pub mod parity;
 pub mod registry;
+pub mod spam;
 pub mod surfaces;
 pub mod tz;
 mod tz_table;

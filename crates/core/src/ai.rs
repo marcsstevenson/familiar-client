@@ -161,7 +161,8 @@ pub struct Email<'a> {
 /// The most text sent, body and PDFs together.
 pub const TEXT_LIMIT: usize = 20_000;
 
-fn cut(s: &str, max: usize) -> &str {
+/// `s` cut to at most `max` bytes, on a character boundary.
+pub fn cut(s: &str, max: usize) -> &str {
     if s.len() <= max {
         return s;
     }
@@ -227,15 +228,16 @@ fn command(
     tool: &Tool,
     model: Option<&str>,
     dir: &Path,
+    schema: &str,
+    agent: &str,
 ) -> Result<(Command, Option<PathBuf>), String> {
     let mut c = Command::new(&tool.program);
     c.current_dir(dir)
         // If it ever ran `fam`, it would be an agent with agent grants.
-        .env("FAMILIAR_AGENT", "ai-propose")
+        .env("FAMILIAR_AGENT", agent)
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
         .stderr(Stdio::piped());
-    let schema = schema().to_string();
     let out = match tool.kind {
         ToolKind::Claude => {
             c.args([
@@ -243,7 +245,7 @@ fn command(
                 "--output-format",
                 "json",
                 "--json-schema",
-                &schema,
+                schema,
                 "--tools",
                 "",
                 "--strict-mcp-config",
@@ -255,7 +257,7 @@ fn command(
         }
         ToolKind::Codex => {
             let schema_file = dir.join("schema.json");
-            std::fs::write(&schema_file, &schema)
+            std::fs::write(&schema_file, schema)
                 .map_err(|e| format!("can't write the schema: {e}"))?;
             let out = dir.join("answer.json");
             c.args([
@@ -298,16 +300,30 @@ impl Drop for RunDir {
     }
 }
 
-/// Runs the tool and returns its answer as JSON (the object the schema
-/// describes), or why there is none.
+/// Asks the tool for the events in an email ([`schema`]) and returns its
+/// answer as JSON, or why there is none.
 pub fn ask(
     tool: &Tool,
     model: Option<&str>,
     prompt: &str,
     timeout: Duration,
 ) -> Result<Value, String> {
+    ask_as(tool, model, &schema(), "ai-propose", prompt, timeout)
+}
+
+/// Runs the tool with an answer `schema` and returns its answer as JSON
+/// (the object the schema describes), or why there is none. `agent` is the
+/// `FAMILIAR_AGENT` name it runs under.
+pub fn ask_as(
+    tool: &Tool,
+    model: Option<&str>,
+    schema: &Value,
+    agent: &str,
+    prompt: &str,
+    timeout: Duration,
+) -> Result<Value, String> {
     let dir = RunDir::new()?;
-    let (mut c, out_file) = command(tool, model, &dir.0)?;
+    let (mut c, out_file) = command(tool, model, &dir.0, &schema.to_string(), agent)?;
     let mut child = c
         .spawn()
         .map_err(|e| format!("can't start {}: {e}", tool.program.display()))?;
@@ -394,7 +410,8 @@ fn answer_json(kind: ToolKind, text: &str) -> Result<Value, String> {
             }
             match v.get("result").and_then(Value::as_str) {
                 Some(r) => serde_json::from_str(r.trim()).map_err(|_| bad()),
-                None if v.get("events").is_some() => Ok(v),
+                // Already the answer, not Claude's wrapper.
+                None if v.is_object() && v.get("type").is_none() => Ok(v),
                 None => Err(bad()),
             }
         }

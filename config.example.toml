@@ -28,6 +28,9 @@ aliases = ["you@outlook.example"]
 # Where "processed" messages go: the tick on a message in the desktop app,
 # or `fam mail process`. Created at the top level if it doesn't exist.
 processed_folder = "Processed"
+# Offer "Check for spam or scam" on this account's mail (`fam mail
+# check-spam`). The AI grade also needs [ai] enabled = true.
+# spam_check = true
 
 [accounts.hotmail.signature]
 new = '''

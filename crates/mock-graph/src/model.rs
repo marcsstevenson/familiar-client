@@ -161,6 +161,10 @@ pub struct Message {
     /// Set for a meeting request or cancellation (a Graph `eventMessage`).
     #[serde(default)]
     pub meeting: Option<Meeting>,
+    /// Internet headers as (name, value), topmost first, served as
+    /// `internetMessageHeaders` when there are any.
+    #[serde(default)]
+    pub headers: Vec<(String, String)>,
 }
 
 /// What makes a message an `eventMessage`.
@@ -229,6 +233,7 @@ impl Message {
             bcc: Vec::new(),
             attachments: Vec::new(),
             meeting: None,
+            headers: Vec::new(),
         }
     }
 }

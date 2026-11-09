@@ -199,6 +199,13 @@ pub(crate) fn message(rec: &MessageRecord, prefer: &Prefer) -> Value {
         v["@odata.type"] = json!(kind);
         v["meetingMessageType"] = json!(meeting.meeting_message_type);
     }
+    if !m.headers.is_empty() {
+        v["internetMessageHeaders"] = m
+            .headers
+            .iter()
+            .map(|(name, value)| json!({ "name": name, "value": value }))
+            .collect();
+    }
     v
 }
 

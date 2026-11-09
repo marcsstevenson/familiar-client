@@ -515,6 +515,32 @@ export type CheckReport = {
   clean: boolean;
 };
 
+export type CheckSpamInput = {
+  /** The message's local ID. */
+  message: number;
+  /** Only the facts: don't send the email to the AI tool. */
+  no_ai?: boolean;
+  /** Don't check: show the result saved by an earlier check, if any. */
+  saved?: boolean;
+};
+
+export type CheckSpamOutput = {
+  /** Its account. */
+  account: string;
+  /** The AI's grade, when it was asked and answered. */
+  ai?: Grade | null;
+  /** When it was checked (Unix seconds). */
+  checked_at: number;
+  /** What Familiar found, from the mail server's headers, your mailbox, the links and the attachments. */
+  facts: Array<Fact>;
+  /** The folder it is in: its well-known name (`inbox`, `junkemail`, ...) or its name. */
+  folder: string;
+  /** The message. */
+  message: number;
+  /** What was skipped and why. */
+  notes: Array<string>;
+};
+
 export type CommandDoc = {
   /** What the command may do. */
   access: Access;
@@ -788,6 +814,17 @@ export type ExitCodeDoc = {
   kind?: ErrorKind | null;
 };
 
+export type Fact = {
+  /** The fact in words. */
+  detail: string;
+  /** What it is: `dmarc`, `scl`, `reply_to`, `link_mismatch`, ... */
+  name: string;
+  /** Which way it points: `spam`, `scam`, `safe`, or empty for neither. */
+  points: string;
+  /** Its value, short: `fail`, `6`, `gmail.com`, ... */
+  value: string;
+};
+
 export type FolderColorInput = {
   /** The account, when more than one has the folder. */
   account?: string | null;
@@ -903,6 +940,25 @@ export type FolderRow = {
   unread: number;
   /** Graph well-known name (`inbox`, `sentitems`, `deleteditems`, ...), if any. */
   well_known?: string | null;
+};
+
+export type Grade = {
+  /** What to do, when there is something to say. */
+  advice?: string | null;
+  /** `legitimate`, `marketing`, `spam`, `phishing`, `scam`, `malware` or `unsure`. */
+  category: string;
+  /** The grade in words: `Looks fine`, `Be careful`, `Likely spam` or `Likely scam`, from the higher of the two. */
+  headline: string;
+  /** Up to five reasons, quoting the email. */
+  reasons: Array<Reason>;
+  /** How likely it is a scam (phishing, fraud, malware, impersonation), 0 to 100. */
+  scam: number;
+  /** How likely it is unwanted bulk or unsolicited mail, 0 to 100. */
+  spam: number;
+  /** One sentence on what the email is. */
+  summary: string;
+  /** `claude` or `codex`. */
+  tool: string;
 };
 
 export type HitSource = "local" | "online";
@@ -1457,6 +1513,13 @@ export type QueuedOp = {
   summary: string;
 };
 
+export type Reason = {
+  /** The words in the email it is based on. */
+  evidence: string;
+  /** What kind of sign: `impersonation`, `credential request`, ... */
+  signal: string;
+};
+
 export type SchemaDocument = {
   /** Every command, by name. */
   commands: Array<CommandDoc>;
@@ -1722,6 +1785,8 @@ export interface Commands {
   "mail.archive": { input: MailArchiveInput; output: WriteOutput };
   /** List or save a message's attachments */
   "mail.attachments": { input: MailAttachmentsInput; output: MailAttachmentsOutput };
+  /** Check how likely an email is to be spam or a scam */
+  "mail.check-spam": { input: CheckSpamInput; output: CheckSpamOutput };
   /** Move messages to Deleted Items */
   "mail.delete": { input: MailDeleteInput; output: WriteOutput };
   /** Show a message with its text */
@@ -1804,6 +1869,7 @@ export const COMMAND_NAMES = [
   "folder.unpin",
   "mail.archive",
   "mail.attachments",
+  "mail.check-spam",
   "mail.delete",
   "mail.fetch",
   "mail.flag",
