@@ -32,15 +32,17 @@ export function MessageList() {
   const [notices, setNotices] = createSignal<string[]>([]);
   // The message whose context menu is open, and where.
   const [menu, setMenu] = createSignal<{ row: Row; x: number; y: number } | null>(null);
-  // On the listbox, for the selected row: a right click selects its row first
-  // (mousedown), and the menu key or Shift+F10 fires here, where focus is.
+  // On the listbox, where focus is: a right click opens the menu for the row
+  // under the pointer (selecting it), the menu key or Shift+F10 for the
+  // selected row.
   const openMenu = (e: MouseEvent) => {
     e.preventDefault();
-    const i = selIndex();
+    const keyboard = e.clientX === 0 && e.clientY === 0;
+    const under = (e.target as HTMLElement).closest(".list-row")?.id.match(/^msg-(\d+)$/);
+    if (!keyboard && under) select(Number(under[1]));
+    const i = keyboard ? selIndex() : under ? Number(under[1]) : null;
     const row = i === null ? undefined : rowAt(i);
     if (i === null || !row) return;
-    // From the keyboard there is no pointer: open by the row.
-    const keyboard = e.clientX === 0 && e.clientY === 0;
     const r = document.getElementById(`msg-${i}`)?.getBoundingClientRect();
     setMenu({
       row: { ...row },
@@ -313,7 +315,10 @@ export function MessageList() {
           </For>
         </div>
       </div>
-      <Show when={menu()}>{(m) => <MessageMenu row={m().row} x={m().x} y={m().y} onClose={() => setMenu(null)} />}</Show>
+      <Show when={menu()}>{(m) => <MessageMenu row={m().row} x={m().x} y={m().y} onClose={() => {
+        setMenu(null);
+        scroller.focus();
+      }} />}</Show>
     </div>
   );
 }
