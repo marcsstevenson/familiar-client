@@ -52,7 +52,7 @@ Everything that defines your setup lives in one `config.toml`: accounts, aliases
 So a new machine is three steps:
 
 1. Copy your `config.toml` into place (`fam config path` shows where) and run `fam config validate`.
-2. Sign in to each account with `fam auth login`.
+2. Sign in to each account with `fam auth login <account>`, using the account names from your config (`hotmail`, `parklands` and so on).
 3. Start `famd` and let it sync.
 
 Keep your config in a private repo of its own, since it has your signatures in it. [`config.example.toml`](config.example.toml) shows every setting, and [docs/config.md](docs/config.md) explains them. (Folder colours and pins are kept per device, in `folders.json`, so they don't travel with the config.)
