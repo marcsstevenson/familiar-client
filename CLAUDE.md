@@ -1,12 +1,19 @@
 # CLAUDE.md
 
-## Pull request workflow
+## Change workflow: judge the risk, then pick the route
 
-- Every change goes through a pull request. Do not push straight to `main`.
+Each thread judges how risky its change is and picks one of two routes. When unsure, use a pull request.
+
+Every change, whichever route, first passes the local checks: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets --locked -- -D warnings`, `cargo test --workspace --locked` and `bash scripts/check-licence-headers.sh`. CI does not run on pull requests, because it is too slow.
+
+**Low risk: push straight to `main`.** Small UI tweaks, docs, icons, config examples, and contained bug fixes that touch one area and cannot damage user data. Run the checks, commit and push to `main`. No PR.
+
+**Higher risk: pull request with Codex review.** The sync engine, the store or its schema, the op queue or anything that writes to live mail or calendars, auth and tokens, refactors across several crates, and anything else that touches user data.
+
 - Include `@codex review` in the PR body when you open it, so Codex reviews it on first open.
-- CI does not run on pull requests, because it is too slow. Before you merge, run the checks yourself on the PR branch: `cargo fmt --all --check`, `cargo clippy --workspace --all-targets --locked -- -D warnings`, `cargo test --workspace --locked` and `bash scripts/check-licence-headers.sh`.
-- Watch every PR you open. Answer each Codex finding by the triage rules below, then merge the PR yourself once your local checks pass. Marc does not need to review.
-- CI runs on `main` after the merge. Check that run, and if it goes red, fix it in a new PR straight away.
+- Watch every PR you open. Answer each Codex finding by the triage rules below, then merge the PR yourself once your local checks pass on the PR branch. Marc does not need to review.
+
+Either way, CI runs on `main` after the push or merge. Check that run, and if it goes red, fix it straight away (by the same risk rule).
 
 ### Codex review triage: fix what is real, decline what is imagined
 
