@@ -1,7 +1,7 @@
 # Checking an email for spam or a scam
 
 AI spam plan ([designs/AI Spam and Scam Check Plan.md](../designs/AI%20Spam%20and%20Scam%20Check%20Plan.md)),
-WP S.1 and S.2.
+WP S.1 to S.3. In the desktop app: right-click a message, Check for spam or scam.
 
 ```sh
 fam mail check-spam 4182

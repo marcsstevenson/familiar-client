@@ -3,7 +3,7 @@
 // report` for the reports), so it goes through the op queue and works offline.
 import { Show, onMount } from "solid-js";
 import { isCommandError, run } from "../api";
-import { notify, removeFromList } from "../state";
+import { notify, removeFromList, setSpamDialog, spamSettings } from "../state";
 import type { Row } from "./api";
 
 export function MessageMenu(props: { row: Row; x: number; y: number; onClose: () => void }) {
@@ -91,6 +91,18 @@ export function MessageMenu(props: { row: Row; x: number; y: number; onClose: ()
           Delete
         </button>
         <hr class="menu-rule" />
+        <Show when={spamSettings.accounts.includes(row.account)}>
+          <button
+            role="menuitem"
+            title="See how likely this is to be spam or a scam, from the mail server's checks and the AI tool"
+            onClick={() => {
+              props.onClose();
+              setSpamDialog({ message: row.id });
+            }}
+          >
+            Check for spam or scam
+          </button>
+        </Show>
         <Show
           when={row.in_junk}
           fallback={

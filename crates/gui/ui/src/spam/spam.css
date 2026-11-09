@@ -1,0 +1,74 @@
+/* Spam and scam check dialog and banner. Colours come from styles/tokens.css. */
+.spam-dialog {
+  width: min(640px, 94vw);
+}
+.spam-head {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+.spam-grade.spam-bad {
+  color: var(--danger);
+}
+.spam-grade.spam-careful {
+  color: var(--warn);
+}
+.spam-grade.spam-fine {
+  color: var(--success);
+}
+.spam-reasons {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: var(--space-2) var(--space-4);
+  margin: 0;
+}
+.spam-reasons dt {
+  font-weight: 600;
+}
+.spam-reasons dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.spam-advice {
+  font-weight: 600;
+}
+.spam-facts h3 {
+  margin: 0 0 var(--space-3);
+  font-size: var(--text-md);
+  font-weight: 600;
+}
+.spam-facts ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+}
+.spam-facts li {
+  overflow-wrap: anywhere;
+}
+.spam-mark {
+  display: inline-block;
+  width: 1.6em;
+  font-weight: 700;
+}
+.spam-fact-scam .spam-mark {
+  color: var(--danger);
+}
+.spam-fact-spam .spam-mark {
+  color: var(--warn);
+}
+.spam-fact-safe .spam-mark {
+  color: var(--success);
+}
+.event-body button.danger {
+  color: var(--danger);
+}
+.reading-spam.spam-bad {
+  color: var(--danger);
+}
+.reading-spam.spam-careful {
+  color: var(--warn);
+}

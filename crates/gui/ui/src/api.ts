@@ -37,6 +37,8 @@ export type UiInfo = {
   /** config.toml's [ai] tool when [ai] is on, and the accounts it covers. */
   ai_tool: string | null;
   ai_accounts: string[];
+  /** Accounts with spam_check = true: their messages offer "Check for spam or scam". */
+  spam_accounts: string[];
   /** Run the timing script (FAMILIAR_BENCH_OUT is set). */
   bench: boolean;
 };

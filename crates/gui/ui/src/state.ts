@@ -2,7 +2,10 @@
 // (folders/, list/, reading/, compose/) and talks to the others only through
 // these signals.
 import { createSignal } from "solid-js";
-import { isCommandError, run } from "./api";
+import { type Commands, isCommandError, run } from "./api";
+
+/** What `fam mail check-spam` gives. */
+export type SpamResult = Commands["mail.check-spam"]["output"];
 
 /** The folder shown in the list: a local folder ID, or null for the unified Inbox. */
 export const [selectedFolder, setSelectedFolder] = createSignal<number | null>(null);
@@ -72,6 +75,20 @@ export const [eventDialog, setEventDialog] = createSignal<{ message: number; fro
 
 /** The open message's sender address, set by the reading pane. */
 export const [readingFrom, setReadingFrom] = createSignal<string>("");
+
+/** The message the spam and scam check is open for. `saved` is a result to
+ * show instead of checking again. */
+export const [spamDialog, setSpamDialog] = createSignal<{ message: number; saved?: SpamResult } | null>(null);
+
+/** Spam check results known this session, by message ID: checked in the
+ * dialog, or read back from the saved results. */
+export const [spamResults, setSpamResults] = createSignal<Record<number, SpamResult | null>>({});
+export function rememberSpam(id: number, r: SpamResult | null): void {
+  setSpamResults((all) => ({ ...all, [id]: r }));
+}
+
+/** [accounts] with spam_check = true, from config.toml. */
+export const spamSettings: { accounts: string[] } = { accounts: [] };
 
 /** [ai] from config.toml: the tool, and the accounts whose mail may go to it. */
 export const aiSettings: { tool: string | null; accounts: string[] } = { tool: null, accounts: [] };

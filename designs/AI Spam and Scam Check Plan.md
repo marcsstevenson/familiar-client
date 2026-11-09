@@ -203,7 +203,7 @@ fam mail check-spam <id> [--no-ai] [--json]
 
 PR #39 added the first message context menu (`list/MessageMenu.tsx`), with Report junk, Report phishing and Not junk. WP S.3 adds **Check for spam or scam** to it, for `spam_check` accounts.
 
-The result opens in a small dialog, with a spinner and Cancel while the AI runs (Cancel kills the child, which the events dialog doesn't do yet; this adds it to the shared runner path):
+The result opens in a small dialog, with a spinner while the AI runs. Closing it leaves the check to finish in the background; its result is saved and shows on the message:
 
 ```
 Likely scam · 92%                                   Spam 15% · checked by Claude
@@ -250,7 +250,7 @@ What the mail server and your mailbox say
 | --- | --- | --- | --- |
 | S.1 | **Facts without AI.** `spam_check` config key, header fetch via famd, `spam.rs` facts (auth, verdict, identity, relationship, links, attachments), `fam mail check-spam --no-ai`, registry, mock headers, `docs/spam.md` | AI.2 (done) | `fam mail check-spam <id> --no-ai --json` gives the right facts for the fixtures and through the mock |
 | S.2 | **AI grade.** Spam schema and prompt, answer checking, bands, skip for agents/MCP, fake-AI tests | S.1 | The fake AI drives every path; Claude grades the live sample |
-| S.3 | **Menu item and dialog.** Check in the message context menu, result dialog, Cancel, saved-result banner, Report junk/phishing/Not junk through `mail.report`, `spam_accounts` in `ui_info` | S.1 (S.2 for the AI half), PR #39 | A right-click on a Hotmail message shows a graded result and can report it |
+| S.3 | **Menu item and dialog.** Check in the message context menu, result dialog, saved-result banner, Report junk/phishing/Not junk through `mail.report`, `spam_accounts` in `ui_info` | S.1 (S.2 for the AI half), PR #39 | A right-click on a Hotmail message shows a graded result and can report it |
 | S.4 | **Live check on Marc's PC.** Real Junk and Inbox mail through Claude, then Codex; prompt adjusted from what's seen | S.2, S.3 | Marc checks a week of suspicious mail and agrees with the grades |
 
 S.1 is useful on its own (the facts alone answer "why is this in Junk?"). S.2 and S.3 can run in parallel once S.1 is in.
