@@ -6,7 +6,9 @@
 //! hasn't been checked ([`auto_candidates`]) and checks it one message at a
 //! time, exactly as `fam mail check-spam` would. A graded result is saved
 //! where the desktop app reads it. A message whose check gives no grade (the
-//! AI tool failed) isn't tried again until famd restarts.
+//! AI tool failed) isn't tried again until famd restarts. The config is read
+//! again before each message too, so turning `spam_auto` or `[ai]` off stops
+//! a long backlog straight away.
 
 use std::collections::HashSet;
 use std::path::PathBuf;
@@ -83,9 +85,9 @@ fn round(
     stop: &watch::Receiver<bool>,
     tried: &mut HashSet<i64>,
 ) {
+    // famd logged the config at start; a bad edit since then is the desktop
+    // app's to report.
     let Ok(cfg) = familiar_config::load(config) else {
-        // famd logged the config at start; a bad edit since then is the
-        // desktop app's to report.
         return;
     };
     if !cfg.accounts.values().any(|a| a.spam_auto) {
@@ -98,13 +100,21 @@ fn round(
             return;
         }
     };
-    for id in ids {
+    for (key, id) in ids {
         if *stop.borrow() {
             return;
         }
-        if !tried.insert(id) {
+        if tried.contains(&id) {
             continue;
         }
+        // Still wanted? The setting may have been turned off mid-backlog.
+        let Ok(cfg) = familiar_config::load(config) else {
+            return;
+        };
+        if !cfg.ai.enabled || !cfg.accounts.get(&key).is_some_and(|a| a.spam_auto) {
+            continue;
+        }
+        tried.insert(id);
         let input = CheckSpamInput {
             message: id,
             no_ai: false,

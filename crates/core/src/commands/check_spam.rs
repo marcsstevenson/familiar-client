@@ -392,17 +392,18 @@ fn body(r: &Reader, m: &familiar_store::Message) -> (String, Option<String>, boo
 /// last day. Older mail is only checked on request.
 pub const AUTO_WINDOW: i64 = 24 * 3600;
 
-/// Messages per folder the background check looks through each round.
+/// Messages read from the store at a time while looking for candidates.
 const AUTO_PAGE: usize = 100;
 
 /// The messages famd's background check should look at now, newest first:
 /// in Inbox or Junk Email of a `spam_auto` account, arrived within
 /// [`AUTO_WINDOW`] of `now`, with the body synced, and not checked yet.
+/// Each is its account's key and the message's local ID.
 pub fn auto_candidates(
     paths: &DaemonPaths,
     cfg: &familiar_config::Config,
     now: i64,
-) -> Result<Vec<i64>, CommandError> {
+) -> Result<Vec<(String, i64)>, CommandError> {
     let keys: Vec<&String> = cfg
         .accounts
         .iter()
@@ -424,18 +425,30 @@ pub fn auto_candidates(
             if !matches!(f.well_known.as_deref(), Some("inbox" | "junkemail")) {
                 continue;
             }
-            for m in r.messages(f.id, None, AUTO_PAGE).map_err(store_err)? {
-                if m.received_at < now - AUTO_WINDOW {
-                    break;
+            let mut after = None;
+            'pages: loop {
+                let page = r.messages(f.id, after, AUTO_PAGE).map_err(store_err)?;
+                let full = page.len() == AUTO_PAGE;
+                for m in page {
+                    if m.received_at < now - AUTO_WINDOW {
+                        break 'pages;
+                    }
+                    after = Some(familiar_store::Cursor {
+                        received_at: m.received_at,
+                        id: m.id.0,
+                    });
+                    if m.body.is_some() && !done.is_some_and(|d| d.contains_key(&m.remote_id)) {
+                        out.push((m.received_at, key.clone(), m.id.0));
+                    }
                 }
-                if m.body.is_some() && !done.is_some_and(|d| d.contains_key(&m.remote_id)) {
-                    out.push((m.received_at, m.id.0));
+                if !full {
+                    break;
                 }
             }
         }
     }
     out.sort_unstable_by(|a, b| b.cmp(a));
-    Ok(out.into_iter().map(|(_, id)| id).collect())
+    Ok(out.into_iter().map(|(_, k, id)| (k, id)).collect())
 }
 
 /// Runs `fam mail check-spam` against the store and famd at `paths`.
