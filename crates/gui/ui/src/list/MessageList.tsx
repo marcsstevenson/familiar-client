@@ -363,6 +363,13 @@ function ListRow(props: {
               <span class="row-date">{shortDate(r().received_at)}</span>
             </div>
             <div class="row-line">
+              <Show when={r().spam_warning}>
+                {(w) => (
+                  <span class="row-spam" title={`Spam check: ${w()}`} aria-label={`Warning: ${w()}`}>
+                    ⚠ {w().split(" · ")[0]}
+                  </span>
+                )}
+              </Show>
               <Show when={r().importance === 2}>
                 <span class="row-icon important" aria-label="High importance">!</span>
               </Show>
