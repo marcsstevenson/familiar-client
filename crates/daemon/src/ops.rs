@@ -489,21 +489,10 @@ impl OpRunner {
             OpPayload::ReportMessage {
                 message, report, ..
             } => {
-                let m = api
-                    .report_message(&self.message_remote(*message)?, report.graph_action(), pr)
+                // Graph moves it; if it picks another folder than the local
+                // guess (a tenant may send phishing elsewhere), sync says so.
+                api.report_message(&self.message_remote(*message)?, report.graph_action(), pr)
                     .await?;
-                // The server picks the folder (phishing may go to Deleted
-                // Items); show it there rather than wait for the next sync.
-                if let Some(parent) = m.parent_folder_id.as_deref() {
-                    let (acc, id) = (self.account, MessageId(*message));
-                    self.w.write(|tx| match tx.folder_by_remote(acc, parent)? {
-                        Some(f) => match tx.move_message(id, f.id) {
-                            Err(familiar_store::Error::NotFound(_)) => Ok(()),
-                            r => r,
-                        },
-                        None => Ok(()),
-                    })?;
-                }
             }
             OpPayload::DeleteMessage { message } => {
                 match api

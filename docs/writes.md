@@ -54,8 +54,8 @@ provider's own report process, so its filter learns from it:
   it only on the beta endpoint, so the runner posts to `/beta` (everything
   else stays on v1.0). The server moves the message: junk and phishing into
   Junk Email, not junk back to the Inbox. Locally the message moves there at
-  once, then to whatever folder Graph's answer names (a work tenant may put
-  phishing elsewhere). Not junk is only for messages in Junk Email; junk on a
+  once; if Graph picks another folder (a work tenant may put phishing
+  elsewhere), the next sync moves it there. Not junk is only for messages in Junk Email; junk on a
   message already there does nothing.
 - **Gmail (later).** The op payload (`report_message` with a provider-neutral
   `Report`) is the seam. Gmail has no report API beyond its labels: junk and
