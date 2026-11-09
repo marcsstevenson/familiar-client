@@ -1,7 +1,7 @@
 # Checking an email for spam or a scam
 
 AI spam plan ([designs/AI Spam and Scam Check Plan.md](../designs/AI%20Spam%20and%20Scam%20Check%20Plan.md)),
-WP S.1 to S.3. In the desktop app: right-click a message, Check for spam or scam.
+WP S.1 to S.3, plus a background check. In the desktop app: right-click a message, Check for spam or scam.
 
 ```sh
 fam mail check-spam 4182
@@ -79,6 +79,30 @@ runs high, so the headline carries the meaning.
 The AI isn't asked when an agent or the MCP server runs the check (an agent
 asking another agent), or with `--no-ai`. If the tool fails or times out,
 you get the facts and a note.
+
+## Checking new mail on its own
+
+With `spam_auto = true` on an account (instead of, or as well as,
+`spam_check`), famd checks the account's new mail in the background:
+
+```toml
+[accounts.hotmail]
+# ...
+spam_auto = true
+```
+
+Once a minute it looks for mail in Inbox and Junk Email that arrived in
+the last day, has its body on this device and hasn't been checked, and
+checks it one message at a time, as `fam mail check-spam` would. Each
+check is one call to the AI tool. The grade is saved (below); a check
+that gives no grade (the tool failed) isn't tried again until famd
+restarts, and famd's log says why. The setting is read again every round,
+so turning it off needs no restart.
+
+In the desktop app, a grade stands out under the reading pane's header
+only when it disagrees with where the message is: 50% or more outside
+Junk Email, or under 50% in it. Otherwise it shows only while the pointer
+is over the header.
 
 ## Saved results
 

@@ -87,7 +87,7 @@ export function rememberSpam(id: number, r: SpamResult | null): void {
   setSpamResults((all) => ({ ...all, [id]: r }));
 }
 
-/** [accounts] with spam_check = true, from config.toml. */
+/** [accounts] with spam_check or spam_auto = true, from config.toml. */
 export const spamSettings: { accounts: string[] } = { accounts: [] };
 
 /** [ai] from config.toml: the tool, and the accounts whose mail may go to it. */

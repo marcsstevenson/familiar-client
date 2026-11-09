@@ -109,6 +109,10 @@ pub struct Account {
     /// check-spam`), which asks the `[ai]` tool. Off by default.
     #[serde(default)]
     pub spam_check: bool,
+    /// Check new Inbox and Junk mail in the background (famd), as well as
+    /// on request. Implies `spam_check`. Off by default.
+    #[serde(default)]
+    pub spam_auto: bool,
     /// Signatures for this account.
     pub signature: Option<Signature>,
 }

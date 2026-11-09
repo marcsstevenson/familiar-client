@@ -55,7 +55,7 @@ struct UiInfo {
     ai_tool: Option<String>,
     /// The accounts whose mail `[ai]` may send to that tool.
     ai_accounts: Vec<String>,
-    /// The accounts with `spam_check = true`: their messages' menu offers
+    /// The accounts with `spam_check` or `spam_auto`: their messages' menu offers
     /// "Check for spam or scam".
     spam_accounts: Vec<String>,
     /// True when `FAMILIAR_BENCH_OUT` names a file: the front end then runs
@@ -90,7 +90,7 @@ fn ui_info() -> UiInfo {
         .map(|c| {
             c.accounts
                 .iter()
-                .filter(|(_, a)| a.spam_check)
+                .filter(|(_, a)| a.spam_check || a.spam_auto)
                 .map(|(k, _)| k.clone())
                 .collect()
         })

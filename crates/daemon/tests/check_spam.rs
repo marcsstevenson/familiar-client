@@ -176,6 +176,7 @@ async fn facts_grade_and_saved_result() {
                 aliases: Vec::new(),
                 processed_folder: None,
                 spam_check,
+                spam_auto: false,
                 signature: None,
             },
         );
@@ -298,4 +299,71 @@ async fn without_famd_the_store_facts_are_still_given() {
         ),
         "{out:#?}"
     );
+}
+
+/// `spam_auto`: famd checks new Inbox mail on its own and saves the grade.
+#[cfg(unix)]
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn famd_checks_new_mail_on_its_own() {
+    let mut env = Env::new(5).await;
+    let remote = env.mock.mailbox(KEY).add_message(phish(&env)).unwrap();
+    let dir = tempfile::tempdir().unwrap();
+    let script = fake_claude(dir.path());
+    std::fs::write(dir.path().join("mode"), "answer").unwrap();
+    std::fs::write(
+        dir.path().join("answer.json"),
+        serde_json::json!({
+            "type": "result", "is_error": false, "result": "",
+            "structured_output": {
+                "spam": 10, "scam": 90, "category": "phishing",
+                "summary": "Pretends to be ANZ.", "reasons": [], "advice": ""
+            }
+        })
+        .to_string(),
+    )
+    .unwrap();
+    let config = dir.path().join("config.toml");
+    std::fs::write(
+        &config,
+        format!(
+            "version = 1\n[ai]\nenabled = true\ntool = '{}'\n[accounts.{KEY}]\nemail = 'test.user@example.com'\ntenant = 'consumers'\nspam_auto = true\n",
+            script.display()
+        ),
+    )
+    .unwrap();
+    let mut o = env.options(fast_policy());
+    o.spam = Some(familiar_daemon::spam::SpamAuto {
+        config,
+        every: Duration::from_millis(200),
+    });
+    env.start_with(o);
+    env.until("first sync", LIMIT, |e| e.settled(30)).await;
+    let id = synced(&env, &remote).await;
+
+    // The grade turns up in the saved results without anyone asking.
+    let mut saved = None;
+    let p = env.paths.clone();
+    env.until("the background check", LIMIT, |_| {
+        let r = check_at(
+            &p,
+            None,
+            &CheckSpamInput {
+                saved: true,
+                ..input(id)
+            },
+            0,
+        );
+        saved = r.ok();
+        saved.is_some()
+    })
+    .await;
+    let g = saved.unwrap().ai.expect("a grade");
+    assert_eq!((g.spam, g.scam), (10, 90));
+
+    // Once checked, it isn't checked again.
+    let first = std::fs::read_to_string(dir.path().join("prompt.txt")).unwrap();
+    std::fs::remove_file(dir.path().join("prompt.txt")).unwrap();
+    tokio::time::sleep(Duration::from_millis(800)).await;
+    assert!(!first.is_empty());
+    assert!(!dir.path().join("prompt.txt").exists());
 }

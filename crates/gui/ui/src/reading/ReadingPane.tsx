@@ -8,7 +8,7 @@
 // marks it read.
 import { For, Show, createEffect, createSignal, on } from "solid-js";
 import { run } from "../api";
-import { rememberSpam, selectedMessage, setEventDialog, setReadingFrom, setSpamDialog, spamResults, spamSettings } from "../state";
+import { type SpamResult, rememberSpam, selectedMessage, setEventDialog, setReadingFrom, setSpamDialog, spamResults, spamSettings } from "../state";
 import { gradeLevel, gradeWords } from "../spam/SpamDialog";
 import { resolvedTheme } from "../theme";
 import { Attachments } from "./Attachments";
@@ -106,11 +106,13 @@ export function ReadingPane() {
   };
 
   // How long opening took, for the performance checks (WP 3.7).
-  // A spam check saved for the open message (spam_check accounts only).
+  // A spam check saved for the open message (spam_check and spam_auto
+  // accounts only). Read on every open: famd's background check can save
+  // one at any time, and it's a small local file.
   createEffect(
     on(view, (v) => {
       const m = v?.message;
-      if (!m || !spamSettings.accounts.includes(m.account) || m.id in spamResults()) return;
+      if (!m || !spamSettings.accounts.includes(m.account)) return;
       run("mail.check-spam", { message: m.id, saved: true }).then(
         (r) => rememberSpam(m.id, r),
         () => rememberSpam(m.id, null),
@@ -120,6 +122,13 @@ export function ReadingPane() {
   const spam = () => {
     const m = view()?.message;
     return m ? (spamResults()[m.id] ?? null) : null;
+  };
+  // The result stands out only when it disagrees with where the message is:
+  // 50% or more outside Junk, or under 50% in Junk. Otherwise it shows only
+  // while the pointer is over the header.
+  const spamStandsOut = (r: SpamResult) => {
+    if (!r.ai) return false;
+    return Math.max(r.ai.spam, r.ai.scam) >= 50 !== (r.folder === "junkemail");
   };
 
   const loaded = () => {
@@ -193,6 +202,14 @@ export function ReadingPane() {
                 </div>
                 {/* Shown only while the pointer is over the header (or it has
                     focus), so it takes no room otherwise. */}
+                <Show when={spam() && !spamStandsOut(spam()!) ? spam() : null}>
+                  {(r) => (
+                    <div class="reading-trusted" role="note">
+                      <span class={`reading-spam spam-${gradeLevel(r())}`}>Checked: {gradeWords(r())}</span>
+                      <button onClick={() => setSpamDialog({ message: m().id, saved: r() })}>Details</button>
+                    </div>
+                  )}
+                </Show>
                 <Show when={v().sender_trusted}>
                   <div class="reading-trusted" role="note">
                     <span>Images from {m().from.addr} are always shown.</span>
@@ -215,7 +232,7 @@ export function ReadingPane() {
                   </Show>
                 </div>
               </Show>
-              <Show when={spam()}>
+              <Show when={spam() && spamStandsOut(spam()!) ? spam() : null}>
                 {(r) => (
                   <div class="reading-banner" role="note">
                     <span class={`reading-spam spam-${gradeLevel(r())}`}>Checked: {gradeWords(r())}</span>

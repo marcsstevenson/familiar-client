@@ -91,7 +91,11 @@ impl Env {
     }
 
     pub fn start(&mut self, policy: SyncPolicy) {
-        self.daemon = Some(Daemon::start(self.options(policy)).unwrap());
+        self.start_with(self.options(policy));
+    }
+
+    pub fn start_with(&mut self, options: DaemonOptions) {
+        self.daemon = Some(Daemon::start(options).unwrap());
     }
 
     pub async fn stop(&mut self) {
