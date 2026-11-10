@@ -1712,6 +1712,16 @@ export type VersionOutput = {
   version: string;
 };
 
+export type WatchInput = {
+  /** Only messages this search matches (`fam mail search` syntax), for example `from:club`. */
+  match?: string | null;
+};
+
+export type WatchOutput = {
+  /** Events printed. */
+  events: number;
+};
+
 export type WriteOutput = {
   /** True when nothing was changed (`--dry-run`). */
   dry_run: boolean;
@@ -1831,6 +1841,8 @@ export interface Commands {
   "ui.open": { input: UiOpenInput; output: UiDone };
   /** Show the Familiar version */
   "version": { input: VersionInput; output: VersionOutput };
+  /** Print new mail as it arrives, as JSON lines */
+  "watch": { input: WatchInput; output: WatchOutput };
 }
 
 /** A command name. */
@@ -1892,4 +1904,5 @@ export const COMMAND_NAMES = [
   "ui.folder",
   "ui.open",
   "version",
+  "watch",
 ] as const satisfies readonly CommandName[];

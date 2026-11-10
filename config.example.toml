@@ -102,6 +102,16 @@ allow = ["read", "draft"]
 # [agent.accounts.home]
 # allow = ["send"]
 
+# Commands famd runs when new mail arrives, one [[hooks]] each. `match` is
+# a search (fam mail search syntax); leave it out for every new message.
+# The message comes as one JSON line on stdin and in FAMILIAR_* variables
+# (FAMILIAR_SUBJECT, FAMILIAR_FROM, ...). See docs/hooks.md.
+# [[hooks]]
+# name = "club"
+# on = "new_mail"
+# match = "from:club"
+# run = "notify-send \"Club mail\" \"$FAMILIAR_SUBJECT\""
+
 # An AI tool on this computer that finds events in emails for "Add to
 # calendar" (fam cal propose). Off until enabled: the email's text is sent
 # to the tool's maker. See docs/ai.md.

@@ -277,6 +277,25 @@ impl Reader {
         query::messages_by_ids(&self.conn, ids)
     }
 
+    /// Up to `limit` messages added after `after` (by local ID), oldest
+    /// first. Used to notice new mail.
+    pub fn messages_after(&self, after: MessageId, limit: usize) -> Result<Vec<Message>> {
+        query::messages_after(&self.conn, after, limit)
+    }
+
+    /// The highest local message ID (0 for an empty store).
+    pub fn max_message_id(&self) -> Result<MessageId> {
+        query::max_message_id(&self.conn)
+    }
+
+    /// Which of `ids` the search index hasn't caught up with yet.
+    pub fn queued_for_index(
+        &self,
+        ids: &[MessageId],
+    ) -> Result<std::collections::HashSet<MessageId>> {
+        query::queued_for_index(&self.conn, ids)
+    }
+
     /// The oldest `limit` entries of the search index queue (WP 1.9).
     pub fn search_queue(&self, limit: usize) -> Result<SearchQueueBatch> {
         query::search_queue(&self.conn, limit)

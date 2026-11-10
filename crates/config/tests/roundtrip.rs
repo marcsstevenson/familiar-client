@@ -347,3 +347,41 @@ fn allow_under_an_account_points_to_agent_accounts() {
     );
     assert_eq!(r.problems[0].line, Some(5));
 }
+
+#[test]
+fn hooks_are_checked() {
+    let text = r#"version = 1
+[accounts.home]
+email = "me@example.com"
+tenant = "consumers"
+[[hooks]]
+on = "new_mail"
+match = "from:club"
+run = "notify-send club"
+[[hooks]]
+on = "sent_mail"
+match = " "
+run = ""
+timeout_seconds = 0
+"#;
+    let r = check(text);
+    let paths: Vec<&str> = r.problems.iter().map(|p| p.path.as_str()).collect();
+    assert_eq!(
+        paths,
+        vec![
+            "hooks[1].on",
+            "hooks[1].match",
+            "hooks[1].run",
+            "hooks[1].timeout_seconds"
+        ],
+        "{:#?}",
+        r.problems
+    );
+    for p in &r.problems {
+        assert!(p.line.is_some(), "no line for {p}");
+    }
+    let c = r.config.unwrap();
+    assert_eq!(c.hooks[0].matches.as_deref(), Some("from:club"));
+    assert!(c.hooks[0].enabled);
+    assert_eq!(c.hooks[0].timeout_seconds, 60);
+}

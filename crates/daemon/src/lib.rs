@@ -9,6 +9,7 @@
 //! - [`indexer`]: keeps the search index beside the store up to date.
 //! - [`check`]: the store-versus-server consistency check (WP 1.12).
 //! - [`spam`]: the background spam and scam check (`spam_auto`).
+//! - [`hooks`]: `[[hooks]]` commands run on new mail.
 //! - [`ipc`]: the per-user socket or named pipe those requests arrive on.
 //!
 //! [`Daemon::start`] runs all of it on the current Tokio runtime; the
@@ -17,6 +18,7 @@
 
 pub mod check;
 pub mod engine;
+pub mod hooks;
 pub mod indexer;
 pub mod ipc;
 pub mod ops;
@@ -79,6 +81,8 @@ pub struct DaemonOptions {
     pub agent: AgentGrants,
     /// The background spam and scam check; `None` leaves it off.
     pub spam: Option<spam::SpamAuto>,
+    /// `[[hooks]]` run on new mail; `None` leaves them off.
+    pub hooks: Option<hooks::Hooks>,
 }
 
 /// Where famd gets the agent grants from.
@@ -112,6 +116,7 @@ impl DaemonOptions {
             page_size: None,
             agent: AgentGrants::Fixed(familiar_core::agent::Grants::default()),
             spam: None,
+            hooks: None,
         }
     }
 }
@@ -256,6 +261,14 @@ impl Daemon {
         if let Some(s) = opts.spam {
             tasks.push(spam::spawn(
                 s,
+                opts.paths.clone(),
+                opts.clock.clone(),
+                rx.clone(),
+            ));
+        }
+        if let Some(h) = opts.hooks {
+            tasks.push(hooks::spawn(
+                h,
                 opts.paths.clone(),
                 opts.clock.clone(),
                 rx.clone(),

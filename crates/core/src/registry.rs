@@ -226,6 +226,7 @@ impl Registry {
         r.register(crate::commands::draft::MailSend);
         r.register(crate::commands::ui::UiOpen);
         r.register(crate::commands::ui::UiFolder);
+        r.register(crate::commands::watch::Watch);
         r
     }
 

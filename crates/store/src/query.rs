@@ -440,6 +440,46 @@ pub(crate) fn messages_by_ids(c: &Connection, ids: &[MessageId]) -> Result<Vec<M
     Ok(s.query_map([list], message)?.collect::<Result<_, _>>()?)
 }
 
+/// Up to `limit` messages with a local ID above `after`, lowest ID first.
+/// IDs only grow, so this is "the messages added since".
+pub(crate) fn messages_after(
+    c: &Connection,
+    after: MessageId,
+    limit: usize,
+) -> Result<Vec<Message>> {
+    let mut s = c.prepare_cached(&format!(
+        "SELECT {MESSAGE_COLS} FROM messages m WHERE m.id > ?1 ORDER BY m.id LIMIT ?2"
+    ))?;
+    Ok(s.query_map(params![after.0, limit as i64], message)?
+        .collect::<Result<_, _>>()?)
+}
+
+/// The highest local message ID, or 0 when there are none.
+pub(crate) fn max_message_id(c: &Connection) -> Result<MessageId> {
+    Ok(MessageId(c.query_row(
+        "SELECT coalesce(max(id), 0) FROM messages",
+        [],
+        |r| r.get(0),
+    )?))
+}
+
+/// Which of `ids` are waiting in the search queue.
+pub(crate) fn queued_for_index(
+    c: &Connection,
+    ids: &[MessageId],
+) -> Result<std::collections::HashSet<MessageId>> {
+    if ids.is_empty() {
+        return Ok(Default::default());
+    }
+    let list = serde_json::to_string(&ids.iter().map(|i| i.0).collect::<Vec<_>>())?;
+    let mut s = c.prepare_cached(
+        "SELECT DISTINCT message_id FROM search_queue
+          WHERE message_id IN (SELECT value FROM json_each(?1))",
+    )?;
+    Ok(s.query_map([list], |r| Ok(MessageId(r.get(0)?)))?
+        .collect::<Result<_, _>>()?)
+}
+
 /// The oldest `limit` rows of the search queue: the distinct message IDs in
 /// them and the highest `seq` read.
 pub(crate) fn search_queue(c: &Connection, limit: usize) -> Result<SearchQueueBatch> {
