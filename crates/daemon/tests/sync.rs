@@ -375,3 +375,49 @@ async fn calendars_sync_for_the_window_around_today() {
     }
     env.stop().await;
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn one_refusing_folder_does_not_hold_up_the_rest() {
+    use familiar_mock_graph::Fault;
+    let mut env = Env::new(1000).await;
+    // One user folder refuses delta for good, as a folder Graph won't sync might.
+    env.mock
+        .push_fault(Fault::access_denied().on_path("fld-user-001/messages/delta"));
+    env.start(fast_policy());
+    env.until("first sync past the refusing folder", LIMIT, |e| {
+        e.settled(30)
+    })
+    .await;
+
+    // New Inbox mail still arrives on the next polls.
+    let mbx = env.mock.mailbox(KEY);
+    mbx.add_message(Message::new(
+        "inbox",
+        "After the refusal",
+        EmailAddress::new("Ann", "ann@example.com"),
+        env.spec.newest + Days::minutes(5),
+    ))
+    .unwrap();
+    env.until("new mail in the Inbox", LIMIT, |e| {
+        let r = e.reader();
+        let inbox = r
+            .folders(e.account())
+            .unwrap()
+            .into_iter()
+            .find(|f| f.well_known.as_deref() == Some("inbox"))
+            .unwrap();
+        r.messages(inbox.id, None, 5)
+            .unwrap()
+            .iter()
+            .any(|m| m.subject == "After the refusal")
+    })
+    .await;
+    // The refusal is on record for that folder only.
+    let r = env.reader();
+    let st = r
+        .sync_state(env.account(), "messages:fld-user-001")
+        .unwrap()
+        .unwrap();
+    assert!(st.last_error.is_some_and(|e| e.contains("Access")));
+    env.stop().await;
+}

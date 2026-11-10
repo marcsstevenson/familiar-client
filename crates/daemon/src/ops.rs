@@ -10,8 +10,10 @@
 //! later ops that needed it (moves into a folder that couldn't be created).
 //!
 //! An op claimed when `famd` stopped (or was killed) is put back at the
-//! front of the queue at start. Every op is safe to send twice; see
-//! `familiar_provider_graph::MailApi`'s write methods.
+//! front of the queue at start. Nearly every op is safe to send twice (see
+//! `familiar_provider_graph::MailApi`'s write methods); the exception is
+//! creating a draft, which can leave a spare copy in Drafts if Graph made it
+//! but its answer was lost.
 
 use std::sync::Arc;
 use std::time::Duration;

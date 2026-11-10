@@ -49,6 +49,20 @@ use tokio::time::Instant;
 
 use crate::policy::{Clock, SyncPolicy};
 
+/// True for an error that is about the account or the connection (offline,
+/// throttled, signed out, Graph itself in trouble), not one folder or message.
+/// Those back the whole account off; the rest only skip the item.
+fn account_wide(e: &GraphError) -> bool {
+    match e {
+        GraphError::Network(_)
+        | GraphError::Throttled { .. }
+        | GraphError::Auth(_)
+        | GraphError::Store(_) => true,
+        GraphError::Graph { status, .. } => *status >= 500 || *status == 408,
+        GraphError::NotFound(_) | GraphError::Decode(_) | GraphError::SyncStateGone(_) => false,
+    }
+}
+
 /// How long a done op stays in the queue before ageing deletes it.
 const DONE_OP_RETENTION_SECS: i64 = 7 * 86_400;
 
@@ -440,25 +454,46 @@ impl Engine {
             }
         }
         let refs: Vec<&str> = batch.iter().map(String::as_str).collect();
-        let report = match self
+        let (upserted, moved) = match self
             .sync
             .sync_folders(&mut self.w, &refs, Priority::Background)
             .await
         {
-            Ok(r) => r,
-            Err(e) => {
-                let msg = e.to_string();
-                let _ = self.w.write(|tx| {
-                    for remote in batch {
-                        tx.set_sync_error(acc, &messages_resource(remote), &msg)?;
-                    }
-                    Ok(())
-                });
-                if matches!(e, GraphError::NotFound(_)) {
-                    // A folder went away under us; re-read the tree first.
-                    self.tree_due = Some(Instant::now());
-                }
+            Ok(r) => (r.upserted, r.moved),
+            Err(e) if account_wide(&e) => {
+                self.folder_error(batch, &e);
                 return Err(e);
+            }
+            Err(e) if batch.len() == 1 => {
+                // This folder refuses; the others carry on. It is tried
+                // again when it is next due.
+                self.folder_error(batch, &e);
+                (0, 0)
+            }
+            Err(_) => {
+                // One of them refuses. Run them one at a time so it doesn't
+                // hold up the rest; folders already done just confirm their
+                // bookmark.
+                let (mut upserted, mut moved) = (0, 0);
+                for remote in batch {
+                    match self
+                        .sync
+                        .sync_folders(&mut self.w, &[remote.as_str()], Priority::Background)
+                        .await
+                    {
+                        Ok(r) => {
+                            upserted += r.upserted;
+                            moved += r.moved;
+                        }
+                        Err(e) => {
+                            self.folder_error(std::slice::from_ref(remote), &e);
+                            if account_wide(&e) {
+                                return Err(e);
+                            }
+                        }
+                    }
+                }
+                (upserted, moved)
             }
         };
         let now = Instant::now();
@@ -473,7 +508,7 @@ impl Engine {
                     };
             }
         }
-        if report.upserted + report.moved > 0 {
+        if upserted + moved > 0 {
             self.bodies_pending = true;
             self.body_cursor = None;
         }
@@ -482,11 +517,34 @@ impl Engine {
         }
         let at = (self.clock)();
         self.shared.update(|l| {
-            l.headers_synced += report.upserted as u64;
+            l.headers_synced += upserted as u64;
             l.last_round_at = Some(at);
             l.detail = None;
         });
         Ok(())
+    }
+
+    /// Records a failed round on the folders' sync states and in the log.
+    fn folder_error(&mut self, folders: &[String], e: &GraphError) {
+        let acc = self.account;
+        let msg = e.to_string();
+        let _ = self.w.write(|tx| {
+            for remote in folders {
+                tx.set_sync_error(acc, &messages_resource(remote), &msg)?;
+            }
+            Ok(())
+        });
+        if !account_wide(e) {
+            crate::log(&format!(
+                "{}: folder {} skipped this round: {msg}",
+                self.key,
+                folders.join(", ")
+            ));
+        }
+        if matches!(e, GraphError::NotFound(_)) {
+            // A folder went away under us; re-read the tree first.
+            self.tree_due = Some(Instant::now());
+        }
     }
 
     /// Fetches the next batch of window bodies. False when none are left.
@@ -516,14 +574,20 @@ impl Engine {
             .await?;
         let mut ok = 0u64;
         let mut first_err = None;
-        for (_, r) in results {
+        for (id, r) in results {
             match r {
                 Ok(_) => ok += 1,
                 // Deleted since the round: the next round removes it.
                 Err(GraphError::NotFound(_)) => {}
-                Err(e) => {
+                Err(e) if account_wide(&e) => {
                     first_err.get_or_insert(e);
                 }
+                // This one message refuses: skip it rather than retry the
+                // batch for ever. It is tried again on a later pass.
+                Err(e) => crate::log(&format!(
+                    "{}: body of message {} skipped: {e}",
+                    self.key, id.0
+                )),
             }
         }
         self.shared.update(|l| l.bodies_fetched += ok);

@@ -11,7 +11,7 @@ use std::time::{Duration, Instant};
 use common::{Env, client};
 use familiar_mock_graph::{Fault, Mailbox, MockGraph, SyntheticSpec};
 use familiar_provider_graph::{
-    ClientOptions, GraphClient, MailApi, Priority, TokenSource, messages_resource,
+    ClientOptions, GraphClient, MailApi, Priority, StaticToken, TokenSource, messages_resource,
 };
 use familiar_store::MessageId;
 
@@ -227,4 +227,37 @@ async fn a_401_refreshes_the_token_once() {
         matches!(err, familiar_provider_graph::Error::Auth(_)),
         "{err}"
     );
+}
+
+#[tokio::test]
+async fn a_gateway_timeout_repeats_a_read_but_not_a_write() {
+    let mock = MockGraph::start().await.unwrap();
+    let mut opts = ClientOptions::with_base(mock.base_url());
+    opts.default_retry_after = Duration::from_millis(10);
+    let api =
+        MailApi::new(GraphClient::new(opts, Arc::new(StaticToken("test-token".into()))).unwrap());
+    let gateway = || Fault::status(504, "GatewayTimeout", "The gateway timed out");
+
+    // A read is simply asked again.
+    mock.push_fault(gateway().on_path("/messages/imm-small-01").times(1));
+    api.body("imm-small-01", Priority::User).await.unwrap();
+
+    // A draft may have been made behind a 504, so it is not posted twice.
+    mock.push_fault(gateway().on_method("POST").times(1));
+    let r = api
+        .create_draft(&serde_json::json!({ "subject": "Once" }), Priority::User)
+        .await;
+    assert!(
+        matches!(
+            r,
+            Err(familiar_provider_graph::Error::Graph { status: 504, .. })
+        ),
+        "{r:?}"
+    );
+    let posts = mock
+        .requests()
+        .iter()
+        .filter(|q| q.method == "POST")
+        .count();
+    assert_eq!(posts, 1);
 }
