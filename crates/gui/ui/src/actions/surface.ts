@@ -53,6 +53,9 @@ export const COMMAND_SURFACE = {
   "mail.read": "palette",
   "mail.search": "palette",
   "mail.send": "palette",
+  "mail.snooze": "palette",
+  "mail.snoozed": "palette",
+  "mail.unsnooze": "palette",
   "mail.thread": "palette",
   "mcp.serve": "terminal", // speaks MCP over stdio
   "ops.cancel": "palette",
@@ -64,4 +67,5 @@ export const COMMAND_SURFACE = {
   "ui.folder": "palette",
   "ui.open": "palette",
   version: "palette",
+  watch: "terminal", // streams events until stopped
 } as const satisfies Record<CommandName, Surface>;

@@ -801,6 +801,36 @@ Saves a new message as a draft with the account's signature and queues it to sen
 - `--wait-secs <wait-secs>`: Seconds --wait waits at most (default 60).
 - `--yes`: Send even to many outside recipients who would see each other.
 
+## mail.snooze
+
+Hide messages in Snoozed until a time, then bring them back. Access: `write`.
+
+```
+fam mail snooze <MESSAGES>...
+```
+
+Moves messages to their account's Snoozed folder (made at the top level the first time), on this device at once and queued for the server. At --until famd moves each one back to the folder it came from, marked unread. famd must be running then; a snooze that comes due while it isn't comes back when it next starts. Snoozing a snoozed message again only changes the time. A message moved out of Snoozed by hand stays where it was put.
+
+- `--dry-run`: Only show what would change.
+- `MESSAGES` (required, repeatable): Local message IDs.
+- `--tz <tz>`: Time zone for --until (IANA or Windows name; default this computer's).
+- `--until <until>` (required): When they come back: "mon 9am", "tomorrow" (9 am), "tonight" (6 pm), "weekend", "next week", "3h", "2d", "2026-11-21 08:30".
+- `--wait`: Wait until the server has the move (needs famd).
+- `--wait-secs <wait-secs>`: Seconds --wait waits at most (default 60).
+
+## mail.snoozed
+
+List snoozed messages and when they come back. Access: `read`.
+
+```
+fam mail snoozed
+```
+
+Lists the messages snoozed with fam mail snooze, soonest back first. Reads the store, so it works without famd.
+
+- `--account <account>`: Only this account (its name in config.toml).
+- `--tz <tz>`: Time zone for the times shown (default this computer's).
+
 ## mail.thread
 
 Show a whole conversation. Access: `read`.
@@ -813,6 +843,21 @@ Shows the conversation a message belongs to, oldest first, across every folder o
 
 - `MESSAGE` (required): The local ID of any message in the conversation.
 - `--no-trash`: Leave out messages in Deleted Items and Junk Email.
+
+## mail.unsnooze
+
+Bring snoozed messages back now. Access: `write`.
+
+```
+fam mail unsnooze <MESSAGES>...
+```
+
+Ends the snooze of each message and moves it out of Snoozed to the folder it came from (the Inbox if that folder is gone, or if it was put in Snoozed by hand).
+
+- `--dry-run`: Only show what would change.
+- `MESSAGES` (required, repeatable): Local message IDs.
+- `--wait`: Wait until the server has the move (needs famd).
+- `--wait-secs <wait-secs>`: Seconds --wait waits at most (default 60).
 
 ## mcp.serve
 

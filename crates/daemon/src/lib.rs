@@ -24,6 +24,7 @@ pub mod ipc;
 pub mod ops;
 pub mod policy;
 pub mod service;
+pub mod snooze;
 pub mod spam;
 
 use std::collections::HashMap;
@@ -255,6 +256,7 @@ impl Daemon {
         let mut tasks: Vec<JoinHandle<()>> =
             engines.into_iter().map(|e| tokio::spawn(e.run())).collect();
         tasks.extend(runners.into_iter().map(|r| tokio::spawn(r.run())));
+        tasks.push(snooze::spawn(service.clone(), rx.clone()));
         if let Some(t) = indexer::spawn(&opts.paths.index, w.clone(), rx.clone()) {
             tasks.push(t);
         }

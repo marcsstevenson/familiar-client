@@ -510,11 +510,13 @@ impl WriteTx<'_> {
     }
 
     /// Deletes `account`'s unpinned headers received before `before`, for
-    /// `sync.headers` set to a period. Returns how many.
+    /// `sync.headers` set to a period. Snoozed messages are kept until they
+    /// come back. Returns how many.
     pub fn prune_headers(&self, account: AccountId, before: i64) -> Result<usize> {
         Ok(self.tx.execute(
             "DELETE FROM messages
-              WHERE account_id = ?1 AND received_at < ?2 AND body_pinned = 0",
+              WHERE account_id = ?1 AND received_at < ?2 AND body_pinned = 0
+                AND id NOT IN (SELECT message_id FROM snoozes)",
             params![account, before],
         )?)
     }

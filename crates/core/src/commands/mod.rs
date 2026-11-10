@@ -19,6 +19,7 @@ pub mod mail;
 pub mod mcp;
 pub mod schema;
 pub mod search;
+pub mod snooze;
 pub mod sync;
 pub mod ui;
 pub mod version;

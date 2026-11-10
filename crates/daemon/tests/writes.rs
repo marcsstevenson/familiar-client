@@ -587,3 +587,149 @@ async fn report_moves_to_junk_and_back_through_beta_report_message() {
         msgs[0].folder
     );
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn snooze_hides_mail_until_famd_brings_it_back() {
+    let mut env = Env::new(50).await;
+    env.start(SyncPolicy {
+        snooze_interval: Duration::from_millis(100),
+        ..policy()
+    });
+    env.until("first sync", LIMIT, |e| e.settled(30)).await;
+    let msgs = inbox(&env, 4);
+    let inbox_id = msgs[0].folder;
+    let mbox = || env.mock.mailbox(KEY);
+    let real_now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+    let until = real_now + 3600;
+    let ids: Vec<i64> = msgs.iter().map(|m| m.id.0).collect();
+
+    // A time gone by is refused.
+    let err = submit(
+        &env,
+        WriteRequest::Snooze {
+            messages: vec![ids[0]],
+            until: real_now - 60,
+        },
+        waiting(),
+    )
+    .await
+    .unwrap_err();
+    assert_eq!(err.kind, ErrorKind::Usage, "{err:?}");
+
+    // Snoozing makes the folder, then moves into it, here and on the server.
+    let out = submit(
+        &env,
+        WriteRequest::Snooze {
+            messages: ids[..3].to_vec(),
+            until,
+        },
+        waiting(),
+    )
+    .await
+    .unwrap();
+    let kinds: Vec<&str> = out.ops.iter().map(|o| o.kind.as_str()).collect();
+    assert_eq!(
+        kinds,
+        [
+            "create_folder",
+            "move_message",
+            "move_message",
+            "move_message"
+        ],
+        "{out:?}"
+    );
+    assert!(out.ops.iter().all(|o| o.state == "done"), "{out:?}");
+    let snoozed = folder_named(&env, "Snoozed").unwrap();
+    for m in &msgs[..3] {
+        assert_eq!(
+            mbox().message(&m.remote_id).unwrap().folder_id,
+            snoozed.remote_id
+        );
+    }
+    assert_eq!(env.reader().snoozes().unwrap().len(), 3);
+
+    // Snoozing again only moves the time; it still goes back to the Inbox.
+    let out = submit(
+        &env,
+        WriteRequest::Snooze {
+            messages: vec![ids[1]],
+            until: until + 3600,
+        },
+        waiting(),
+    )
+    .await
+    .unwrap();
+    assert!(out.ops.is_empty(), "{out:?}");
+    let s = env.reader().snoozes().unwrap();
+    let s1 = s.iter().find(|s| s.message == msgs[1].id).unwrap();
+    assert_eq!((s1.until, s1.return_folder), (until + 3600, Some(inbox_id)));
+
+    // Unsnooze brings it back now, as it was (read state kept).
+    let out = submit(
+        &env,
+        WriteRequest::Unsnooze {
+            messages: vec![ids[1]],
+            mark_unread: false,
+        },
+        waiting(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(out.ops.len(), 1, "{out:?}");
+    let back = env.reader().message(msgs[1].id).unwrap().unwrap();
+    assert_eq!(back.folder, inbox_id);
+    assert_eq!(back.is_read, msgs[1].is_read);
+    assert_eq!(env.reader().snoozes().unwrap().len(), 2);
+
+    // A message moved out of Snoozed by hand stays where it was put.
+    submit(
+        &env,
+        WriteRequest::Archive {
+            messages: vec![ids[2]],
+        },
+        waiting(),
+    )
+    .await
+    .unwrap();
+    let archive = env.reader().message(msgs[2].id).unwrap().unwrap().folder;
+
+    // Make sure the one famd brings back is read, to see it come back unread.
+    submit(
+        &env,
+        WriteRequest::MarkRead {
+            messages: vec![ids[0]],
+            read: true,
+        },
+        waiting(),
+    )
+    .await
+    .unwrap();
+
+    // Nothing comes back early.
+    tokio::time::sleep(Duration::from_millis(400)).await;
+    assert_eq!(
+        env.reader().message(msgs[0].id).unwrap().unwrap().folder,
+        snoozed.id
+    );
+
+    // When the time comes famd moves it back to the Inbox, unread.
+    env.now.store(until + 1, Ordering::SeqCst);
+    env.until("snooze back", LIMIT, |e| {
+        let m = mbox().message(&msgs[0].remote_id).unwrap();
+        m.folder_id == mbox().folder_id("inbox").unwrap()
+            && !m.is_read
+            && e.reader().open_ops().is_ok_and(|o| o.is_empty())
+    })
+    .await;
+    let m0 = env.reader().message(msgs[0].id).unwrap().unwrap();
+    assert_eq!((m0.folder, m0.is_read), (inbox_id, false));
+    assert_eq!(
+        env.reader().message(msgs[2].id).unwrap().unwrap().folder,
+        archive
+    );
+    assert!(env.reader().snoozes().unwrap().is_empty());
+    env.stop().await;
+}

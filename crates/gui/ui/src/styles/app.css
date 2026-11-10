@@ -291,6 +291,37 @@ button {
   border-top: 1px solid var(--border);
   margin: var(--space-2) 0;
 }
+.snooze-choices {
+  display: flex;
+  flex-direction: column;
+  padding-left: var(--space-4);
+}
+.snooze-choices > button {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-4);
+  border: 0;
+  background: transparent;
+  text-align: left;
+  padding: var(--space-2) var(--space-4);
+  cursor: default;
+}
+.snooze-choices > button:hover,
+.snooze-choices > button:focus-visible {
+  background: var(--bg-hover);
+}
+.snooze-at,
+.row-snooze {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+.row-snooze {
+  flex: none;
+}
+.snooze-choices input {
+  margin: var(--space-2) var(--space-4);
+  width: calc(100% - 2 * var(--space-4));
+}
 .folder-menu .danger {
   color: var(--danger);
 }

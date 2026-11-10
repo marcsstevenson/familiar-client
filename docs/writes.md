@@ -14,6 +14,9 @@ until the server has them.
 | `fam mail move <ids>... --to <folder>` | Move to a folder of the same account | write |
 | `fam mail archive <ids>...` | Move to Archive | write |
 | `fam mail report <ids>... [--phishing \| --not-junk]` | Report to the provider as junk (default), phishing or not junk; see below | write |
+| `fam mail snooze <ids>... --until <when> [--tz]` | Move to Snoozed until a time; famd brings it back; see below | write |
+| `fam mail unsnooze <ids>...` | Bring snoozed messages back now | write |
+| `fam mail snoozed` | Snoozed messages and when each comes back | read |
 | `fam mail delete <ids>... [--permanent --yes]` | Move to Deleted Items; `--permanent` deletes items already there for good | delete |
 | `fam folder create <name> [--parent <folder>]` | Create a folder | write |
 | `fam folder rename <folder> <name>` | Rename | write |
@@ -67,6 +70,32 @@ provider's own report process, so its filter learns from it:
 - **Gmail (later).** The op payload (`report_message` with a provider-neutral
   `Report`) is the seam. Gmail has no report API beyond its labels: junk and
   phishing add `SPAM` and remove `INBOX`, not junk does the reverse.
+
+## Snooze
+
+`fam mail snooze` (and Snooze… in the message list's right-click menu)
+moves messages to the account's **Snoozed** folder, made at the top level
+the first time like any other folder, so Outlook on the web and phones see
+them out of the Inbox too. The store's `snoozes` table (schema 7) keeps when
+each comes back and the folder it came from.
+
+- **Times** (`--until`, read in `--tz`, default this computer's zone):
+  `3h`, `2d`, `1w`, `90m` from now; `tonight` (6 pm); `tomorrow`,
+  `weekend` (Saturday) and `next week` (Monday) at 9 am; or anything
+  `fam cal add --start` takes (`mon 9am`, `fri 2pm`, `21 nov 8am`,
+  `2026-11-21 08:30`; a date alone is 9 am). A day name whose time today
+  has passed is next week's. A time gone by is refused.
+- **Coming back.** famd looks every 30 s (and at start) and moves each due
+  message back to the folder it came from (the Inbox if that folder is gone
+  or it was put in Snoozed by hand), marked unread, through the op queue.
+  **famd has to be running**: with the computer off nothing comes back
+  until famd next starts, and then everything due comes back at once.
+  Graph keeps the message's received time, so it comes back in its old
+  place in the list; unread is what makes it stand out.
+- **Changing your mind.** Snoozing a snoozed message again only changes
+  the time. `fam mail unsnooze` brings it back now (read state kept). A
+  message moved out of Snoozed by hand, here or in another app, stays where
+  it was put when its time comes; the snooze just ends.
 
 ## Compose and send (WP 2.3)
 

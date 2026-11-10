@@ -16,7 +16,7 @@ use familiar_core::daemon::{
     METHOD_SEARCH_ONLINE, METHOD_STATUS, METHOD_STOP, METHOD_SYNC_NOW, OpIdParams, OpsListParams,
     PinParams, PinResult, SearchOnlineParams, SearchOnlineResult, SyncNowParams,
 };
-use familiar_core::ops::{OpView, SubmitParams, WaitParams, WriteOutput};
+use familiar_core::ops::{OpView, SubmitParams, WaitParams, WriteOutput, WriteRequest};
 use familiar_core::{CommandError, ErrorKind};
 use familiar_provider_graph::{Error as GraphError, MailApi, Priority};
 use familiar_search::OnlineHit;
@@ -125,6 +125,47 @@ impl Service {
             self.wake_runners();
         }
         Ok(out)
+    }
+
+    /// Moves messages whose snooze is up back out of Snoozed, marked
+    /// unread, and wakes the op runners. Returns how many came back. A
+    /// snooze that can't be undone (no Inbox, say) is logged and dropped,
+    /// leaving the message in Snoozed.
+    pub fn return_due_snoozes(&self) -> usize {
+        let due = match self.w.clone().write(|t| t.due_snoozes((self.clock)())) {
+            Ok(d) => d,
+            Err(e) => {
+                crate::log(&format!("snooze: {e}"));
+                return 0;
+            }
+        };
+        let mut n = 0;
+        for s in due {
+            let p = SubmitParams {
+                request: WriteRequest::Unsnooze {
+                    messages: vec![s.message.0],
+                    mark_unread: true,
+                },
+                source: "famd".into(),
+                dry_run: false,
+            };
+            let grants = familiar_core::agent::Grants::default();
+            match self.write(|tx| familiar_core::ops::submit(tx, &p, &grants)) {
+                Ok(_) => n += 1,
+                Err(e) => {
+                    crate::log(&format!(
+                        "snooze: message {} can't come back: {}",
+                        s.message.0, e.message
+                    ));
+                    let _ = self.w.clone().write(|t| t.take_snooze(s.message));
+                }
+            }
+        }
+        if n > 0 {
+            crate::log(&format!("snooze: {n} message(s) back"));
+            self.wake_runners();
+        }
+        n
     }
 
     /// `ops.wait`: until every op is done, failed or gone, or the timeout.

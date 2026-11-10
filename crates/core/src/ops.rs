@@ -287,6 +287,23 @@ pub enum WriteRequest {
         /// The processed folder's name, per account key.
         folders: std::collections::BTreeMap<String, String>,
     },
+    /// Move messages to their account's Snoozed folder (made at the top
+    /// level when missing) until `until`, when famd moves them back.
+    Snooze {
+        /// Local message IDs.
+        messages: Vec<i64>,
+        /// When they come back (Unix seconds).
+        until: i64,
+    },
+    /// Bring snoozed messages back now: out of Snoozed to where they were
+    /// (the Inbox when that folder is gone), and end their snoozes.
+    Unsnooze {
+        /// Local message IDs.
+        messages: Vec<i64>,
+        /// Also mark them unread (famd does when a snooze is up).
+        #[serde(default)]
+        mark_unread: bool,
+    },
     /// Move messages to each account's Archive folder.
     Archive {
         /// Local message IDs.
@@ -434,6 +451,8 @@ impl WriteRequest {
             WriteRequest::Flag { .. } => "mail.flag",
             WriteRequest::Move { .. } => "mail.move",
             WriteRequest::Process { .. } => "mail.process",
+            WriteRequest::Snooze { .. } => "mail.snooze",
+            WriteRequest::Unsnooze { .. } => "mail.unsnooze",
             WriteRequest::Archive { .. } => "mail.archive",
             WriteRequest::Report { .. } => "mail.report",
             WriteRequest::Delete { .. } => "mail.delete",
@@ -825,16 +844,7 @@ pub fn plan(tx: &WriteTx<'_>, req: &WriteRequest) -> Result<Vec<Planned>, Comman
             messages: ids,
             folders: names,
         } => {
-            // Grouped by account, so a folder created here is the one made
-            // just before its moves (see `submit`).
-            let mut by_account: Vec<(AccountId, Vec<familiar_store::Message>)> = Vec::new();
-            for m in messages(ids)? {
-                match by_account.iter_mut().find(|(a, _)| *a == m.account) {
-                    Some((_, v)) => v.push(m),
-                    None => by_account.push((m.account, vec![m])),
-                }
-            }
-            for (account, ms) in by_account {
+            for (account, ms) in by_account(messages(ids)?) {
                 let key = key_of(account);
                 let name = names
                     .iter()
@@ -844,34 +854,63 @@ pub fn plan(tx: &WriteTx<'_>, req: &WriteRequest) -> Result<Vec<Planned>, Comman
                         CommandError::usage(format!("{key} has no processed_folder in config.toml"))
                     })?;
                 let folders = tx.folders(account).map_err(store_err)?;
-                if let Some(dest) = find_folder(&folders, name, &key)? {
-                    for m in &ms {
-                        push_move(&mut out, m, dest, &key, "process");
-                    }
+                move_to_named(&mut out, &folders, account, &key, name, &ms, "process")?;
+            }
+        }
+        WriteRequest::Snooze {
+            messages: ids,
+            until,
+        } => {
+            if *until <= unix_now() {
+                return Err(CommandError::usage("the snooze time has already passed"));
+            }
+            for (account, ms) in by_account(messages(ids)?) {
+                let key = key_of(account);
+                let folders = tx.folders(account).map_err(store_err)?;
+                move_to_named(
+                    &mut out,
+                    &folders,
+                    account,
+                    &key,
+                    familiar_store::SNOOZED,
+                    &ms,
+                    "snooze",
+                )?;
+            }
+        }
+        WriteRequest::Unsnooze {
+            messages: ids,
+            mark_unread,
+        } => {
+            for m in messages(ids)? {
+                let key = key_of(m.account);
+                let folders = tx.folders(m.account).map_err(store_err)?;
+                let snoozed = find_folder(&folders, familiar_store::SNOOZED, &key)?;
+                // Moved out of Snoozed meanwhile: it stays where it was put.
+                if snoozed.is_none_or(|f| f.id != m.folder) {
                     continue;
                 }
-                out.push(Planned {
-                    delay_secs: 0,
-                    account,
-                    account_key: key.clone(),
-                    summary: format!("create folder {name:?} under the top level"),
-                    payload: OpPayload::CreateFolder {
-                        folder: 0,
-                        parent: None,
-                        name: name.to_string(),
-                    },
-                });
-                for m in &ms {
+                let back = tx
+                    .snooze(m.id)
+                    .map_err(store_err)?
+                    .and_then(|s| s.return_folder);
+                let dest = back
+                    .and_then(|id| folders.iter().find(|f| f.id == id))
+                    .or_else(|| well_known(&folders, "inbox"))
+                    .ok_or_else(|| {
+                        CommandError::new(ErrorKind::NotFound, format!("{key} has no Inbox"))
+                    })?;
+                push_move(&mut out, &m, dest, &key, "unsnooze");
+                if *mark_unread && m.is_read {
                     out.push(Planned {
                         delay_secs: 0,
-                        account,
+                        account: m.account,
                         account_key: key.clone(),
-                        summary: format!("process {:?} to {name}", short(&m.subject)),
-                        // 0: the folder created just before.
-                        payload: OpPayload::MoveMessage {
+                        summary: format!("mark unread {:?}", short(&m.subject)),
+                        payload: OpPayload::SetRead {
                             message: m.id.0,
-                            to: 0,
-                            from: m.folder.0,
+                            read: false,
+                            prev: true,
                         },
                     });
                 }
@@ -1585,6 +1624,130 @@ fn refuse_well_known(f: &Folder, what: &str) -> Result<(), CommandError> {
     Ok(())
 }
 
+/// Messages grouped by account, in first-seen order, so a folder created
+/// for an account is the one made just before its moves (see `submit`).
+fn by_account(ms: Vec<familiar_store::Message>) -> Vec<(AccountId, Vec<familiar_store::Message>)> {
+    let mut out: Vec<(AccountId, Vec<familiar_store::Message>)> = Vec::new();
+    for m in ms {
+        match out.iter_mut().find(|(a, _)| *a == m.account) {
+            Some((_, v)) => v.push(m),
+            None => out.push((m.account, vec![m])),
+        }
+    }
+    out
+}
+
+/// Plans moving one account's messages to the folder called `name`,
+/// creating it at the top level first when the account doesn't have it.
+fn move_to_named(
+    out: &mut Vec<Planned>,
+    folders: &[Folder],
+    account: AccountId,
+    key: &str,
+    name: &str,
+    ms: &[familiar_store::Message],
+    verb: &str,
+) -> Result<(), CommandError> {
+    if let Some(dest) = find_folder(folders, name, key)? {
+        for m in ms {
+            push_move(out, m, dest, key, verb);
+        }
+        return Ok(());
+    }
+    out.push(Planned {
+        delay_secs: 0,
+        account,
+        account_key: key.to_string(),
+        summary: format!("create folder {name:?} under the top level"),
+        payload: OpPayload::CreateFolder {
+            folder: 0,
+            parent: None,
+            name: name.to_string(),
+        },
+    });
+    for m in ms {
+        out.push(Planned {
+            delay_secs: 0,
+            account,
+            account_key: key.to_string(),
+            summary: format!("{verb} {:?} to {name}", short(&m.subject)),
+            // 0: the folder created just before.
+            payload: OpPayload::MoveMessage {
+                message: m.id.0,
+                to: 0,
+                from: m.folder.0,
+            },
+        });
+    }
+    Ok(())
+}
+
+fn unix_now() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs() as i64)
+}
+
+/// A snooze changes its time even when nothing moves (the message is
+/// already in Snoozed), so an agent needs write access for it either way.
+fn snooze_denial(
+    tx: &WriteTx<'_>,
+    grants: &crate::agent::Grants,
+    req: &WriteRequest,
+) -> Result<Option<crate::agent::Denial>, CommandError> {
+    let ids = match req {
+        WriteRequest::Snooze { messages, .. } | WriteRequest::Unsnooze { messages, .. } => messages,
+        _ => return Ok(None),
+    };
+    let accounts = tx.accounts().map_err(store_err)?;
+    for id in ids {
+        let Some(m) = tx.message(MessageId(*id)).map_err(store_err)? else {
+            continue;
+        };
+        let key = accounts
+            .iter()
+            .find(|a| a.id == m.account)
+            .map(|a| a.key.clone())
+            .unwrap_or_default();
+        if !grants.allows(&key, crate::registry::Access::Write) {
+            return Ok(Some(crate::agent::Denial {
+                account: m.account,
+                account_key: key,
+                access: crate::registry::Access::Write,
+                summary: format!("{} {:?}", req.command(), short(&m.subject)),
+            }));
+        }
+    }
+    Ok(None)
+}
+
+/// Records or ends the snoozes a request makes, before its ops apply (a
+/// snooze notes the folder the message is in now).
+fn snooze_effects(tx: &WriteTx<'_>, req: &WriteRequest) -> Result<(), CommandError> {
+    match req {
+        WriteRequest::Snooze { messages, until } => {
+            for id in messages {
+                let Some(m) = tx.message(MessageId(*id)).map_err(store_err)? else {
+                    continue;
+                };
+                let folders = tx.folders(m.account).map_err(store_err)?;
+                let in_snoozed = folders.iter().any(|f| {
+                    f.id == m.folder && f.name.eq_ignore_ascii_case(familiar_store::SNOOZED)
+                });
+                let back = (!in_snoozed).then_some(m.folder);
+                tx.set_snooze(m.id, *until, back).map_err(store_err)?;
+            }
+        }
+        WriteRequest::Unsnooze { messages, .. } => {
+            for id in messages {
+                tx.take_snooze(MessageId(*id)).map_err(store_err)?;
+            }
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
 fn push_move(
     out: &mut Vec<Planned>,
     m: &familiar_store::Message,
@@ -1822,6 +1985,12 @@ pub fn submit(
         if let Some(d) = crate::agent::check(tx, grants, &planned) {
             return Err(d.error());
         }
+        if let Some(d) = snooze_denial(tx, grants, &params.request)? {
+            return Err(d.error());
+        }
+    }
+    if !params.dry_run {
+        snooze_effects(tx, &params.request)?;
     }
     let mut ops = Vec::with_capacity(planned.len());
     let mut last_item: Option<i64> = None;

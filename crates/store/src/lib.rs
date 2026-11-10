@@ -39,6 +39,7 @@ mod model;
 mod query;
 mod reader;
 mod shared;
+mod snooze;
 mod writer;
 
 pub use bodies::{BodyHash, INLINE_BODY_MAX};
@@ -59,6 +60,7 @@ pub use model::{
 };
 pub use reader::Reader;
 pub use shared::{SharedWriter, StoreWriter};
+pub use snooze::{SNOOZED, Snooze};
 pub use writer::{GcReport, WriteTx, Writer};
 
 use std::path::{Path, PathBuf};
