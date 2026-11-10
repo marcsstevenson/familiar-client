@@ -677,6 +677,14 @@ impl Engine {
         let window = self.policy.window_start(now);
         let headers = self.policy.headers_start(now);
         let limit = i64::try_from(self.policy.cache_limit).unwrap_or(i64::MAX);
+        // A reminder on a sent draft takes its Message-ID from the send op
+        // (fam followup); read those in before done ops are pruned below.
+        if let Some(data) = self.w.paths().root.parent() {
+            let paths = familiar_core::daemon::DaemonPaths::at(data);
+            if let Err(e) = familiar_core::commands::followup::check_all_at(&paths, now) {
+                crate::log(&format!("follow-up reminders: {}", e.message));
+            }
+        }
         let (aged, pruned, evicted) = self.w.write(|tx| {
             let aged = tx.age_out_bodies(acc, window)?;
             let pruned = match headers {

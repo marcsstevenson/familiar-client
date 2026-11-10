@@ -1,6 +1,6 @@
 // IPC for the virtualised message list (crates/gui/src/list.rs).
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { emit, listen } from "@tauri-apps/api/event";
 
 export type Sort = "newest" | "oldest" | "from" | "subject";
 
@@ -46,3 +46,7 @@ export const listIndexOf = (id: number) => invoke<number | null>("list_index_of"
 
 /** Calls `f` whenever the store changes (sync, or a write from anywhere). */
 export const onStoreChanged = (f: () => void) => listen("store_changed", () => f());
+
+/** Tells the panes to refresh after a change outside the store, such as a
+ * follow-up reminder (kept in followups.json, which `store_changed` doesn't watch). */
+export const refreshViews = () => emit("store_changed");

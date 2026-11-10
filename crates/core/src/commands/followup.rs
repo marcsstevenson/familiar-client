@@ -83,7 +83,12 @@ impl FollowUps {
     pub fn save(&self, data_dir: &Path) -> std::io::Result<()> {
         std::fs::create_dir_all(data_dir)?;
         let path = data_dir.join(FILE);
-        let tmp = data_dir.join(format!("{FILE}.tmp"));
+        // Its own temporary file, so two saves at once (the folder pane and
+        // the list both check on a store change) don't trip over each other.
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.subsec_nanos());
+        let tmp = data_dir.join(format!("{FILE}.{}.{nanos}.tmp", std::process::id()));
         let json = serde_json::to_vec_pretty(self).map_err(std::io::Error::other)?;
         std::fs::write(&tmp, json)?;
         std::fs::rename(&tmp, &path)

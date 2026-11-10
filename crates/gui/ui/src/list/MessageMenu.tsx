@@ -4,7 +4,7 @@
 import { Show, onMount } from "solid-js";
 import { isCommandError, run } from "../api";
 import { notify, removeFromList, setSpamDialog, spamSettings } from "../state";
-import type { Row } from "./api";
+import { type Row, refreshViews } from "./api";
 
 export function MessageMenu(props: { row: Row; x: number; y: number; onClose: () => void }) {
   // A copy: the menu closes (and its props go stale) before a command runs.
@@ -90,13 +90,13 @@ export function MessageMenu(props: { row: Row; x: number; y: number; onClose: ()
             <button
               role="menuitem"
               title="If nobody else writes in this conversation within 3 days, it shows in Follow up"
-              onClick={() => act("Reminder set for 3 days", () => run("followup.add", { messages: ids, days: 3 }))}
+              onClick={() => act("Reminder set for 3 days", () => run("followup.add", { messages: ids, days: 3 }).then(refreshViews))}
             >
               Remind me if no reply
             </button>
           }
         >
-          <button role="menuitem" onClick={() => act("Reminder cancelled", () => run("followup.cancel", { messages: ids }))}>
+          <button role="menuitem" onClick={() => act("Reminder cancelled", () => run("followup.cancel", { messages: ids }).then(refreshViews))}>
             Cancel reminder
           </button>
         </Show>
