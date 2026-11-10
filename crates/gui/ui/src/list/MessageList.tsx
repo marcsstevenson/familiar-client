@@ -5,7 +5,7 @@ import { isCommandError, run } from "../api";
 import { listNav, processMessage, processedFolders, removeFromList, setDragged, searchQuery, selectedFolder, selectedMessage, setSelectedMessage, setSelectedRow } from "../state";
 import { OnlineHits, SearchBar } from "./SearchBar";
 import { type Row, type Sort, listIndexOf, listOpen, listRows, onStoreChanged } from "./api";
-import { shortDate } from "./format";
+import { shortDate, snoozeLabel } from "./format";
 import { MessageMenu } from "./MessageMenu";
 
 export const ROW_H = 64;
@@ -359,6 +359,13 @@ function ListRow(props: {
               </Show>
               <Show when={r().is_flagged}>
                 <span class="row-icon flag" title="Flagged" aria-label="Flagged">⚑</span>
+              </Show>
+              <Show when={r().snoozed_until}>
+                {(t) => (
+                  <span class="row-snooze" title={`Snoozed until ${snoozeLabel(t())}`}>
+                    ⏰ {snoozeLabel(t())}
+                  </span>
+                )}
               </Show>
               <span class="row-date">{shortDate(r().received_at)}</span>
             </div>

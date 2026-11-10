@@ -1,10 +1,11 @@
 // The message context menu: the everyday actions plus reporting junk and
 // phishing. Each item runs the same registry command as `fam` (`fam mail
 // report` for the reports), so it goes through the op queue and works offline.
-import { Show, onMount } from "solid-js";
+import { For, Show, createSignal, onMount } from "solid-js";
 import { isCommandError, run } from "../api";
 import { notify, removeFromList, setSpamDialog, spamSettings } from "../state";
 import type { Row } from "./api";
+import { snoozeChoices, snoozeLabel } from "./format";
 
 export function MessageMenu(props: { row: Row; x: number; y: number; onClose: () => void }) {
   // A copy: the menu closes (and its props go stale) before a command runs.
@@ -34,6 +35,15 @@ export function MessageMenu(props: { row: Row; x: number; y: number; onClose: ()
   function leave(label: string, job: () => Promise<unknown>) {
     props.onClose();
     void removeFromList(row.id, label, job);
+  }
+
+  // The snooze choices open in place of the menu's lower part.
+  const [snoozing, setSnoozing] = createSignal(false);
+  const [when, setWhen] = createSignal("");
+
+  function snooze(until: string, at?: string) {
+    if (!until.trim()) return;
+    leave(at ? `Snoozed until ${at}` : "Snoozed", () => run("mail.snooze", { messages: ids, until }));
   }
 
   const onKeyDown = (e: KeyboardEvent) => {
@@ -90,6 +100,55 @@ export function MessageMenu(props: { row: Row; x: number; y: number; onClose: ()
         <button role="menuitem" onClick={() => leave("Moved to Deleted Items", () => run("mail.delete", { messages: ids }))}>
           Delete
         </button>
+        <Show when={row.snoozed_until}>
+          {(t) => (
+            <button
+              role="menuitem"
+              title={`Snoozed until ${snoozeLabel(t())}; bring it back to where it was now`}
+              onClick={() => leave("Unsnoozed", () => run("mail.unsnooze", { messages: ids }))}
+            >
+              Unsnooze
+            </button>
+          )}
+        </Show>
+        <button
+          role="menuitem"
+          aria-expanded={snoozing()}
+          title="Move it to Snoozed; it comes back, unread, at the time you pick (while Familiar is running)"
+          onClick={() => {
+            setSnoozing(!snoozing());
+            box.querySelector<HTMLElement>(".snooze-choices button")?.focus();
+          }}
+        >
+          {row.snoozed_until ? "Snooze until another time…" : "Snooze…"}
+        </button>
+        <Show when={snoozing()}>
+          <div class="snooze-choices">
+            <For each={snoozeChoices()}>
+              {(c) => (
+                <button role="menuitem" onClick={() => snooze(c.until, c.at)}>
+                  <span>{c.label}</span>
+                  <span class="snooze-at">{c.at}</span>
+                </button>
+              )}
+            </For>
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                snooze(when());
+              }}
+            >
+              <input
+                type="text"
+                aria-label="Snooze until"
+                placeholder="fri 2pm, 3h, 21 nov 8am"
+                value={when()}
+                onInput={(e) => setWhen(e.currentTarget.value)}
+                onKeyDown={(e) => e.stopPropagation()}
+              />
+            </form>
+          </div>
+        </Show>
         <hr class="menu-rule" />
         <Show when={spamSettings.accounts.includes(row.account)}>
           <button

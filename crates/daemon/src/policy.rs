@@ -60,6 +60,8 @@ pub struct SyncPolicy {
     pub op_retry_min: Duration,
     /// Longest wait between tries of an op.
     pub op_retry_max: Duration,
+    /// How often famd looks for snoozed messages that are due back.
+    pub snooze_interval: Duration,
 }
 
 impl Default for SyncPolicy {
@@ -82,6 +84,7 @@ impl Default for SyncPolicy {
             contacts_interval: Duration::from_secs(3600),
             op_retry_min: Duration::from_secs(2),
             op_retry_max: Duration::from_secs(300),
+            snooze_interval: Duration::from_secs(30),
         }
     }
 }

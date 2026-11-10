@@ -50,6 +50,9 @@ export const COMMAND_SURFACE = {
   "mail.read": "palette",
   "mail.search": "palette",
   "mail.send": "palette",
+  "mail.snooze": "palette",
+  "mail.snoozed": "palette",
+  "mail.unsnooze": "palette",
   "mail.thread": "palette",
   "mcp.serve": "terminal", // speaks MCP over stdio
   "ops.cancel": "palette",

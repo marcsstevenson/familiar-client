@@ -86,6 +86,8 @@ pub struct Row {
     /// The spam check's headline and score ("Likely scam · 92%") when a
     /// saved grade is 50% or more and the message isn't in Junk Email.
     spam_warning: Option<String>,
+    /// When a snoozed message comes back (Unix seconds).
+    snoozed_until: Option<i64>,
 }
 
 /// The open view. One window, one list.
@@ -252,6 +254,14 @@ impl Lists {
         let want = g.ids[start..end].to_vec();
         let found = g.reader()?.messages_by_ids(&want).map_err(store_error)?;
         let mut by_id: HashMap<MessageId, Message> = found.into_iter().map(|m| (m.id, m)).collect();
+        // Few at a time, so all of them.
+        let snoozes: HashMap<MessageId, i64> = g
+            .reader()?
+            .snoozes()
+            .map_err(store_error)?
+            .into_iter()
+            .map(|s| (s.message, s.until))
+            .collect();
         // Saved spam checks: a small file on this device, read per page so a
         // grade famd saves in the background shows on the next scroll.
         let spam = DaemonPaths::resolve()
@@ -292,6 +302,7 @@ impl Lists {
                     importance: m.importance,
                     in_junk,
                     spam_warning,
+                    snoozed_until: snoozes.get(&m.id).copied(),
                 }
             })
             .collect())

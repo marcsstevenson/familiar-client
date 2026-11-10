@@ -29,6 +29,8 @@ export type Row = {
   in_junk: boolean;
   /** "Likely scam · 92%" when a saved spam check is 50%+ outside Junk Email. */
   spam_warning: string | null;
+  /** When a snoozed message comes back (Unix seconds). */
+  snoozed_until: number | null;
 };
 
 // Each open is numbered, so Rust can ignore an older open that takes its lock late.

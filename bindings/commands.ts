@@ -1265,6 +1265,28 @@ export type MailSendInput = {
   yes?: boolean;
 };
 
+export type MailSnoozeInput = {
+  /** Only show what would change. */
+  dry_run?: boolean;
+  /** Local message IDs. */
+  messages: Array<number>;
+  /** Time zone for --until (IANA or Windows name; default this computer's). */
+  tz?: string | null;
+  /** When they come back: "mon 9am", "tomorrow" (9 am), "tonight" (6 pm), "weekend", "next week", "3h", "2d", "2026-11-21 08:30". */
+  until: string;
+  /** Wait until the server has the move (needs famd). */
+  wait?: boolean;
+  /** Seconds --wait waits at most (default 60). */
+  wait_secs?: number | null;
+};
+
+export type MailSnoozedInput = {
+  /** Only this account (its name in config.toml). */
+  account?: string | null;
+  /** Time zone for the times shown (default this computer's). */
+  tz?: string | null;
+};
+
 export type MailThreadInput = {
   /** The local ID of any message in the conversation. */
   message: number;
@@ -1293,6 +1315,17 @@ export type MailThreadOutput = {
   thread: number;
   /** Messages with an unread copy. */
   unread_count: number;
+};
+
+export type MailUnsnoozeInput = {
+  /** Only show what would change. */
+  dry_run?: boolean;
+  /** Local message IDs. */
+  messages: Array<number>;
+  /** Wait until the server has the move (needs famd). */
+  wait?: boolean;
+  /** Seconds --wait waits at most (default 60). */
+  wait_secs?: number | null;
 };
 
 export type McpAnnotations = {
@@ -1585,6 +1618,37 @@ export type SignatureState = {
   reply: boolean;
 };
 
+export type SnoozeOutput = {
+  /** When the messages come back (RFC 3339). */
+  until: string;
+  /** The same, in local time for people. */
+  until_local: string;
+  /** The moves into Snoozed. */
+  write: WriteOutput;
+};
+
+export type SnoozedOutput = {
+  /** Soonest back first. */
+  messages: Array<SnoozedView>;
+};
+
+export type SnoozedView = {
+  /** Account key. */
+  account: string;
+  /** Sender's name, or address when there's no name. */
+  from: string;
+  /** Local message ID. */
+  id: number;
+  /** Subject. */
+  subject: string;
+  /** When it comes back (RFC 3339). */
+  until: string;
+  /** The same, in local time. */
+  until_local: string;
+  /** When it comes back, Unix seconds. */
+  until_unix: number;
+};
+
 export type SyncCheckInput = {
   /** Only this account (its name in config.toml). */
   account?: string | null;
@@ -1809,8 +1873,14 @@ export interface Commands {
   "mail.search": { input: MailSearchInput; output: MailSearchOutput };
   /** Write and send a message */
   "mail.send": { input: MailSendInput; output: WriteOutput };
+  /** Hide messages in Snoozed until a time, then bring them back */
+  "mail.snooze": { input: MailSnoozeInput; output: SnoozeOutput };
+  /** List snoozed messages and when they come back */
+  "mail.snoozed": { input: MailSnoozedInput; output: SnoozedOutput };
   /** Show a whole conversation */
   "mail.thread": { input: MailThreadInput; output: MailThreadOutput };
+  /** Bring snoozed messages back now */
+  "mail.unsnooze": { input: MailUnsnoozeInput; output: WriteOutput };
   /** Serve the commands to an MCP client over stdio */
   "mcp.serve": { input: McpServeInput; output: McpServeOutput };
   /** Cancel a change that hasn't reached the server */
@@ -1881,7 +1951,10 @@ export const COMMAND_NAMES = [
   "mail.report",
   "mail.search",
   "mail.send",
+  "mail.snooze",
+  "mail.snoozed",
   "mail.thread",
+  "mail.unsnooze",
   "mcp.serve",
   "ops.cancel",
   "ops.list",
