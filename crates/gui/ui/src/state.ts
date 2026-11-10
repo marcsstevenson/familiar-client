@@ -62,6 +62,10 @@ export function processMessage(id: number, account: string): Promise<void> {
   return removeFromList(id, `Moved to ${folder}`, () => run("mail.process", { messages: [id] }));
 }
 
+/** True while the list shows the Follow up view (messages with a follow-up
+ * reminder) instead of a folder. A search still takes precedence. */
+export const [followUpView, setFollowUpView] = createSignal(false);
+
 /** The search shown in the list instead of a folder, in `fam mail search` syntax. */
 export const [searchQuery, setSearchQuery] = createSignal<string | null>(null);
 

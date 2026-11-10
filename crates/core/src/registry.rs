@@ -224,6 +224,9 @@ impl Registry {
         r.register(crate::commands::draft::DraftUpdate);
         r.register(crate::commands::draft::DraftSend);
         r.register(crate::commands::draft::MailSend);
+        r.register(crate::commands::followup::FollowUpList);
+        r.register(crate::commands::followup::FollowUpAdd);
+        r.register(crate::commands::followup::FollowUpCancel);
         r.register(crate::commands::ui::UiOpen);
         r.register(crate::commands::ui::UiFolder);
         r.register(crate::commands::watch::Watch);

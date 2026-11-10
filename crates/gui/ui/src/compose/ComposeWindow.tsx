@@ -35,6 +35,8 @@ export function ComposeWindow(props: { info: UiInfo; spec: ComposeSpec }) {
 
   const [settings, setSettings] = createSignal<ComposeInfo>({ identities: [], send_delay_seconds: 10, config_error: null });
   const [loading, setLoading] = createSignal(true);
+  /** Days to wait for a reply before the sent message shows in Follow up; 0 for no reminder. */
+  const [remindDays, setRemindDays] = createSignal(0);
   const [fatal, setFatal] = createSignal<string | null>(null);
   const [account, setAccount] = createSignal<string | null>(null);
   // An alias of the account to send from; null sends from its own address.
@@ -367,7 +369,11 @@ export function ComposeWindow(props: { info: UiInfo; spec: ComposeSpec }) {
     }
     try {
       if (draftId() === null || dirty()) await save();
-      const out = await run("draft.send", { draft: draftId()!, yes: opts.yes ?? false });
+      const out = await run("draft.send", {
+        draft: draftId()!,
+        yes: opts.yes ?? false,
+        ...(remindDays() > 0 ? { remind_days: remindDays() } : {}),
+      });
       const op = out.ops.find((o) => o.kind === "send_draft");
       if (op?.id && op.not_before) {
         setSending({ op: op.id, at: Date.parse(op.not_before) });
@@ -499,6 +505,15 @@ export function ComposeWindow(props: { info: UiInfo; spec: ComposeSpec }) {
             Discard
           </button>
           <span class="compose-spacer" />
+          <label class="compose-select" title="If nobody replies in time, the message shows in Follow up">
+            <span>Remind me</span>
+            <select value={remindDays()} disabled={busy()} onChange={(e) => setRemindDays(Number(e.currentTarget.value))}>
+              <option value="0">Never</option>
+              <option value="1">No reply in 1 day</option>
+              <option value="3">No reply in 3 days</option>
+              <option value="7">No reply in 1 week</option>
+            </select>
+          </label>
           <label class="compose-select">
             <span>Format</span>
             <select value={mode()} disabled={busy()} onChange={(e) => switchMode(e.currentTarget.value as "rich" | "plain")}>

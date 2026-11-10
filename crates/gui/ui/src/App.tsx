@@ -9,7 +9,7 @@ import { type DaemonState, type UiInfo, watchDaemon } from "./api";
 import { ReadingPane } from "./reading/ReadingPane";
 import { Palette } from "./palette/Palette";
 import { EventDialog } from "./calendar/EventDialog";
-import { aiSettings, eventDialog, notice, processedFolders, setEventDialog, setSearchQuery, setSelectedFolder, setSelectedMessage, setSpamDialog, spamDialog, spamSettings } from "./state";
+import { aiSettings, eventDialog, notice, processedFolders, setEventDialog, setFollowUpView, setSearchQuery, setSelectedFolder, setSelectedMessage, setSpamDialog, spamDialog, spamSettings } from "./state";
 import { SpamDialog } from "./spam/SpamDialog";
 import { FolderTree } from "./folders/FolderTree";
 import { MessageList } from "./list/MessageList";
@@ -53,6 +53,7 @@ export function App(props: { info: UiInfo }) {
       setEventDialog(null);
       setSpamDialog(null);
       setSearchQuery(null);
+      setFollowUpView(false);
       setSelectedFolder(c.folder);
       setSelectedMessage(c.kind === "open" ? c.message : null);
     });
