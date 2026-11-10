@@ -133,11 +133,6 @@ button {
   place-items: center;
   color: var(--text-muted);
 }
-.reading-empty {
-  display: grid;
-  justify-items: center;
-  gap: var(--space-4);
-}
 /* The kea as a faint silhouette, a shade off the pane background in either
    theme. The SVG is only the mask. */
 .reading-empty-kea {
