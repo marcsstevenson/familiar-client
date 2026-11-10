@@ -138,17 +138,14 @@ button {
   justify-items: center;
   gap: var(--space-4);
 }
-/* The kea as a flat silhouette: black on light, muted text colour on dark
-   (black would vanish there). The SVG is only the mask. */
+/* The kea as a faint silhouette, a shade off the pane background in either
+   theme. The SVG is only the mask. */
 .reading-empty-kea {
-  width: 96px;
-  height: 96px;
-  background: #000;
+  width: 192px;
+  height: 192px;
+  background: color-mix(in srgb, var(--text) 9%, var(--bg));
   -webkit-mask: url("../assets/kea-mono.svg") center / contain no-repeat;
   mask: url("../assets/kea-mono.svg") center / contain no-repeat;
-}
-:root[data-theme="dark"] .reading-empty-kea {
-  background: var(--text-muted);
 }
 
 /* Status bar */
