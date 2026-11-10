@@ -93,6 +93,7 @@ fn run() -> Result<(), (u8, String)> {
         opts.policy = policy;
         opts.agent = familiar_daemon::AgentGrants::File(path.clone());
         opts.spam = Some(familiar_daemon::spam::SpamAuto::new(path.clone()));
+        opts.hooks = Some(familiar_daemon::hooks::Hooks::new(path.clone()));
         let daemon = Daemon::start(opts).map_err(|e| (1, e.to_string()))?;
         log(&format!(
             "started: store {}, socket {}",

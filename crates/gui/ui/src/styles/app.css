@@ -561,6 +561,18 @@ button {
   border-radius: var(--radius-sm);
   padding: 0 var(--space-2);
 }
+.row-followup {
+  flex: none;
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
+.row-followup.due {
+  font-weight: 700;
+  color: var(--accent);
+  border: 1px solid currentColor;
+  border-radius: var(--radius-sm);
+  padding: 0 var(--space-2);
+}
 .row-preview {
   height: 18px;
   font-size: var(--text-sm);

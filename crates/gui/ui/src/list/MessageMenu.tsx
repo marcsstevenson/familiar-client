@@ -4,7 +4,7 @@
 import { For, Show, createSignal, onMount } from "solid-js";
 import { isCommandError, run } from "../api";
 import { notify, removeFromList, setSpamDialog, spamSettings } from "../state";
-import type { Row } from "./api";
+import { type Row, refreshViews } from "./api";
 import { snoozeChoices, snoozeLabel } from "./format";
 
 export function MessageMenu(props: { row: Row; x: number; y: number; onClose: () => void }) {
@@ -94,6 +94,22 @@ export function MessageMenu(props: { row: Row; x: number; y: number; onClose: ()
         >
           {row.is_flagged ? "Clear flag" : "Flag"}
         </button>
+        <Show
+          when={row.follow_up_due !== null}
+          fallback={
+            <button
+              role="menuitem"
+              title="If nobody else writes in this conversation within 3 days, it shows in Follow up"
+              onClick={() => act("Reminder set for 3 days", () => run("followup.add", { messages: ids, days: 3 }).then(refreshViews))}
+            >
+              Remind me if no reply
+            </button>
+          }
+        >
+          <button role="menuitem" onClick={() => act("Reminder cancelled", () => run("followup.cancel", { messages: ids }).then(refreshViews))}>
+            Cancel reminder
+          </button>
+        </Show>
         <button role="menuitem" onClick={() => leave("Archived", () => run("mail.archive", { messages: ids }))}>
           Archive
         </button>

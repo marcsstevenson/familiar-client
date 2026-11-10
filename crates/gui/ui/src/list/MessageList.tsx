@@ -2,7 +2,7 @@
 // component asks for the rows on screen a page at a time and draws only those.
 import { For, Show, createEffect, createSignal, on, onCleanup, onMount } from "solid-js";
 import { isCommandError, run } from "../api";
-import { listNav, processMessage, processedFolders, removeFromList, setDragged, searchQuery, selectedFolder, selectedMessage, setSelectedMessage, setSelectedRow } from "../state";
+import { followUpView, listNav, processMessage, processedFolders, removeFromList, setDragged, searchQuery, selectedFolder, selectedMessage, setSelectedMessage, setSelectedRow } from "../state";
 import { OnlineHits, SearchBar } from "./SearchBar";
 import { type Row, type Sort, listIndexOf, listOpen, listRows, onStoreChanged } from "./api";
 import { shortDate, snoozeLabel } from "./format";
@@ -94,6 +94,7 @@ export function MessageList() {
         unread_only: unreadOnly(),
         sort: sort(),
         query: searchQuery(),
+        followups: followUpView(),
       });
       const n = opened.total;
       if (g !== gen) return;
@@ -170,7 +171,7 @@ export function MessageList() {
     return out;
   };
 
-  createEffect(on([selectedFolder, sort, unreadOnly, searchQuery], () => void reopen(false)));
+  createEffect(on([selectedFolder, sort, unreadOnly, searchQuery, followUpView], () => void reopen(false)));
 
   // The selected row's flags, for actions such as "mark unread". A selected
   // message whose row has left the view (the Unread filter, once opening it
@@ -311,7 +312,7 @@ export function MessageList() {
         </Show>
         <div class="list-spacer" style={{ height: `${total() * ROW_H}px` }}>
           <For each={visible()}>
-            {(i) => <ListRow index={i} row={rowAt(i)} selected={selIndex() === i} onSelect={select} unified={selectedFolder() === null || searchQuery() !== null} />}
+            {(i) => <ListRow index={i} row={rowAt(i)} selected={selIndex() === i} onSelect={select} unified={selectedFolder() === null || searchQuery() !== null || followUpView()} />}
           </For>
         </div>
       </div>
@@ -363,7 +364,18 @@ function ListRow(props: {
               <Show when={r().snoozed_until}>
                 {(t) => (
                   <span class="row-snooze" title={`Snoozed until ${snoozeLabel(t())}`}>
-                    ⏰ {snoozeLabel(t())}
+                    💤 {snoozeLabel(t())}
+                  </span>
+                )}
+              </Show>
+              <Show when={r().follow_up_due}>
+                {(due) => (
+                  <span
+                    class="row-followup"
+                    classList={{ due: due() * 1000 <= Date.now() }}
+                    title={due() * 1000 <= Date.now() ? "No reply yet: time to follow up" : `Remind me ${shortDate(due())} if nobody replies`}
+                  >
+                    {due() * 1000 <= Date.now() ? "No reply" : `⏰ ${shortDate(due())}`}
                   </span>
                 )}
               </Show>

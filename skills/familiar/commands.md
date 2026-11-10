@@ -359,6 +359,7 @@ Queues a draft to send after the undo-send delay ([app] send_delay_seconds; --no
 - `DRAFT` (required): Local ID of the draft.
 - `--dry-run`: Only show what would happen.
 - `--now`: Skip the undo-send delay.
+- `--remind-days <remind-days>`: Remind me if nobody replies within this many days (see fam followup list).
 - `--wait`: Wait until it has gone (needs famd; includes the undo-send delay).
 - `--wait-secs <wait-secs>`: Seconds --wait waits at most (default 60).
 - `--yes`: Send even to many outside recipients who would see each other.
@@ -510,6 +511,44 @@ Stops listing a pinned folder below All inboxes in the desktop app's folder pane
 
 - `--account <account>`: The account, when more than one has the folder.
 - `FOLDER` (required): The folder (path, or name).
+
+## followup.add
+
+Remind me if nobody replies to a message. Access: `write`.
+
+```
+fam followup add <MESSAGES>...
+```
+
+Sets a reminder on messages (usually ones you sent): if nobody else has written in the conversation by then, it shows as due in fam followup list and in the desktop app's Follow up view. Due in 3 days unless --days says otherwise; setting it again moves the time. Kept on this device only (followups.json in the data directory), not on the server.
+
+- `--days <days>`: Days from now until the reminder is due (default 3).
+- `MESSAGES` (required, repeatable): Local message IDs, usually from Sent Items.
+
+## followup.cancel
+
+Cancel follow-up reminders. Access: `write`.
+
+```
+fam followup cancel <MESSAGES>...
+```
+
+Removes the follow-up reminders on messages. Lists the reminders left.
+
+- `MESSAGES` (required, repeatable): Local message IDs.
+
+## followup.list
+
+List follow-up reminders for mail nobody has replied to. Access: `read`.
+
+```
+fam followup list
+```
+
+Lists the reminders set with fam followup add or fam draft send --remind-days, soonest first: waiting (no reply yet), due (no reply and the time is up) or sending (the draft hasn't gone yet). A reminder whose conversation gets a message from someone else is answered and drops off. Kept on this device only (followups.json in the data directory).
+
+- `--account <account>`: Only this account (its name in config.toml).
+- `--due`: Only reminders that are due (no reply, and the time is up).
 
 ## mail.archive
 
@@ -734,6 +773,7 @@ Saves a new message as a draft with the account's signature and queues it to sen
 - `--inline <inline>` (repeatable): Add an inline image.
 - `--no-signature`: Leave the account's signature off.
 - `--now`: Skip the undo-send delay.
+- `--remind-days <remind-days>`: Remind me if nobody replies within this many days (see fam followup list).
 - `--subject <subject>`: Subject.
 - `--to <to>` (repeatable): To: an address or `Name <address>`; repeat, or separate with commas.
 - `--wait`: Wait until it has gone (needs famd; includes the undo-send delay).
@@ -921,3 +961,15 @@ fam version
 Shows the Familiar version and the command schema version.
 
 - `--verbose`: Also report the operating system and CPU architecture.
+
+## watch
+
+Print new mail as it arrives, as JSON lines. Access: `read`.
+
+```
+fam watch
+```
+
+Runs until stopped (Ctrl+C), printing one JSON object per new message as famd syncs it: {event: "new_mail", id, account, folder, from, to, subject, received_at, preview, has_attachments}. Only mail that arrives after it starts counts; Sent Items, Drafts, Outbox, Deleted Items and Junk are left out. --match keeps only messages a search matches. famd must be running for mail to arrive. Hooks in config.toml ([[hooks]]) get the same events.
+
+- `--match <match>`: Only messages this search matches (`fam mail search` syntax), for example `from:club`.

@@ -53,6 +53,10 @@ pub struct ViewSpec {
     /// A search, in `fam mail search` syntax, instead of folders.
     #[serde(default)]
     pub query: Option<String>,
+    /// The Follow up view instead of folders: messages with a follow-up
+    /// reminder (`fam followup list`), soonest due first.
+    #[serde(default)]
+    pub followups: bool,
 }
 
 /// The result of opening a view.
@@ -88,6 +92,8 @@ pub struct Row {
     spam_warning: Option<String>,
     /// When a snoozed message comes back (Unix seconds).
     snoozed_until: Option<i64>,
+    /// When its follow-up reminder is due (Unix seconds), if it has one.
+    follow_up_due: Option<i64>,
 }
 
 /// The open view. One window, one list.
@@ -190,6 +196,33 @@ impl Inner {
     }
 }
 
+impl Inner {
+    /// Opens the Follow up view: messages with an open reminder, soonest due
+    /// first. Reminders whose message hasn't synced yet aren't shown.
+    fn followups(&mut self, unread_only: bool) -> Result<Opened, CommandError> {
+        let paths = DaemonPaths::resolve()?;
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_secs() as i64);
+        let checked = familiar_core::commands::followup::check_all_at(&paths, now)?;
+        let reader = self.reader()?;
+        let (accounts, junk) = reader.snapshot(accounts_and_junk).map_err(store_error)?;
+        self.accounts = accounts;
+        self.junk = junk;
+        self.ids = checked
+            .iter()
+            .filter_map(|c| c.message.as_ref())
+            .filter(|m| !unread_only || !m.is_read)
+            .map(|m| m.id)
+            .collect();
+        Ok(Opened {
+            total: self.ids.len(),
+            notices: Vec::new(),
+            capped: false,
+        })
+    }
+}
+
 impl Lists {
     /// Opens a view: reads and sorts its message IDs.
     pub fn open(&self, spec: &ViewSpec) -> Result<Opened, CommandError> {
@@ -207,6 +240,9 @@ impl Lists {
         g.generation = spec.generation;
         if let Some(q) = spec.query.as_deref() {
             return g.search(q, spec.unread_only);
+        }
+        if spec.followups {
+            return g.followups(spec.unread_only);
         }
         let (ids, accounts, junk) = g
             .reader()?
@@ -267,6 +303,9 @@ impl Lists {
         let spam = DaemonPaths::resolve()
             .map(|p| familiar_core::commands::check_spam::Saved::load(&p.data_dir))
             .unwrap_or_default();
+        let followups = DaemonPaths::resolve()
+            .map(|p| familiar_core::commands::followup::FollowUps::load(&p.data_dir))
+            .unwrap_or_default();
         // A message deleted since the view opened is skipped; the store-changed
         // event reopens the view straight after.
         Ok(want
@@ -285,6 +324,11 @@ impl Lists {
                         .filter(|a| a.spam.max(a.scam) >= 50)
                         .map(|a| format!("{} · {}%", a.headline, a.spam.max(a.scam)))
                 };
+                let follow_up_due = m
+                    .internet_message_id
+                    .as_deref()
+                    .and_then(|imid| followups.find(&account, imid))
+                    .map(|f| f.due_at);
                 Row {
                     id: m.id.0,
                     account,
@@ -303,6 +347,7 @@ impl Lists {
                     in_junk,
                     spam_warning,
                     snoozed_until: snoozes.get(&m.id).copied(),
+                    follow_up_due,
                 }
             })
             .collect())
@@ -426,6 +471,7 @@ mod tests {
                 sort,
                 generation: 0,
                 query: None,
+                followups: false,
             };
             sorted_ids(&r, &[f], &spec).unwrap()
         };

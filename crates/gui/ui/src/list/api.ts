@@ -1,6 +1,6 @@
 // IPC for the virtualised message list (crates/gui/src/list.rs).
 import { invoke } from "@tauri-apps/api/core";
-import { listen } from "@tauri-apps/api/event";
+import { emit, listen } from "@tauri-apps/api/event";
 
 export type Sort = "newest" | "oldest" | "from" | "subject";
 
@@ -11,6 +11,8 @@ export type ViewSpec = {
   sort: Sort;
   /** A search instead of folders. */
   query: string | null;
+  /** The Follow up view instead of folders. */
+  followups?: boolean;
 };
 
 export type Row = {
@@ -31,6 +33,8 @@ export type Row = {
   spam_warning: string | null;
   /** When a snoozed message comes back (Unix seconds). */
   snoozed_until: number | null;
+  /** When its follow-up reminder is due (Unix seconds), if it has one. */
+  follow_up_due: number | null;
 };
 
 // Each open is numbered, so Rust can ignore an older open that takes its lock late.
@@ -44,3 +48,7 @@ export const listIndexOf = (id: number) => invoke<number | null>("list_index_of"
 
 /** Calls `f` whenever the store changes (sync, or a write from anywhere). */
 export const onStoreChanged = (f: () => void) => listen("store_changed", () => f());
+
+/** Tells the panes to refresh after a change outside the store, such as a
+ * follow-up reminder (kept in followups.json, which `store_changed` doesn't watch). */
+export const refreshViews = () => emit("store_changed");

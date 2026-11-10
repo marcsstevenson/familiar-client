@@ -232,6 +232,35 @@ pub fn check(c: &Config) -> Vec<Problem> {
         }
     }
 
+    for (i, h) in c.hooks.iter().enumerate() {
+        let path = format!("hooks[{i}]");
+        if !crate::model::HOOK_EVENTS.contains(&h.on.as_str()) {
+            p.push(Problem::error(
+                format!("{path}.on"),
+                format!(
+                    "unknown event `{}`; expected one of: {}",
+                    h.on,
+                    crate::model::HOOK_EVENTS.join(", ")
+                ),
+            ));
+        }
+        if h.run.trim().is_empty() {
+            p.push(Problem::error(format!("{path}.run"), "must not be empty"));
+        }
+        if h.matches.as_deref().is_some_and(|m| m.trim().is_empty()) {
+            p.push(Problem::error(
+                format!("{path}.match"),
+                "must not be empty; leave it out to match every message",
+            ));
+        }
+        if h.timeout_seconds == 0 {
+            p.push(Problem::error(
+                format!("{path}.timeout_seconds"),
+                "must be at least 1",
+            ));
+        }
+    }
+
     let mut rule_names = BTreeSet::new();
     for (i, r) in c.rules.iter().enumerate() {
         let path = format!("rules[{i}]");
