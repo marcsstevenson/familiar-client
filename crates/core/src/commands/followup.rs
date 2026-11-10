@@ -204,26 +204,35 @@ pub fn check(
                 message: None,
             });
         };
-        if let Ok(OpPayload::SendDraft {
-            internet_message_id: Some(id),
-            ..
-        }) = OpPayload::of(&op)
-        {
-            entry.internet_message_id = Some(id);
-            entry.send_op = None;
-        } else if op.state == OpState::Done || op.state == OpState::Failed {
+        // The op saves the Message-ID before it sends, so only a done op
+        // says the message went.
+        let sent = match OpPayload::of(&op) {
+            Ok(OpPayload::SendDraft {
+                internet_message_id: Some(id),
+                ..
+            }) if op.state == OpState::Done => Some(id),
+            _ => None,
+        };
+        match (sent, op.state) {
+            (Some(id), _) => {
+                entry.internet_message_id = Some(id);
+                entry.send_op = None;
+            }
             // Sent without a Message-ID (the draft was gone), or failed.
-            return Ok(Checked {
-                entry,
-                status: Status::Gone,
-                message: None,
-            });
-        } else {
-            return Ok(Checked {
-                entry,
-                status: Status::Sending,
-                message: None,
-            });
+            (None, OpState::Done | OpState::Failed) => {
+                return Ok(Checked {
+                    entry,
+                    status: Status::Gone,
+                    message: None,
+                });
+            }
+            _ => {
+                return Ok(Checked {
+                    entry,
+                    status: Status::Sending,
+                    message: None,
+                });
+            }
         }
     }
     let imid = entry.internet_message_id.clone().unwrap_or_default();
@@ -876,6 +885,11 @@ mod tests {
             Ok(())
         })
         .unwrap();
+        // Not sent yet: the send itself may still fail and be cancelled.
+        let rows = e.list(1000);
+        assert_eq!(rows.len(), 1);
+        assert_eq!(rows[0].status, Status::Sending);
+        e.w.write(|tx| tx.complete_op(OpId(kept))).unwrap();
         let rows = e.list(1000);
         assert_eq!(rows.len(), 1);
         assert_eq!(rows[0].status, Status::Waiting);
