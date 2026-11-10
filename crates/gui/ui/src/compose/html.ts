@@ -2,10 +2,50 @@
 // the draft already has are shown from their bytes but keep their `cid:` link
 // (in data-cid) so saving doesn't attach them again.
 
-/** The inside of `<body>`, from a whole HTML document or a fragment. */
+/** The inside of `<body>`, from a whole HTML document or a fragment, made safe for the editor. */
 export function bodyOf(html: string): string {
   const doc = new DOMParser().parseFromString(html, "text/html");
+  cleanForEditor(doc.body);
   return doc.body.innerHTML;
+}
+
+// Elements that can run code, load things, submit, or (style) restyle the
+// whole compose window. Text inside them goes too.
+const DROP = "script,style,link,meta,base,iframe,frame,frameset,object,embed,applet,form,input,button,textarea,select,noscript,template,svg,math";
+// Attributes that hold a URL, and the schemes each may use.
+const URL_ATTRS: Record<string, string[]> = {
+  href: ["http:", "https:", "mailto:", "#"],
+  src: ["http:", "https:", "cid:", "data:image/"],
+  background: [],
+  action: [],
+  formaction: [],
+  srcdoc: [],
+  srcset: [],
+  "xlink:href": [],
+};
+
+/**
+ * Strips a draft body of anything active before it goes into the editor,
+ * which lives in the app's own page. A reply or forward quotes the sender's
+ * HTML, so it is treated like a message in the reading pane: no scripts, no
+ * event handlers, no frames or forms, no style blocks (they would restyle the
+ * compose window), and only web, mail, `cid:` and image `data:` URLs.
+ * `root` must come from DOMParser, which never runs or loads anything.
+ */
+export function cleanForEditor(root: HTMLElement): void {
+  for (const el of root.querySelectorAll(DROP)) el.remove();
+  for (const el of root.querySelectorAll("*")) {
+    for (const a of [...el.attributes]) {
+      const name = a.name.toLowerCase();
+      const allowed = URL_ATTRS[name];
+      if (name.startsWith("on")) {
+        el.removeAttribute(a.name);
+      } else if (allowed) {
+        const v = a.value.trim().toLowerCase();
+        if (!allowed.some((s) => v.startsWith(s))) el.removeAttribute(a.name);
+      }
+    }
+  }
 }
 
 export function escapeHtml(s: string): string {
