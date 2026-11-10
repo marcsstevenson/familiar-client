@@ -24,6 +24,7 @@ export const COMMAND_SURFACE = {
   "config.validate": "palette",
   "contacts.search": "palette",
   "draft.create": "palette",
+  "draft.edit": "terminal", // opens $EDITOR and waits
   "draft.forward": "palette",
   "draft.reply": "palette",
   "draft.send": "palette",
