@@ -85,16 +85,17 @@
 }
 .compose-from {
   color: var(--text);
+  padding-left: var(--space-3);
 }
 .compose-field select {
   border: 0;
-  padding: var(--space-2) 0;
+  padding: var(--space-2) var(--space-3);
   max-width: 60%;
 }
 .compose-subject {
   flex: 1;
   border: 0;
-  padding: var(--space-3) 0;
+  padding: var(--space-3);
   outline: none;
 }
 
@@ -105,7 +106,7 @@
   flex-wrap: wrap;
   align-items: center;
   gap: var(--space-2);
-  padding: var(--space-2) 0;
+  padding: var(--space-2) var(--space-3);
   min-width: 0;
 }
 .chip {
@@ -141,7 +142,7 @@
 .suggestions {
   position: absolute;
   z-index: 10;
-  left: calc(56px + var(--space-4) + var(--space-3));
+  left: calc(56px + var(--space-4) + var(--space-3) + var(--space-3));
   top: 100%;
   min-width: 320px;
   max-width: 70%;
@@ -203,6 +204,7 @@
   display: none;
 }
 .editor-wrap {
+  position: relative;
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -250,6 +252,38 @@
 }
 .editor img {
   max-width: 100%;
+  height: auto;
+}
+/* The box and corner handle over a picture being resized. */
+.img-resize {
+  position: absolute;
+  border: 1px solid var(--accent);
+  pointer-events: none;
+}
+.img-resize-handle {
+  position: absolute;
+  right: -6px;
+  bottom: -6px;
+  width: 11px;
+  height: 11px;
+  background: var(--accent);
+  border: 1px solid var(--bg);
+  border-radius: 2px;
+  cursor: nwse-resize;
+  pointer-events: auto;
+  touch-action: none;
+}
+.img-resize-size {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 8px);
+  padding: 1px var(--space-2);
+  border-radius: var(--radius-sm);
+  background: var(--bg-chrome);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  white-space: nowrap;
 }
 .editor.plain {
   border: 0;

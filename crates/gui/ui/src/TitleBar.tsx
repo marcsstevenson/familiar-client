@@ -23,11 +23,9 @@ export function TitleBar(props: { platform: string; title?: string }) {
   return (
     <header class="titlebar" classList={{ mac: mac() }} data-tauri-drag-region>
       <img class="titlebar-icon" src={keaUrl} alt="" data-tauri-drag-region />
-      <Show when={props.title}>
-        <span class="titlebar-name" data-tauri-drag-region>
-          {props.title}
-        </span>
-      </Show>
+      <span class="titlebar-name" data-tauri-drag-region>
+        {props.title ?? "Familiar"}
+      </span>
       <Show when={props.title === undefined}>
         <button class="titlebar-tool" title="New message (Ctrl+N)" aria-label="New message" onClick={() => void openCompose({ kind: "new" })}>
           ✎

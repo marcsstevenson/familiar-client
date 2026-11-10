@@ -51,6 +51,7 @@ button {
   margin-right: var(--space-2);
 }
 .titlebar-name {
+  margin-right: var(--space-3);
   font-weight: 600;
   font-size: var(--text-sm);
 }

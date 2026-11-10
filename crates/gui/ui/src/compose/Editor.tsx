@@ -1,7 +1,7 @@
 // The body editor: rich text in a contenteditable with a small toolbar, or a
 // plain textarea. Rich editing uses the browser's own editing commands, which
 // WebView2 and WebKit both support.
-import { For, Show, createSignal } from "solid-js";
+import { For, Show, createSignal, onCleanup } from "solid-js";
 import { ownSignature } from "./html";
 
 type Tool = { cmd: string; label: string; text: string; key?: string };
@@ -29,6 +29,62 @@ export function RichEditor(props: {
   let saved: Range | null = null;
   const [linking, setLinking] = createSignal(false);
   const [href, setHref] = createSignal("https://");
+  let wrap!: HTMLDivElement;
+  // The picture being resized, and where its box sits in the wrap.
+  const [picked, setPicked] = createSignal<HTMLImageElement | null>(null);
+  const [box, setBox] = createSignal({ left: 0, top: 0, width: 0, height: 0, shown: false, size: "" });
+  const [dragging, setDragging] = createSignal(false);
+  const place = () => {
+    const img = picked();
+    if (!img) return;
+    if (!el.contains(img)) return setPicked(null);
+    const r = img.getBoundingClientRect();
+    const w = wrap.getBoundingClientRect();
+    const e = el.getBoundingClientRect();
+    // The box needs the corner in view, and stops at the body's top edge.
+    const shown = r.bottom > e.top && r.bottom <= e.bottom;
+    const top = Math.max(r.top, e.top);
+    setBox({ left: r.left - w.left, top: top - w.top, width: r.width, height: r.bottom - top, shown, size: `${Math.round(r.width)} × ${Math.round(r.height)}` });
+  };
+  const pick = (img: HTMLImageElement | null) => {
+    setPicked(img);
+    place();
+  };
+  const onWindowResize = () => place();
+  window.addEventListener("resize", onWindowResize);
+  onCleanup(() => window.removeEventListener("resize", onWindowResize));
+  // Drag the corner: the width follows the pointer, the height keeps the
+  // picture's shape. The width goes in the attribute (which Outlook reads)
+  // and the style (which beats any width the quoted HTML set).
+  const startResize = (e: PointerEvent) => {
+    const img = picked();
+    if (!img) return;
+    e.preventDefault();
+    const handle = e.currentTarget as HTMLElement;
+    handle.setPointerCapture(e.pointerId);
+    const x0 = e.clientX;
+    const w0 = img.getBoundingClientRect().width;
+    const max = el.clientWidth;
+    setDragging(true);
+    const move = (m: PointerEvent) => {
+      const w = Math.round(Math.min(max, Math.max(24, w0 + m.clientX - x0)));
+      img.setAttribute("width", String(w));
+      img.removeAttribute("height");
+      img.style.width = `${w}px`;
+      img.style.height = "auto";
+      place();
+    };
+    const up = () => {
+      handle.removeEventListener("pointermove", move);
+      handle.removeEventListener("pointerup", up);
+      handle.removeEventListener("pointercancel", up);
+      setDragging(false);
+      props.onInput();
+    };
+    handle.addEventListener("pointermove", move);
+    handle.addEventListener("pointerup", up);
+    handle.addEventListener("pointercancel", up);
+  };
 
   const exec = (cmd: string, value?: string) => {
     el.focus();
@@ -56,7 +112,7 @@ export function RichEditor(props: {
   };
 
   return (
-    <div class="editor-wrap">
+    <div class="editor-wrap" ref={wrap}>
       <div class="toolbar" role="toolbar" aria-label="Formatting" onMouseDown={(e) => {
         // Keep the selection in the body while a button is pressed.
         if ((e.target as HTMLElement).closest("button")) e.preventDefault();
@@ -106,8 +162,17 @@ export function RichEditor(props: {
         aria-multiline="true"
         aria-label="Message body"
         spellcheck={true}
-        onInput={() => props.onInput()}
+        onInput={() => {
+          place();
+          props.onInput();
+        }}
+        onScroll={place}
+        onBlur={() => {
+          if (!dragging()) setPicked(null);
+        }}
+        onMouseDown={(e) => pick(e.target instanceof HTMLImageElement ? e.target : null)}
         onKeyDown={(e) => {
+          if (e.key === "Escape" && picked()) setPicked(null);
           if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
             e.preventDefault();
             startLink();
@@ -121,6 +186,19 @@ export function RichEditor(props: {
           }
         }}
       />
+      <Show when={picked() && box().shown && !props.disabled}>
+        <div
+          class="img-resize"
+          style={{ left: `${box().left}px`, top: `${box().top}px`, width: `${box().width}px`, height: `${box().height}px` }}
+        >
+          <div class="img-resize-handle" title="Drag to resize" onPointerDown={startResize} />
+          <Show when={dragging()}>
+            <span class="img-resize-size">
+              {box().size}
+            </span>
+          </Show>
+        </div>
+      </Show>
     </div>
   );
 }
