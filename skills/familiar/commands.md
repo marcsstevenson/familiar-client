@@ -876,3 +876,15 @@ fam version
 Shows the Familiar version and the command schema version.
 
 - `--verbose`: Also report the operating system and CPU architecture.
+
+## watch
+
+Print new mail as it arrives, as JSON lines. Access: `read`.
+
+```
+fam watch
+```
+
+Runs until stopped (Ctrl+C), printing one JSON object per new message as famd syncs it: {event: "new_mail", id, account, folder, from, to, subject, received_at, preview, has_attachments}. Only mail that arrives after it starts counts; Sent Items, Drafts, Outbox, Deleted Items and Junk are left out. --match keeps only messages a search matches. famd must be running for mail to arrive. Hooks in config.toml ([[hooks]]) get the same events.
+
+- `--match <match>`: Only messages this search matches (`fam mail search` syntax), for example `from:club`.

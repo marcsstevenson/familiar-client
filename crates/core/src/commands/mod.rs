@@ -20,4 +20,5 @@ pub mod search;
 pub mod sync;
 pub mod ui;
 pub mod version;
+pub mod watch;
 pub mod write;
