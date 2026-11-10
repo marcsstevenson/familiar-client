@@ -742,6 +742,8 @@ export type DraftSendInput = {
   dry_run?: boolean;
   /** Skip the undo-send delay. */
   now?: boolean;
+  /** Remind me if nobody replies within this many days (see fam followup list). */
+  remind_days?: number | null;
   /** Wait until it has gone (needs famd; includes the undo-send delay). */
   wait?: boolean;
   /** Seconds --wait waits at most (default 60). */
@@ -940,6 +942,49 @@ export type FolderRow = {
   unread: number;
   /** Graph well-known name (`inbox`, `sentitems`, `deleteditems`, ...), if any. */
   well_known?: string | null;
+};
+
+export type FollowUpAddInput = {
+  /** Days from now until the reminder is due (default 3). */
+  days?: number | null;
+  /** Local message IDs, usually from Sent Items. */
+  messages: Array<number>;
+};
+
+export type FollowUpCancelInput = {
+  /** Local message IDs. */
+  messages: Array<number>;
+};
+
+export type FollowUpListInput = {
+  /** Only this account (its name in config.toml). */
+  account?: string | null;
+  /** Only reminders that are due (no reply, and the time is up). */
+  due?: boolean;
+};
+
+export type FollowUpListOutput = {
+  /** Open reminders, soonest due first. */
+  followups: Array<FollowUpRow>;
+};
+
+export type FollowUpRow = {
+  /** Account name. */
+  account: string;
+  /** When the reminder is due (RFC 3339, UTC). */
+  due_at: string;
+  /** The same, in Unix seconds. */
+  due_unix: number;
+  /** Local ID of the waiting message, once it is on this device. */
+  message?: number | null;
+  /** When the waiting message was sent (RFC 3339, UTC), once known. */
+  sent_at?: string | null;
+  /** `sending`, `waiting` or `due`. */
+  status: Status;
+  /** Subject. */
+  subject: string;
+  /** Who it went to (To), when the message is on this device. */
+  to: Array<string>;
 };
 
 export type Grade = {
@@ -1253,6 +1298,8 @@ export type MailSendInput = {
   no_signature?: boolean;
   /** Skip the undo-send delay. */
   now?: boolean;
+  /** Remind me if nobody replies within this many days (see fam followup list). */
+  remind_days?: number | null;
   /** Subject. */
   subject?: string | null;
   /** To: an address or `Name <address>`; repeat, or separate with commas. */
@@ -1585,6 +1632,8 @@ export type SignatureState = {
   reply: boolean;
 };
 
+export type Status = "sending" | "waiting" | "due" | "replied" | "gone";
+
 export type SyncCheckInput = {
   /** Only this account (its name in config.toml). */
   account?: string | null;
@@ -1781,6 +1830,12 @@ export interface Commands {
   "folder.rename": { input: FolderRenameInput; output: WriteOutput };
   /** Unpin a mail folder */
   "folder.unpin": { input: FolderPinInput; output: FolderRow };
+  /** Remind me if nobody replies to a message */
+  "followup.add": { input: FollowUpAddInput; output: FollowUpListOutput };
+  /** Cancel follow-up reminders */
+  "followup.cancel": { input: FollowUpCancelInput; output: FollowUpListOutput };
+  /** List follow-up reminders for mail nobody has replied to */
+  "followup.list": { input: FollowUpListInput; output: FollowUpListOutput };
   /** Move messages to Archive */
   "mail.archive": { input: MailArchiveInput; output: WriteOutput };
   /** List or save a message's attachments */
@@ -1867,6 +1922,9 @@ export const COMMAND_NAMES = [
   "folder.pin",
   "folder.rename",
   "folder.unpin",
+  "followup.add",
+  "followup.cancel",
+  "followup.list",
   "mail.archive",
   "mail.attachments",
   "mail.check-spam",

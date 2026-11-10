@@ -5,7 +5,7 @@ import { type CommandError, isCommandError, run } from "../api";
 import type { FolderRow } from "../../../../../bindings/commands";
 import { onStoreChanged } from "../list/api";
 import { FolderMenu } from "./FolderMenu";
-import { dragged, removeFromList, searchQuery, selectedFolder, setDragged, setSearchQuery, setSelectedFolder, setSelectedMessage } from "../state";
+import { dragged, followUpView, removeFromList, searchQuery, selectedFolder, setDragged, setFollowUpView, setSearchQuery, setSelectedFolder, setSelectedMessage } from "../state";
 
 /** Well-known folders first, in this order; the rest keep the tree order. */
 const WELL_KNOWN = ["inbox", "drafts", "sentitems", "archive", "deleteditems", "junkemail"];
@@ -83,21 +83,33 @@ function dropOn(f: FolderRow) {
 
 function choose(id: number | null) {
   setSearchQuery(null);
+  setFollowUpView(false);
   setSelectedFolder(id);
   setSelectedMessage(null);
 }
 
 function chooseView(query: string) {
+  setFollowUpView(false);
   setSearchQuery(query);
   setSelectedMessage(null);
 }
 
 export function FolderTree(props: { views: { name: string; query: string }[] }) {
   const [data, { refetch }] = createResource(() => run("folder.list", {}));
+  // Follow-up reminders: the Follow up entry shows while there are any, with
+  // the number due. Rechecked on every store change, since a reply that
+  // arrives answers one.
+  const [followups, { refetch: refetchFollowups }] = createResource(() =>
+    run("followup.list", {}).catch(() => ({ followups: [] })),
+  );
   onMount(async () => {
-    const stop = await onStoreChanged(() => void refetch());
+    const stop = await onStoreChanged(() => {
+      void refetch();
+      void refetchFollowups();
+    });
     onCleanup(stop);
   });
+  const dueCount = () => (followups.latest?.followups ?? []).filter((f) => f.status === "due").length;
   // Folders keep their identity across refreshes (every sync and every move
   // changes counts), so <For> keeps their buttons: focus and a drag in progress
   // survive.
@@ -138,9 +150,23 @@ export function FolderTree(props: { views: { name: string; query: string }[] }) 
         name="All inboxes"
         unread={inboxUnread()}
         depth={0}
-        selected={selectedFolder() === null && searchQuery() === null}
+        selected={selectedFolder() === null && searchQuery() === null && !followUpView()}
         onSelect={() => choose(null)}
       />
+      <Show when={(followups.latest?.followups.length ?? 0) > 0 || followUpView()}>
+        <FolderItem
+          name="Follow up"
+          title="Mail you asked to be reminded about if nobody replies"
+          unread={dueCount()}
+          countLabel="due"
+          depth={0}
+          selected={followUpView() && searchQuery() === null}
+          onSelect={() => {
+            choose(null);
+            setFollowUpView(true);
+          }}
+        />
+      </Show>
       <Show when={pinned().length > 0}>
         <div role="group" aria-label="Pinned folders">
           <For each={pinned()}>
@@ -241,6 +267,8 @@ function FolderItem(props: {
   onContextMenu?: (e: MouseEvent) => void;
   /** Hover text. */
   title?: string;
+  /** What the count is, for screen readers (default "unread"). */
+  countLabel?: string;
 }) {
   const [over, setOver] = createSignal(false);
   return (
@@ -289,7 +317,7 @@ function FolderItem(props: {
       <Show when={props.unread > 0}>
         <span class="folder-count">
           {props.unread}
-          <span class="visually-hidden"> unread</span>
+          <span class="visually-hidden"> {props.countLabel ?? "unread"}</span>
         </span>
       </Show>
     </button>

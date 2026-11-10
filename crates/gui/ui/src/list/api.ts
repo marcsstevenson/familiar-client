@@ -11,6 +11,8 @@ export type ViewSpec = {
   sort: Sort;
   /** A search instead of folders. */
   query: string | null;
+  /** The Follow up view instead of folders. */
+  followups?: boolean;
 };
 
 export type Row = {
@@ -29,6 +31,8 @@ export type Row = {
   in_junk: boolean;
   /** "Likely scam · 92%" when a saved spam check is 50%+ outside Junk Email. */
   spam_warning: string | null;
+  /** When its follow-up reminder is due (Unix seconds), if it has one. */
+  follow_up_due: number | null;
 };
 
 // Each open is numbered, so Rust can ignore an older open that takes its lock late.

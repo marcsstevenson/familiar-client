@@ -835,6 +835,9 @@ pub struct DraftSendInput {
     /// Seconds --wait waits at most (default 60).
     #[serde(default)]
     pub wait_secs: Option<u32>,
+    /// Remind me if nobody replies within this many days (see fam followup list).
+    #[serde(default)]
+    pub remind_days: Option<u32>,
 }
 
 impl Command for DraftSend {
@@ -849,14 +852,20 @@ impl Command for DraftSend {
     };
 
     fn run(&self, _ctx: &Context<'_>, i: DraftSendInput) -> Result<WriteOutput, CommandError> {
-        send_at(
-            &DaemonPaths::resolve()?,
+        crate::commands::followup::check_days(i.remind_days)?;
+        let paths = DaemonPaths::resolve()?;
+        let out = send_at(
+            &paths,
             i.draft,
             i.now,
             i.yes,
             &ComposeSettings::load()?,
             &flags(i.dry_run, i.wait, i.wait_secs),
-        )
+        )?;
+        if i.remind_days.is_some() {
+            crate::commands::followup::remind_after_send(&paths, &out, i.remind_days)?;
+        }
+        Ok(out)
     }
 
     fn render_text(&self, o: &WriteOutput) -> String {
@@ -925,6 +934,9 @@ pub struct MailSendInput {
     /// Seconds --wait waits at most (default 60).
     #[serde(default)]
     pub wait_secs: Option<u32>,
+    /// Remind me if nobody replies within this many days (see fam followup list).
+    #[serde(default)]
+    pub remind_days: Option<u32>,
 }
 
 impl Command for MailSend {
@@ -955,13 +967,19 @@ impl Command for MailSend {
             no_signature: i.no_signature,
             ..ComposeArgs::default()
         };
-        compose_at(
-            &DaemonPaths::resolve()?,
+        crate::commands::followup::check_days(i.remind_days)?;
+        let paths = DaemonPaths::resolve()?;
+        let out = compose_at(
+            &paths,
             &args,
             &ComposeSettings::load()?,
             Some((i.now, i.yes)),
             &flags(i.dry_run, i.wait, i.wait_secs),
-        )
+        )?;
+        if i.remind_days.is_some() {
+            crate::commands::followup::remind_after_send(&paths, &out, i.remind_days)?;
+        }
+        Ok(out)
     }
 
     fn render_text(&self, o: &WriteOutput) -> String {

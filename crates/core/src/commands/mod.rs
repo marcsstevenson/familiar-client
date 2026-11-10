@@ -13,6 +13,7 @@ pub mod config;
 pub mod contacts;
 pub mod draft;
 pub mod folder;
+pub mod followup;
 pub mod mail;
 pub mod mcp;
 pub mod schema;
