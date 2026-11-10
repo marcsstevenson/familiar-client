@@ -82,6 +82,10 @@ pub struct NewMailWatch {
     mark: Option<MessageId>,
     /// New messages not ready yet, with when they were first seen.
     pending: BTreeMap<MessageId, i64>,
+    /// Accounts whose first sync had finished at the previous look. Rows an
+    /// account gets before then are its first sync, even if that finished
+    /// between two looks.
+    synced: HashSet<AccountId>,
 }
 
 impl NewMailWatch {
@@ -93,6 +97,7 @@ impl NewMailWatch {
             searcher: None,
             mark: None,
             pending: BTreeMap::new(),
+            synced: HashSet::new(),
         }
     }
 
@@ -114,11 +119,18 @@ impl NewMailWatch {
             self.searcher = Searcher::open(&self.paths.index).ok();
         }
         let r = self.reader.as_ref().expect("opened above");
-        let Some(mark) = self.mark else {
-            self.mark = Some(r.max_message_id().map_err(|e| format!("store: {e}"))?);
+        let err = |e: familiar_store::Error| format!("store: {e}");
+        let synced = first_synced(r).map_err(err)?;
+        let top = r.max_message_id().map_err(err)?;
+        let Some(mut mark) = self.mark else {
+            self.mark = Some(top);
+            self.synced = synced;
             return Ok(Vec::new());
         };
-        let err = |e: familiar_store::Error| format!("store: {e}");
+        // The newest rows were deleted: SQLite hands their IDs out again.
+        if top < mark {
+            mark = top;
+        }
 
         // New rows since the mark join the pending list.
         let mut seen = mark;
@@ -134,6 +146,7 @@ impl NewMailWatch {
             }
         }
         self.mark = Some(seen);
+        let was_synced = std::mem::replace(&mut self.synced, synced);
         if self.pending.is_empty() {
             return Ok(Vec::new());
         }
@@ -151,7 +164,10 @@ impl NewMailWatch {
         for (id, first_seen) in std::mem::take(&mut self.pending) {
             // Deleted again before it was ready.
             let Some(m) = rows.remove(&id) else { continue };
-            if m.received_at < now - MAX_AGE || !names.is_new_mail(r, &m).map_err(err)? {
+            if m.received_at < now - MAX_AGE
+                || !was_synced.contains(&m.account)
+                || !names.is_new_mail(r, &m).map_err(err)?
+            {
                 continue;
             }
             let waited = now - first_seen >= BODY_WAIT;
@@ -186,10 +202,23 @@ impl NewMailWatch {
     }
 }
 
-/// Account keys, folder paths and first-sync state, read once per poll.
+/// The accounts whose first sync has finished.
+fn first_synced(r: &Reader) -> familiar_store::Result<HashSet<AccountId>> {
+    let mut out = HashSet::new();
+    for a in r.accounts()? {
+        if r.sync_state(a.id, crate::daemon::FIRST_SYNC_RESOURCE)?
+            .is_some()
+        {
+            out.insert(a.id);
+        }
+    }
+    Ok(out)
+}
+
+/// Account keys and folder paths, read once per poll.
 #[derive(Default)]
 struct Names {
-    accounts: HashMap<AccountId, (String, bool)>,
+    accounts: HashMap<AccountId, String>,
     folders: HashMap<FolderId, (String, Option<String>)>,
 }
 
@@ -199,10 +228,7 @@ impl Names {
             return Ok(());
         }
         for a in r.accounts()? {
-            let synced = r
-                .sync_state(a.id, crate::daemon::FIRST_SYNC_RESOURCE)?
-                .is_some();
-            self.accounts.insert(a.id, (a.key.clone(), synced));
+            self.accounts.insert(a.id, a.key.clone());
             let folders = r.folders(a.id)?;
             let paths = crate::commands::folder::folder_paths(&folders);
             for f in folders {
@@ -215,13 +241,12 @@ impl Names {
 
     fn is_new_mail(&mut self, r: &Reader, m: &Message) -> familiar_store::Result<bool> {
         self.load_account(r, m.account)?;
-        let synced = self.accounts.get(&m.account).is_some_and(|a| a.1);
         let excluded = self
             .folders
             .get(&m.folder)
             .and_then(|f| f.1.as_deref())
             .is_some_and(|w| NOT_NEW_MAIL.contains(&w));
-        Ok(synced && !excluded)
+        Ok(!excluded)
     }
 
     fn event(&mut self, r: &Reader, m: &Message) -> familiar_store::Result<MailEvent> {
@@ -233,11 +258,7 @@ impl Names {
         Ok(MailEvent {
             event: "new_mail".into(),
             id: m.id.0,
-            account: self
-                .accounts
-                .get(&m.account)
-                .map(|a| a.0.clone())
-                .unwrap_or_default(),
+            account: self.accounts.get(&m.account).cloned().unwrap_or_default(),
             folder: self
                 .folders
                 .get(&m.folder)

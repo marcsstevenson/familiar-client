@@ -160,9 +160,13 @@ pub fn run_hook(name: &str, hook: &Hook, ev: &MailEvent, stop: &watch::Receiver<
         }
     };
     if let Some(mut stdin) = child.stdin.take() {
-        // A command that doesn't read stdin may have closed it already.
+        // On its own thread: a command that keeps stdin open without reading
+        // it would otherwise hold this write, and the timeout, forever. A
+        // command that doesn't read stdin may have closed it already.
         let line = serde_json::to_string(ev).unwrap_or_default();
-        let _ = writeln!(stdin, "{line}");
+        std::thread::spawn(move || {
+            let _ = writeln!(stdin, "{line}");
+        });
     }
     let deadline = Instant::now() + Duration::from_secs(hook.timeout_seconds.into());
     let status = loop {
