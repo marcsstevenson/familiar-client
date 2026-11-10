@@ -49,6 +49,9 @@ use tokio::time::Instant;
 
 use crate::policy::{Clock, SyncPolicy};
 
+/// How long a done op stays in the queue before ageing deletes it.
+const DONE_OP_RETENTION_SECS: i64 = 7 * 86_400;
+
 /// Sync state row for an account's contacts.
 pub const CONTACTS_RESOURCE: &str = "contacts";
 
@@ -617,6 +620,9 @@ impl Engine {
                 None => 0,
             };
             let ev = tx.evict_cached_bodies(limit)?;
+            // Done ops keep their payload (a draft's attachments, in base64);
+            // a week is plenty for `fam ops list` and `ops.wait`.
+            tx.prune_done_ops(now - DONE_OP_RETENTION_SECS)?;
             Ok((aged, pruned, ev.evicted))
         })?;
         let gc = {
