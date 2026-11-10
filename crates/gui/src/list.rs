@@ -197,7 +197,7 @@ impl Inner {
 impl Inner {
     /// Opens the Follow up view: messages with an open reminder, soonest due
     /// first. Reminders whose message hasn't synced yet aren't shown.
-    fn followups(&mut self) -> Result<Opened, CommandError> {
+    fn followups(&mut self, unread_only: bool) -> Result<Opened, CommandError> {
         let paths = DaemonPaths::resolve()?;
         let now = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
@@ -209,7 +209,9 @@ impl Inner {
         self.junk = junk;
         self.ids = checked
             .iter()
-            .filter_map(|c| c.message.as_ref().map(|m| m.id))
+            .filter_map(|c| c.message.as_ref())
+            .filter(|m| !unread_only || !m.is_read)
+            .map(|m| m.id)
             .collect();
         Ok(Opened {
             total: self.ids.len(),
@@ -238,7 +240,7 @@ impl Lists {
             return g.search(q, spec.unread_only);
         }
         if spec.followups {
-            return g.followups();
+            return g.followups(spec.unread_only);
         }
         let (ids, accounts, junk) = g
             .reader()?
