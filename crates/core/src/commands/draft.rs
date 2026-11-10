@@ -143,7 +143,11 @@ fn body_html(
     body: Option<&str>,
     body_file: Option<&str>,
     html: bool,
+    markdown: bool,
 ) -> Result<String, CommandError> {
+    if html && markdown {
+        return Err(CommandError::usage("give --html or --markdown, not both"));
+    }
     let text = match (body, body_file) {
         (Some(_), Some(_)) => {
             return Err(CommandError::usage("give --body or --body-file, not both"));
@@ -153,7 +157,13 @@ fn body_html(
             .map_err(|e| CommandError::new(ErrorKind::NotFound, format!("{f}: {e}")))?,
         (None, None) => String::new(),
     };
-    Ok(if html { text } else { text_to_html(&text) })
+    Ok(if html {
+        text
+    } else if markdown {
+        crate::markdown::to_html(&text)
+    } else {
+        text_to_html(&text)
+    })
 }
 
 fn with_signature(body: String, sig: Option<&str>) -> String {
@@ -218,7 +228,7 @@ fn account_for(paths: &DaemonPaths, only: Option<&str>) -> Result<Account, Comma
 }
 
 /// The account a message belongs to.
-fn account_of(
+pub(crate) fn account_of(
     paths: &DaemonPaths,
     message: i64,
 ) -> Result<(Account, familiar_store::Message), CommandError> {
@@ -261,6 +271,8 @@ pub struct ComposeArgs {
     pub body_file: Option<String>,
     /// Body is HTML.
     pub html: bool,
+    /// Body is Markdown.
+    pub markdown: bool,
     /// Files.
     pub attach: Vec<String>,
     /// Inline images.
@@ -290,7 +302,12 @@ pub fn compose_request(
             name: account.display_name.clone(),
             address,
         });
-    let body = body_html(args.body.as_deref(), args.body_file.as_deref(), args.html)?;
+    let body = body_html(
+        args.body.as_deref(),
+        args.body_file.as_deref(),
+        args.html,
+        args.markdown,
+    )?;
     let sig = if args.no_signature {
         None
     } else {
@@ -374,7 +391,7 @@ pub fn send_at(
     )
 }
 
-fn render(o: &WriteOutput) -> String {
+pub(crate) fn render(o: &WriteOutput) -> String {
     let mut s = o.render();
     if let Some(d) = o
         .ops
@@ -431,6 +448,9 @@ pub struct DraftCreateInput {
     /// The body is HTML.
     #[serde(default)]
     pub html: bool,
+    /// The body is Markdown, sent as HTML (a line break stays a line break).
+    #[serde(default)]
+    pub markdown: bool,
     /// Attach a file (up to 3 MB); repeat for more.
     #[serde(default)]
     pub attach: Vec<String>,
@@ -476,6 +496,7 @@ impl Command for DraftCreate {
             body: i.body,
             body_file: i.body_file,
             html: i.html,
+            markdown: i.markdown,
             attach: i.attach,
             inline: i.inline,
             importance: i.importance,
@@ -530,6 +551,9 @@ pub struct DraftReplyInput {
     /// The body is HTML.
     #[serde(default)]
     pub html: bool,
+    /// The body is Markdown, sent as HTML (a line break stays a line break).
+    #[serde(default)]
+    pub markdown: bool,
     /// Attach a file; repeat for more.
     #[serde(default)]
     pub attach: Vec<String>,
@@ -576,6 +600,7 @@ impl Command for DraftReply {
             body: i.body,
             body_file: i.body_file,
             html: i.html,
+            markdown: i.markdown,
             attach: i.attach,
             inline: i.inline,
             no_signature: i.no_signature,
@@ -626,6 +651,9 @@ pub struct DraftForwardInput {
     /// The body is HTML.
     #[serde(default)]
     pub html: bool,
+    /// The body is Markdown, sent as HTML (a line break stays a line break).
+    #[serde(default)]
+    pub markdown: bool,
     /// Attach another file; repeat for more.
     #[serde(default)]
     pub attach: Vec<String>,
@@ -665,6 +693,7 @@ impl Command for DraftForward {
             body: i.body,
             body_file: i.body_file,
             html: i.html,
+            markdown: i.markdown,
             attach: i.attach,
             no_signature: i.no_signature,
             ..ComposeArgs::default()
@@ -717,6 +746,9 @@ pub struct DraftUpdateInput {
     /// The body is HTML.
     #[serde(default)]
     pub html: bool,
+    /// The body is Markdown, sent as HTML (a line break stays a line break).
+    #[serde(default)]
+    pub markdown: bool,
     /// Attach a file; repeat for more.
     #[serde(default)]
     pub attach: Vec<String>,
@@ -772,6 +804,7 @@ impl Command for DraftUpdate {
                 i.body.as_deref(),
                 i.body_file.as_deref(),
                 i.html,
+                i.markdown,
             )?)?;
             files.extend(images);
             Some(html)
@@ -907,6 +940,9 @@ pub struct MailSendInput {
     /// The body is HTML.
     #[serde(default)]
     pub html: bool,
+    /// The body is Markdown, sent as HTML (a line break stays a line break).
+    #[serde(default)]
+    pub markdown: bool,
     /// Attach a file (up to 3 MB); repeat for more.
     #[serde(default)]
     pub attach: Vec<String>,
@@ -961,6 +997,7 @@ impl Command for MailSend {
             body: i.body,
             body_file: i.body_file,
             html: i.html,
+            markdown: i.markdown,
             attach: i.attach,
             inline: i.inline,
             importance: i.importance,

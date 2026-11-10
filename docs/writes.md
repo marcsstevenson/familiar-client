@@ -26,12 +26,17 @@ until the server has them.
 | `fam draft reply <id> [--all] [--body ...]` | Save a reply (threaded via Graph's `createReply`), your text and `reply` signature above the quoted original | draft |
 | `fam draft forward <id> --to ... [--body ...]` | Save a forward with the original's attachments | draft |
 | `fam draft update <draft> [--to/--cc/--bcc] [--subject] [--body] [--attach] [--remove-attachment]` | Change a draft; a recipient flag replaces that line (`--cc ""` empties it), `--body` the whole body. Images the body embeds become inline attachments with content IDs taken from their bytes, so saving the same body again adds nothing, and inline images the new body no longer shows are taken off. `--remove-attachment` takes a file off by name or Graph attachment ID | draft |
+| `fam draft edit [<draft>] [--account] [--no-signature]` | Write a draft (or, without an ID, a new message) in your editor, in Markdown; see below | draft |
 | `fam draft send <draft> [--now] [--yes]` | Send after the undo-send delay | send |
 | `fam mail send --to ... --subject ... --body ... [--now] [--yes]` | Draft and send in one go | send |
 | `fam cal add <subject> --start <when> [--end \| --minutes] [--calendar \| --purpose] [--attendee ...] [--repeat ...] [--from-mail <id>]` | Add an event (invitations go to attendees) | write |
 | `fam cal edit <event> [--subject] [--start] [--end \| --minutes] [--location] [--series]` | Change an event, or with `--series` every event of its series | write |
 | `fam cal delete <event> [--series] [--comment] [--yes]` | Delete; a meeting you organised is cancelled and attendees told (needs `--yes`) | delete |
 | `fam cal rsvp <event> accept\|tentative\|decline [--no-reply] [--series]` | Answer an invitation; a declined meeting leaves the calendar | write |
+
+The compose commands also take `--markdown`: the body is Markdown and is
+saved as HTML. A single line break stays a line break, as people expect in
+mail; tables, strikethrough and task lists work too.
 
 Every write takes `--dry-run` (say what would change, change nothing) and
 `--wait` (wait until the server has it, up to `--wait-secs`, default 60).
@@ -150,3 +155,46 @@ provider's own report process, so its filter learns from it:
 Code: `familiar_core::ops` (planning, local apply/undo), `familiar_daemon::ops`
 (the runner), `familiar_provider_graph` `write.rs` (Graph calls), mock routes
 in `crates/mock-graph/src/writes.rs`. Tests: `crates/daemon/tests/writes.rs`.
+
+## Writing in your editor
+
+`fam draft edit <draft>` opens the draft in `$VISUAL` or `$EDITOR`
+(Notepad on Windows and `vi` elsewhere when neither is set). The file
+looks like this:
+
+```
+To: Ana <ana@example.com>, bo@example.com
+Cc:
+Bcc:
+Subject: Saturday
+
+Hi **Ana**,
+
+- bring the roster
+- and the keys
+
+Thanks,
+Marc
+```
+
+The header lines come first, then a blank line, then the body in Markdown.
+When the editor closes, whatever changed is saved as `fam draft update`
+would, with the Markdown turned into HTML. Closing it unchanged saves
+nothing. The signature and, in a reply or forward, the quoted message
+below your text are not in the file and are kept as they were. A draft
+written elsewhere with fonts or colours comes back as plain Markdown, so
+saving a change to its text drops that formatting. Bcc isn't kept on this
+device, so the Bcc line starts empty and only a filled-in line changes it.
+
+Without an ID, `fam draft edit` writes a new message, which gets the
+account's `new` signature (`--no-signature` leaves it off; `--account`
+picks the account when there is more than one). If the file can't be
+saved (an unknown header line, say), the error names the file, which is
+kept so nothing you wrote is lost.
+
+The editor command runs through the shell, so arguments work. Editors
+that return at once need their wait flag: `EDITOR="code --wait"`. On
+Windows set it with `setx EDITOR "code --wait"` and open a new terminal.
+`fam draft edit` isn't offered over MCP or in the desktop app, since it
+needs a person at a terminal; agents use `--markdown` on the other
+compose commands instead.
