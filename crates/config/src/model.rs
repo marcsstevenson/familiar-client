@@ -41,6 +41,9 @@ pub struct Config {
     /// An AI tool on this computer that finds events in emails.
     #[serde(default)]
     pub ai: Ai,
+    /// Scripts famd runs when something happens, such as new mail.
+    #[serde(default)]
+    pub hooks: Vec<Hook>,
 }
 
 /// `[app]`.
@@ -286,6 +289,39 @@ pub enum RuleRun {
     /// Runs in Familiar, only while the app or daemon is running.
     Local,
 }
+
+/// One `[[hooks]]` entry: a command famd runs when an event happens.
+///
+/// The command line goes to the system shell (`sh -c`, or `cmd /C` on
+/// Windows). The event is passed as one line of JSON on stdin and in
+/// `FAMILIAR_*` environment variables, never pasted into the command line.
+#[derive(Debug, Clone, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct Hook {
+    /// A name for log lines. Defaults to `hooks[<n>]`.
+    pub name: Option<String>,
+    /// The event: `new_mail`.
+    pub on: String,
+    /// Only messages this search matches (`fam mail search` syntax), for
+    /// example `from:club`. Default: every new message.
+    #[serde(default, rename = "match")]
+    pub matches: Option<String>,
+    /// The command line to run.
+    pub run: String,
+    /// Off hooks are kept but not run.
+    #[serde(default = "default_true")]
+    pub enabled: bool,
+    /// How long the command may run before it is stopped.
+    #[serde(default = "default_hook_timeout")]
+    pub timeout_seconds: u32,
+}
+
+fn default_hook_timeout() -> u32 {
+    60
+}
+
+/// The events a hook can be for.
+pub const HOOK_EVENTS: &[&str] = &["new_mail"];
 
 /// `[ai]`: an AI command-line tool the user already has (`claude`,
 /// `codex`) that `fam cal propose` asks for the events in an email. Off

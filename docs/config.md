@@ -38,6 +38,7 @@ Your own config has your signatures in it, so keep it in a private repo, not in 
 | `[sync]` | `window` (`1y`), `headers` (`all`), `older_bodies` (`on-demand`, `none`), `cache_limit` (`2GB`), `attachments` (`on-demand`, `window`) |
 | `[[views]]` | `name`, `query` |
 | `[[rules]]` | `name`, `account`, `run` (`server`, `local`), `enabled` (default true), `when`, `then`. Conditions and actions are checked by the rules engine later. |
+| `[[hooks]]` | `name`, `on` (`new_mail`), `match` (a search; default every new message), `run` (a command line), `enabled` (default true), `timeout_seconds` (`60`). See [hooks.md](hooks.md). |
 | `[keys]` | `<action> = "<key>"` |
 | `[agent]` | `allow` (default `["read", "draft"]`; may add `write`) |
 | `[ai]` | `enabled` (default `false`), `tool` (`auto`, `claude`, `codex`, `none` or a path), `model`, `timeout_seconds` (`90`), `accounts`. See [ai.md](ai.md). |
