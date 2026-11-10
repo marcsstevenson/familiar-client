@@ -43,8 +43,9 @@ fn query(c: &Connection, sql: &str, p: impl rusqlite::Params) -> Result<Vec<Snoo
 const COLS: &str = "SELECT message_id, until, return_folder_id FROM snoozes";
 
 impl WriteTx<'_> {
-    /// Snoozes `message` until `until`. Snoozing again only moves the time,
-    /// keeping the folder it goes back to.
+    /// Snoozes `message` until `until`. Snoozing again with no
+    /// `return_folder` (from inside Snoozed) only moves the time; with one
+    /// (it was moved out and snoozed from there) it goes back there instead.
     pub fn set_snooze(
         &self,
         message: MessageId,
@@ -54,7 +55,8 @@ impl WriteTx<'_> {
         self.tx.execute(
             "INSERT INTO snoozes (message_id, until, return_folder_id, created_at)
              VALUES (?1, ?2, ?3, ?4)
-             ON CONFLICT (message_id) DO UPDATE SET until = excluded.until",
+             ON CONFLICT (message_id) DO UPDATE SET until = excluded.until,
+               return_folder_id = coalesce(excluded.return_folder_id, return_folder_id)",
             params![message, until, return_folder, now()],
         )?;
         Ok(())
@@ -151,6 +153,19 @@ mod tests {
                 return_folder: Some(inbox)
             }]
         );
+        // Snoozed again from another folder: it goes back there.
+        w.write(|t| {
+            let other = t.upsert_folder(&NewFolder {
+                account: t.message(m)?.unwrap().account,
+                remote_id: "archive".into(),
+                name: "Archive".into(),
+                ..Default::default()
+            })?;
+            t.set_snooze(m, 200, Some(other))?;
+            assert_eq!(t.snooze(m)?.unwrap().return_folder, Some(other));
+            t.set_snooze(m, 200, Some(inbox))
+        })
+        .unwrap();
         assert!(w.write(|t| t.due_snoozes(199)).unwrap().is_empty());
         assert_eq!(w.write(|t| t.due_snoozes(200)).unwrap().len(), 1);
         assert!(w.write(|t| t.take_snooze(m)).unwrap().is_some());
