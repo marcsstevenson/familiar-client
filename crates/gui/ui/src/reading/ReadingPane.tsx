@@ -141,7 +141,12 @@ export function ReadingPane() {
         when={view()}
         fallback={
           <div class="pane-empty">
-            {error() ?? (selectedMessage() === null ? "Select a message to read it" : "")}
+            <Show when={!error() && selectedMessage() === null} fallback={error() ?? ""}>
+              <div class="reading-empty">
+                <span class="reading-empty-kea" aria-hidden="true" />
+                Select a message to read it
+              </div>
+            </Show>
           </div>
         }
       >

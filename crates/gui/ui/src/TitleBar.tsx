@@ -4,6 +4,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { isCommandError } from "./api";
+import keaUrl from "./assets/kea.svg";
 import { openCompose } from "./compose/spec";
 import { notify } from "./state";
 import { cycleTheme, theme } from "./theme";
@@ -21,6 +22,7 @@ export function TitleBar(props: { platform: string; title?: string }) {
   const mac = () => props.platform === "macos";
   return (
     <header class="titlebar" classList={{ mac: mac() }} data-tauri-drag-region>
+      <img class="titlebar-icon" src={keaUrl} alt="" data-tauri-drag-region />
       <span class="titlebar-name" data-tauri-drag-region>
         {props.title ?? "Familiar"}
       </span>

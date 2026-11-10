@@ -45,6 +45,11 @@ button {
 .titlebar.mac {
   padding-left: 80px; /* room for the traffic lights */
 }
+.titlebar-icon {
+  width: 18px;
+  height: 18px;
+  margin-right: var(--space-2);
+}
 .titlebar-name {
   font-weight: 600;
   font-size: var(--text-sm);
@@ -127,6 +132,23 @@ button {
   display: grid;
   place-items: center;
   color: var(--text-muted);
+}
+.reading-empty {
+  display: grid;
+  justify-items: center;
+  gap: var(--space-4);
+}
+/* The kea as a flat silhouette: black on light, muted text colour on dark
+   (black would vanish there). The SVG is only the mask. */
+.reading-empty-kea {
+  width: 96px;
+  height: 96px;
+  background: #000;
+  -webkit-mask: url("../assets/kea-mono.svg") center / contain no-repeat;
+  mask: url("../assets/kea-mono.svg") center / contain no-repeat;
+}
+:root[data-theme="dark"] .reading-empty-kea {
+  background: var(--text-muted);
 }
 
 /* Status bar */
