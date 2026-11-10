@@ -71,6 +71,7 @@ Actions and their default keys (`ui/src/actions/builtin.ts`):
 | --- | --- | --- | --- |
 | `palette` | Ctrl+K | | Show all commands |
 | `next`, `previous` | `j`, `k` | arrows (in the list) | Move through the list |
+| `close` | Esc | | Close the open message (dialogs, menus and the search box keep their own Esc) |
 | `archive` | `e` | Backspace | `fam mail archive` |
 | `process` | (none; set one in `[keys]`) | | `fam mail process` |
 | `delete` | `#` | Delete, Ctrl+D | `fam mail delete` |

@@ -1,7 +1,7 @@
 // The built-in actions. The message actions run the same registry commands as
 // `fam`, on the selected message.
 import { isCommandError, run } from "../api";
-import { listNav, notify, processMessage, processedFolders, readingFrom, removeFromList, selectedMessage, selectedRow, setEventDialog } from "../state";
+import { listNav, notify, processMessage, processedFolders, readingFrom, removeFromList, selectedMessage, selectedRow, setEventDialog, setSelectedMessage } from "../state";
 import { searchFocus } from "../list/SearchBar";
 import { cycleTheme } from "../theme";
 import { openCompose } from "../compose/spec";
@@ -32,6 +32,17 @@ export function registerBuiltinActions(openPalette: (prefill?: string) => void):
   registerAction({ id: "palette", title: "Show all commands", key: "Ctrl+K", run: () => openPalette() });
   registerAction({ id: "next", title: "Next message", key: "j", run: () => listNav.move(1) });
   registerAction({ id: "previous", title: "Previous message", key: "k", run: () => listNav.move(-1) });
+  // Dialogs, menus, search and other inputs keep Esc for themselves
+  // (onGlobalKey skips them), so here it only closes the open message.
+  registerAction({
+    id: "close",
+    title: "Close the message",
+    key: "Escape",
+    enabled: hasMessage,
+    run: () => {
+      setSelectedMessage(null);
+    },
+  });
   registerAction({
     id: "archive",
     title: "Archive",
