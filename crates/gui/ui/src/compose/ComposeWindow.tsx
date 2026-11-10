@@ -58,7 +58,11 @@ export function ComposeWindow(props: { info: UiInfo; spec: ComposeSpec }) {
   const [problem, setProblem] = createSignal<string | null>(null);
   const [dropping, setDropping] = createSignal(false);
   const [outside, setOutside] = createSignal<string | null>(null);
-  const [sending, setSending] = createSignal<{ op: number; at: number } | null>(null);
+  const [sending, setSending] = createSignal<{ op: number; at: number; later?: Date } | null>(null);
+  const [laterOpen, setLaterOpen] = createSignal(false);
+  const [laterText, setLaterText] = createSignal("");
+  // A send-later time waiting on the outside-recipients question.
+  let pendingAt: Date | undefined;
   const [now, setNow] = createSignal(Date.now());
   // A save is waiting on the engine: the From account can't change under it.
   const [inFlight, setInFlight] = createSignal(false);
@@ -356,8 +360,10 @@ export function ComposeWindow(props: { info: UiInfo; spec: ComposeSpec }) {
 
   // --- sending --------------------------------------------------------------
 
-  async function send(opts: { yes?: boolean } = {}) {
+  async function send(opts: { yes?: boolean; at?: Date } = {}) {
     setProblem(null);
+    setLaterOpen(false);
+    pendingAt = opts.at;
     if (to().length + cc().length + bcc().length === 0) {
       setProblem("Add someone to send it to");
       return;
@@ -373,10 +379,11 @@ export function ComposeWindow(props: { info: UiInfo; spec: ComposeSpec }) {
         draft: draftId()!,
         yes: opts.yes ?? false,
         ...(remindDays() > 0 ? { remind_days: remindDays() } : {}),
+        ...(opts.at ? { at: opts.at.toISOString() } : {}),
       });
       const op = out.ops.find((o) => o.kind === "send_draft");
       if (op?.id && op.not_before) {
-        setSending({ op: op.id, at: Date.parse(op.not_before) });
+        setSending({ op: op.id, at: Date.parse(op.not_before), later: opts.at });
       } else {
         await finish();
       }
@@ -394,7 +401,25 @@ export function ComposeWindow(props: { info: UiInfo; spec: ComposeSpec }) {
     setCc([]);
     setShowBcc(true);
     touch("to", "cc", "bcc");
-    await send();
+    await send({ at: pendingAt });
+  }
+
+  /** Send later: the server holds it and sends it at `at`, even with the PC off. */
+  function sendLater(at: Date) {
+    if (!(at.getTime() > Date.now() + 60_000)) {
+      setProblem("Pick a time at least a minute from now");
+      return;
+    }
+    void send({ at });
+  }
+
+  function sendLaterTyped() {
+    const t = laterText();
+    if (!t) {
+      setProblem("Pick a date and time");
+      return;
+    }
+    sendLater(new Date(t));
   }
 
   async function undoSend() {
@@ -403,7 +428,7 @@ export function ComposeWindow(props: { info: UiInfo; spec: ComposeSpec }) {
     try {
       await run("ops.cancel", { id: s.op });
       setSending(null);
-      setStatus("Not sent; the draft is still in Drafts");
+      setStatus(s.later ? "Not scheduled; the draft is still in Drafts" : "Not sent; the draft is still in Drafts");
     } catch (e) {
       setProblem(`Too late to undo: ${errorText(e)}`);
     }
@@ -497,6 +522,9 @@ export function ComposeWindow(props: { info: UiInfo; spec: ComposeSpec }) {
         <div class="compose-actions">
           <button type="button" class="primary" disabled={busy() || !!fatal()} onClick={() => void send()} title="Send (Ctrl+Enter)">
             Send
+          </button>
+          <button type="button" disabled={busy() || !!fatal()} onClick={() => setLaterOpen(!laterOpen())} title="Send later: the server sends it at the time you pick, even with this PC off" aria-expanded={laterOpen()}>
+            Later…
           </button>
           <button type="button" disabled={busy() || !!fatal()} onClick={() => void pickFiles().then((f) => addFiles(f))} title="Attach files">
             Attach
@@ -619,6 +647,22 @@ export function ComposeWindow(props: { info: UiInfo; spec: ComposeSpec }) {
           <div class="drop-hint" aria-hidden="true">Drop on the text to put a picture in it, anywhere else to attach</div>
         </Show>
 
+        <Show when={laterOpen()}>
+          <div class="compose-dialog compose-later" role="dialog" aria-label="Send later">
+            <p>Send later. The server holds it and sends it then, even with this PC off.</p>
+            <div class="compose-dialog-buttons">
+              <For each={laterChoices()}>
+                {(c) => <button type="button" onClick={() => sendLater(c.at)}>{c.label}</button>}
+              </For>
+            </div>
+            <div class="compose-dialog-buttons">
+              <input type="datetime-local" aria-label="Date and time" value={laterText()} onInput={(e) => setLaterText(e.currentTarget.value)} />
+              <button type="button" class="primary" onClick={sendLaterTyped}>Schedule</button>
+              <button type="button" onClick={() => setLaterOpen(false)}>Cancel</button>
+            </div>
+          </div>
+        </Show>
+
         <Show when={outside()}>
           {(m) => (
             <div class="compose-dialog" role="alertdialog" aria-label="Outside recipients">
@@ -626,7 +670,7 @@ export function ComposeWindow(props: { info: UiInfo; spec: ComposeSpec }) {
               <p>Put them in Bcc so they can't see each other's addresses?</p>
               <div class="compose-dialog-buttons">
                 <button type="button" class="primary" onClick={() => void moveToBcc()}>Move to Bcc and send</button>
-                <button type="button" onClick={() => { setOutside(null); void send({ yes: true }); }}>Send anyway</button>
+                <button type="button" onClick={() => { setOutside(null); void send({ yes: true, at: pendingAt }); }}>Send anyway</button>
                 <button type="button" onClick={() => setOutside(null)}>Cancel</button>
               </div>
             </div>
@@ -637,7 +681,10 @@ export function ComposeWindow(props: { info: UiInfo; spec: ComposeSpec }) {
         <Show when={sending()} fallback={<span classList={{ warn: !!problem() }}>{problem() ?? status() ?? ""}</span>}>
           {(s) => (
             <>
-              <span>Sending in {Math.max(0, Math.ceil((s().at - now()) / 1000))} s</span>
+              <span>
+                {s().later ? `Scheduling for ${whenLabel(s().later!)} in ` : "Sending in "}
+                {Math.max(0, Math.ceil((s().at - now()) / 1000))} s
+              </span>
               <button type="button" class="link" onClick={() => void undoSend()}>Undo</button>
             </>
           )}
@@ -647,4 +694,26 @@ export function ComposeWindow(props: { info: UiInfo; spec: ComposeSpec }) {
       </footer>
     </div>
   );
+}
+
+/** The quick send-later choices: in an hour, tomorrow 8am, Monday 8am. */
+function laterChoices(): { label: string; at: Date }[] {
+  const now = new Date();
+  const at8 = (days: number) => {
+    const d = new Date(now);
+    d.setDate(d.getDate() + days);
+    d.setHours(8, 0, 0, 0);
+    return d;
+  };
+  const toMonday = ((8 - now.getDay()) % 7) || 7;
+  const out = [
+    { label: "In 1 hour", at: new Date(now.getTime() + 3_600_000) },
+    { label: "Tomorrow 8am", at: at8(1) },
+  ];
+  if (toMonday > 1) out.push({ label: "Monday 8am", at: at8(toMonday) });
+  return out;
+}
+
+function whenLabel(d: Date): string {
+  return d.toLocaleString(undefined, { weekday: "short", day: "numeric", month: "short", hour: "numeric", minute: "2-digit" });
 }

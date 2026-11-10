@@ -300,3 +300,10 @@
 .compose .statusbar {
   gap: var(--space-3);
 }
+.compose-later .compose-dialog-buttons + .compose-dialog-buttons {
+  margin-top: var(--space-4);
+}
+.compose-later input[type="datetime-local"] {
+  flex: 1;
+  min-width: 0;
+}

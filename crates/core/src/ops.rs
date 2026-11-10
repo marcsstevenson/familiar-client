@@ -132,6 +132,10 @@ pub enum OpPayload {
         /// lost answer from a refusal on a retry.
         #[serde(default)]
         internet_message_id: Option<String>,
+        /// Send later: the server holds the message until this time (Unix
+        /// seconds) and sends it then, so it goes even with this PC off.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        send_at: Option<i64>,
     },
     /// Create an event (or a recurring series).
     CreateEvent(EventOp),
@@ -369,6 +373,9 @@ pub enum WriteRequest {
         send: bool,
         /// Undo-send delay in seconds.
         send_delay_secs: u32,
+        /// Send later: when the server should send it (Unix seconds).
+        #[serde(default)]
+        send_at: Option<i64>,
     },
     /// Change a draft.
     DraftUpdate {
@@ -398,6 +405,9 @@ pub enum WriteRequest {
         message: i64,
         /// Undo-send delay in seconds.
         delay_secs: u32,
+        /// Send later: when the server should send it (Unix seconds).
+        #[serde(default)]
+        send_at: Option<i64>,
     },
     /// Add an event.
     EventCreate {
@@ -509,6 +519,9 @@ pub struct QueuedOp {
     /// When it is due to go (RFC 3339), if held back by the undo-send delay.
     #[serde(default)]
     pub not_before: Option<String>,
+    /// Send later: when the server is to send the message (RFC 3339).
+    #[serde(default)]
+    pub send_at: Option<String>,
 }
 
 /// What a write did.
@@ -738,6 +751,23 @@ fn pick_account(
             }
         }
     }
+}
+
+/// A send-later op's time, RFC 3339.
+fn send_at_of(p: &OpPayload) -> Option<String> {
+    match p {
+        OpPayload::SendDraft {
+            send_at: Some(t), ..
+        } => Some(crate::commands::auth::rfc3339((*t).max(0) as u64)),
+        _ => None,
+    }
+}
+
+/// ` at <time>` for a send-later summary (UTC, as the queue shows times).
+fn later(send_at: Option<i64>) -> String {
+    send_at.map_or_else(String::new, |t| {
+        format!(" at {}", crate::commands::auth::rfc3339(t.max(0) as u64))
+    })
 }
 
 fn short(s: &str) -> String {
@@ -1154,6 +1184,7 @@ pub fn plan(tx: &WriteTx<'_>, req: &WriteRequest) -> Result<Vec<Planned>, Comman
             draft,
             send,
             send_delay_secs,
+            send_at,
         } => {
             let a = match draft.respond_to {
                 Some(id) => {
@@ -1195,13 +1226,15 @@ pub fn plan(tx: &WriteTx<'_>, req: &WriteRequest) -> Result<Vec<Planned>, Comman
                     account: a.id,
                     account_key: a.key.clone(),
                     summary: format!(
-                        "send {:?} to {}",
+                        "send {:?} to {}{}",
                         short(&op.subject),
-                        who(&op.to, &op.cc, &op.bcc)
+                        who(&op.to, &op.cc, &op.bcc),
+                        later(*send_at)
                     ),
                     payload: OpPayload::SendDraft {
                         message: 0,
                         internet_message_id: None,
+                        send_at: *send_at,
                     },
                 });
             }
@@ -1248,6 +1281,7 @@ pub fn plan(tx: &WriteTx<'_>, req: &WriteRequest) -> Result<Vec<Planned>, Comman
         WriteRequest::Send {
             message,
             delay_secs,
+            send_at,
         } => {
             let m = need_draft(tx, *message)?;
             if m.to.is_empty() && m.cc.is_empty() {
@@ -1276,10 +1310,16 @@ pub fn plan(tx: &WriteTx<'_>, req: &WriteRequest) -> Result<Vec<Planned>, Comman
                 delay_secs: *delay_secs,
                 account: m.account,
                 account_key: key_of(m.account),
-                summary: format!("send {:?} to {}", short(&m.subject), who(&to, &[], &[])),
+                summary: format!(
+                    "send {:?} to {}{}",
+                    short(&m.subject),
+                    who(&to, &[], &[]),
+                    later(*send_at)
+                ),
                 payload: OpPayload::SendDraft {
                     message: *message,
                     internet_message_id: None,
+                    send_at: *send_at,
                 },
             });
         }
@@ -2014,6 +2054,7 @@ pub fn submit(
                 error: None,
                 item: None,
                 not_before: due,
+                send_at: send_at_of(&p.payload),
             });
             continue;
         }
@@ -2070,6 +2111,7 @@ pub fn submit(
             error: None,
             item,
             not_before: due,
+            send_at: send_at_of(&p.payload),
         });
     }
     Ok(WriteOutput {

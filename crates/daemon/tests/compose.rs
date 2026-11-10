@@ -176,7 +176,7 @@ async fn drafts_replies_and_sending() {
 
     // Send it now: it moves to Sent Items and, being to me, arrives in the Inbox.
     let p = env.paths.clone();
-    let sent = blocking(move || send_at(&p, draft, true, false, &settings(), &waiting()))
+    let sent = blocking(move || send_at(&p, draft, true, false, None, &settings(), &waiting()))
         .await
         .unwrap();
     assert_eq!(sent.ops[0].state, "done", "{sent:?}");
@@ -430,4 +430,52 @@ async fn undo_send_and_offline_outbox() {
     .unwrap_err();
     assert_eq!(err.kind, familiar_core::ErrorKind::Usage);
     env.stop().await;
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn send_later_sets_the_deferred_send_time() {
+    let mut env = Env::new(40).await;
+    env.start(policy());
+    env.until("first sync", LIMIT, |e| e.settled(30)).await;
+    let at = 1_900_000_000; // 2030-03-17T17:46:40Z
+    let out = compose(
+        &env,
+        ComposeArgs {
+            to: vec![ME.into()],
+            subject: Some("Familiar Test later".into()),
+            body: Some("hi".into()),
+            send_at: Some(at),
+            ..ComposeArgs::default()
+        },
+        Some((true, false)),
+        waiting(),
+    )
+    .await
+    .unwrap();
+    let send = out.ops.iter().find(|o| o.kind == "send_draft").unwrap();
+    assert_eq!(send.state, "done", "{out:?}");
+    assert_eq!(send.send_at.as_deref(), Some("2030-03-17T17:46:40Z"));
+    assert!(
+        send.summary.ends_with(" at 2030-03-17T17:46:40Z"),
+        "{send:?}"
+    );
+
+    // The draft is stamped with PidTagDeferredSendTime, then sent.
+    let reqs = env.mock.requests();
+    let patch = reqs
+        .iter()
+        .position(|r| r.method == "PATCH" && r.body.contains("0x3FEF"))
+        .expect("deferred send PATCH");
+    assert!(
+        reqs[patch]
+            .body
+            .contains("\"value\":\"2030-03-17T17:46:40Z\""),
+        "{}",
+        reqs[patch].body
+    );
+    let send_post = reqs
+        .iter()
+        .position(|r| r.method == "POST" && r.path.ends_with("/send"))
+        .expect("send");
+    assert!(patch < send_post);
 }

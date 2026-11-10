@@ -864,6 +864,22 @@ pub fn check_outside(
     Ok(())
 }
 
+/// The draft PATCH that holds a message on the server until `at` (Unix
+/// seconds) when it is sent: MAPI `PidTagDeferredSendTime`, which Graph
+/// exposes only as an extended property. Exchange keeps the message and sends
+/// it at that time itself; a time already past sends at once.
+pub fn deferred_send_json(at: i64) -> serde_json::Value {
+    let when = chrono::DateTime::<chrono::Utc>::from_timestamp(at, 0)
+        .unwrap_or_default()
+        .format("%Y-%m-%dT%H:%M:%SZ")
+        .to_string();
+    serde_json::json!({
+        "singleValueExtendedProperties": [
+            {"id": "SystemTime 0x3FEF", "value": when}
+        ]
+    })
+}
+
 #[cfg(test)]
 mod tests {
 

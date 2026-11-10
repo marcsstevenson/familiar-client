@@ -18,7 +18,9 @@
 use std::sync::Arc;
 use std::time::Duration;
 
-use familiar_core::compose::{AttachmentData, DraftOp, DraftUpdateOp, Recipient, ResponseKind};
+use familiar_core::compose::{
+    self, AttachmentData, DraftOp, DraftUpdateOp, Recipient, ResponseKind,
+};
 use familiar_core::events::{self, EventOp};
 use familiar_core::ops::{OpPayload, OpResult, finish_local, undo_local};
 use familiar_provider_graph::{CalendarApi, Error as GraphError, GraphEvent, MailApi, Priority};
@@ -391,6 +393,7 @@ impl OpRunner {
             OpPayload::SendDraft {
                 message,
                 internet_message_id,
+                ..
             } => {
                 let remote = self.message_remote(*message)?;
                 if internet_message_id.is_none() {
@@ -406,11 +409,18 @@ impl OpRunner {
                 }
                 let OpPayload::SendDraft {
                     internet_message_id,
+                    send_at,
                     ..
                 } = &*p
                 else {
                     unreachable!()
                 };
+                if let Some(at) = send_at {
+                    // Send later: the server holds the message until then
+                    // (PidTagDeferredSendTime) and sends it itself.
+                    api.update_draft(&remote, &compose::deferred_send_json(*at), pr)
+                        .await?;
+                }
                 match api.send_draft(&remote, pr).await {
                     Err(GraphError::NotFound(e)) => {
                         // Gone: sent by a try whose answer was lost, or
