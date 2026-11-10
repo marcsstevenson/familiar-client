@@ -257,7 +257,8 @@ impl GraphClient {
 
     /// One request with retries, as [`GraphClient::get`] describes. A write
     /// is retried only on answers that mean Graph did not act on it (429,
-    /// 503 with `Retry-After`, 401 before the refresh).
+    /// 503 with `Retry-After`, 401 before the refresh); a read also on a 504
+    /// or a 503 without `Retry-After`.
     pub async fn request(
         &self,
         method: Method,
@@ -323,7 +324,15 @@ impl GraphClient {
                 }
                 StatusCode::TOO_MANY_REQUESTS
                 | StatusCode::SERVICE_UNAVAILABLE
-                | StatusCode::GATEWAY_TIMEOUT => {
+                | StatusCode::GATEWAY_TIMEOUT
+                    if method == Method::GET
+                        || status == StatusCode::TOO_MANY_REQUESTS
+                        || (status == StatusCode::SERVICE_UNAVAILABLE && retry_after.is_some()) =>
+                {
+                    // A 504, or a 503 without Retry-After, can come after
+                    // Graph acted on a write, so only reads repeat on those
+                    // here. A write's error goes back to its op, which waits
+                    // and checks what it can (a send looks in Sent Items).
                     if attempt >= self.inner.opts.max_attempts {
                         return Err(Error::Throttled {
                             attempts: attempt,

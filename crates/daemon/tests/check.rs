@@ -14,6 +14,7 @@ use familiar_core::commands::sync::render_check;
 use familiar_core::daemon::{
     CHECK_TIMEOUT, CheckParams, CheckReport, Client, DriftKind, METHOD_CHECK,
 };
+use familiar_daemon::policy::SyncPolicy;
 use familiar_mock_graph::{EmailAddress, Message};
 use familiar_provider_graph::GraphMessage;
 use familiar_store::{BodyRef, Cursor, NewFolder};
@@ -34,7 +35,12 @@ fn kinds(r: &CheckReport) -> BTreeMap<DriftKind, usize> {
 
 async fn synced(messages: usize) -> Env {
     let mut env = Env::new(messages).await;
-    env.start(fast_policy());
+    // Ageing only at start: the drift test plants an old body that the
+    // hourly ageing would otherwise tidy away before the check sees it.
+    env.start(SyncPolicy {
+        ageing_interval: Duration::from_secs(3600),
+        ..fast_policy()
+    });
     env.until("first sync", LIMIT, |e| e.settled(30)).await;
     env
 }
