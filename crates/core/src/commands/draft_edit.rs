@@ -153,7 +153,7 @@ impl Written {
         let text = text.trim_start_matches('\u{feff}').replace("\r\n", "\n");
         let (head, body) = text.split_once("\n\n").unwrap_or((text.as_str(), ""));
         let mut w = Written {
-            body: body.trim().to_string(),
+            body: body.trim_start_matches('\n').trim_end().to_string(),
             ..Self::default()
         };
         for line in head.lines().filter(|l| !l.trim().is_empty()) {
@@ -505,6 +505,12 @@ mod tests {
         assert_eq!(w.to, "a@x.test");
         assert_eq!(w.subject, "S");
         assert_eq!(w.body, "Body\nmore");
+    }
+
+    #[test]
+    fn leading_indentation_is_kept() {
+        let w = Written::parse("To: a@x.test\n\n    let x = 1;\n").unwrap();
+        assert_eq!(w.body, "    let x = 1;");
     }
 
     #[test]
