@@ -2,7 +2,7 @@
 // component asks for the rows on screen a page at a time and draws only those.
 import { For, Show, createEffect, createSignal, on, onCleanup, onMount } from "solid-js";
 import { isCommandError, run } from "../api";
-import { followUpView, listNav, processMessage, processedFolders, removeFromList, setDragged, searchQuery, selectedFolder, selectedMessage, setSelectedMessage, setSelectedRow } from "../state";
+import { followUpView, leavingRows, listNav, processMessage, processedFolders, removeFromList, setDragged, searchQuery, selectedFolder, selectedMessage, setSelectedMessage, setSelectedRow } from "../state";
 import { OnlineHits, SearchBar } from "./SearchBar";
 import { type Row, type Sort, listIndexOf, listOpen, listRows, onStoreChanged } from "./api";
 import { shortDate, snoozeLabel } from "./format";
@@ -30,6 +30,10 @@ export function MessageList() {
   const [error, setError] = createSignal<string | null>(null);
   const [rev, setRev] = createSignal(0);
   const [notices, setNotices] = createSignal<string[]>([]);
+  // After a row has faded out (see leavingRows), the rows from this index down
+  // slide up into its place.
+  const [shiftFrom, setShiftFrom] = createSignal<number | null>(null);
+  let shiftTimer: ReturnType<typeof setTimeout> | undefined;
   // The message whose context menu is open, and where.
   const [menu, setMenu] = createSignal<{ row: Row; x: number; y: number } | null>(null);
   // On the listbox, where focus is: a right click opens the menu for the row
@@ -112,8 +116,16 @@ export function MessageList() {
           if (g !== gen) return;
         }
       }
+      const shift = keepScroll ? closedGap(pages, fresh) : null;
       pages = fresh;
       inflight = new Map();
+      if (shift !== null) {
+        // Set with the new rows, so no frame shows them in place first.
+        clearTimeout(shiftTimer);
+        setShiftFrom(shift);
+        setRev((x) => x + 1);
+        shiftTimer = setTimeout(() => setShiftFrom(null), 200);
+      }
       setTotal(n);
       if (!keepScroll) {
         scroller.scrollTop = 0;
@@ -145,6 +157,21 @@ export function MessageList() {
       setTotal(0);
       setError(isCommandError(e) ? e.message : String(e));
     }
+  }
+
+  /** The index of a leaving row that the refresh has taken out, when every
+   * row after it on screen moved up by one; null otherwise (no animation). */
+  function closedGap(before: Map<number, Row[]>, after: Map<number, Row[]>): number | null {
+    const leaving = leavingRows();
+    if (leaving.size === 0) return null;
+    const at = (m: Map<number, Row[]>, i: number) => m.get(Math.floor(i / PAGE))?.[i % PAGE];
+    for (const i of visible()) {
+      const was = at(before, i);
+      if (!was || !leaving.has(was.id)) continue;
+      const next = at(before, i + 1);
+      return next === undefined || at(after, i)?.id === next.id ? i : null;
+    }
+    return null;
   }
 
   /** Pages covering the rows on screen plus the overscan. */
@@ -312,7 +339,7 @@ export function MessageList() {
         </Show>
         <div class="list-spacer" style={{ height: `${total() * ROW_H}px` }}>
           <For each={visible()}>
-            {(i) => <ListRow index={i} row={rowAt(i)} selected={selIndex() === i} onSelect={select} unified={selectedFolder() === null || searchQuery() !== null || followUpView()} />}
+            {(i) => <ListRow index={i} row={rowAt(i)} selected={selIndex() === i} shifting={(shiftFrom() ?? Infinity) <= i} onSelect={select} unified={selectedFolder() === null || searchQuery() !== null || followUpView()} />}
           </For>
         </div>
       </div>
@@ -328,6 +355,7 @@ function ListRow(props: {
   index: number;
   row: Row | undefined;
   selected: boolean;
+  shifting: boolean;
   unified: boolean;
   onSelect: (i: number) => void;
 }) {
@@ -335,7 +363,12 @@ function ListRow(props: {
     <div
       id={`msg-${props.index}`}
       class="list-row"
-      classList={{ selected: props.selected, unread: props.row ? !props.row.is_read : false }}
+      classList={{
+        selected: props.selected,
+        unread: props.row ? !props.row.is_read : false,
+        leaving: props.row ? leavingRows().has(props.row.id) : false,
+        "shift-up": props.shifting,
+      }}
       role="option"
       aria-selected={props.selected}
       style={{ transform: `translateY(${props.index * ROW_H}px)` }}

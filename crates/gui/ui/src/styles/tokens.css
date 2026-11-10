@@ -25,6 +25,8 @@
   --list-w: 400px;
 
   --duration-fast: 80ms;
+  --duration-base: 120ms;
+  --duration-slow: 180ms;
 }
 
 :root,

@@ -91,7 +91,7 @@ export function App(props: { info: UiInfo }) {
             </button>
           </span>
         </Show>
-        <Show when={notice()}>{(n) => <span classList={{ warn: n().error }}>{n().text}</span>}</Show>
+        <Show when={notice()}>{(n) => <span class="statusbar-notice" classList={{ warn: n().error }}>{n().text}</span>}</Show>
         <span class="statusbar-spacer" />
         <span>Familiar {props.info.version}</span>
       </footer>

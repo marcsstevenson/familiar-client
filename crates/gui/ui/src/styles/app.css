@@ -510,7 +510,9 @@ button {
 .list-scroller:focus .list-row.selected {
   background: var(--bg-selected);
 }
-.list-row.unread::before {
+/* The unread dot: on every row, shown on unread ones. It shrinks away when
+   a message is read and appears at once when one is marked unread. */
+.list-row::before {
   content: "";
   position: absolute;
   left: 6px;
@@ -519,6 +521,31 @@ button {
   height: 6px;
   border-radius: 50%;
   background: var(--accent);
+  opacity: 0;
+  scale: 0;
+  transition: opacity var(--duration-base) ease-out, scale var(--duration-base) ease-out;
+}
+.list-row.unread::before {
+  opacity: 1;
+  scale: 1;
+  transition: none;
+}
+/* Deleted, archived or moved: fades out to the left while the command runs
+   (removeFromList waits this long), then the rows below slide up into its
+   place. `translate` is separate from the row's own `transform`. */
+.list-row.leaving {
+  opacity: 0;
+  translate: -24px 0;
+  pointer-events: none;
+  transition: opacity 140ms ease-out, translate 140ms ease-out;
+}
+.list-row.shift-up {
+  animation: row-shift-up var(--duration-slow) ease-out;
+}
+@keyframes row-shift-up {
+  from {
+    translate: 0 64px;
+  }
 }
 .row-line {
   display: flex;
@@ -800,4 +827,42 @@ button.link {
   text-transform: uppercase;
   color: var(--accent);
   font-weight: 600;
+}
+
+/* Menus and dialogs open with a short fade and a slight grow; their dimmed
+   backdrops fade in. `scale` leaves any `transform` the box has alone. */
+@keyframes pop-in {
+  from {
+    opacity: 0;
+    scale: 0.97;
+  }
+}
+@keyframes fade-in {
+  from {
+    opacity: 0;
+  }
+}
+.folder-menu {
+  transform-origin: top left;
+  animation: pop-in var(--duration-base) ease-out;
+}
+.palette,
+.folder-dialog,
+.compose-dialog {
+  animation: pop-in var(--duration-base) ease-out;
+}
+.palette-backdrop,
+.folder-menu-backdrop.modal,
+.statusbar-notice {
+  animation: fade-in var(--duration-base) ease-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
 }

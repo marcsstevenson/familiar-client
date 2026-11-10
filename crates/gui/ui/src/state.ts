@@ -3,6 +3,7 @@
 // these signals.
 import { createSignal } from "solid-js";
 import { type Commands, isCommandError, run } from "./api";
+import { refreshViews } from "./list/api";
 
 /** What `fam mail check-spam` gives. */
 export type SpamResult = Commands["mail.check-spam"]["output"];
@@ -37,15 +38,41 @@ export const listNav = {
   leaving: null as number | null,
 };
 
+/** Messages fading out of the list while the command that takes them out
+ * (delete, archive, move) runs. The list draws their rows as leaving. */
+export const [leavingRows, setLeavingRows] = createSignal<ReadonlySet<number>>(new Set());
+const setLeaving = (id: number, on: boolean) =>
+  setLeavingRows((s) => {
+    const next = new Set(s);
+    if (on) next.add(id);
+    else next.delete(id);
+    return next;
+  });
+
+/** How long a row takes to fade out; matches `.list-row.leaving` in app.css. */
+const LEAVE_MS = 140;
+const reducedMotion = () => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+
 /** Runs a command that takes message `id` out of the list (delete, archive,
- * move) and reports it in the status bar. If `id` is the open message, the
- * list opens the next one once the command has taken effect. */
+ * move) and reports it in the status bar. The row fades out while the command
+ * runs, then the list refreshes at once (the command has changed the store)
+ * rather than at its next poll. If `id` is the open message, the list opens
+ * the next one once the command has taken effect. */
 export async function removeFromList(id: number, label: string, job: () => Promise<unknown>): Promise<void> {
+  // Already on its way out (a second Delete press before the list moved on).
+  if (leavingRows().has(id)) return;
   if (id === selectedMessage()) listNav.leaving = id;
+  setLeaving(id, true);
+  const fade = new Promise((r) => setTimeout(r, reducedMotion() ? 0 : LEAVE_MS));
   try {
-    await job();
+    await Promise.all([job(), fade]);
     notify(label);
+    await refreshViews();
+    // The refresh has dropped the row by now; if not, it comes back until
+    // the next poll does.
+    setTimeout(() => setLeaving(id, false), 500);
   } catch (e) {
+    setLeaving(id, false);
     if (listNav.leaving === id) listNav.leaving = null;
     notify(isCommandError(e) ? e.message : String(e), true);
   }
