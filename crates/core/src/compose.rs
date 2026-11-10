@@ -50,7 +50,10 @@ impl Recipient {
         let ok = address
             .split_once('@')
             .is_some_and(|(l, d)| !l.is_empty() && d.contains('.') && !d.ends_with('.'))
-            && !address.contains(char::is_whitespace);
+            && !address.contains(char::is_whitespace)
+            // Graph reads `:` as group syntax and drops the address
+            // (`:marc@example.com` from a pasted "To:" line).
+            && !address.contains([':', '<', '>']);
         if !ok {
             return Err(CommandError::usage(format!("{s:?} isn't an email address")));
         }
@@ -946,6 +949,7 @@ mod tests {
         assert_eq!(Recipient::parse("a@b.co").unwrap().name, "");
         assert!(Recipient::parse("not an address").is_err());
         assert!(Recipient::parse("a@b").is_err());
+        assert!(Recipient::parse(":marc@example.com").is_err());
         let all = Recipient::parse_all(&["\"Doe, Pat\" <pat@example.com>; b@c.nz".into()]).unwrap();
         assert_eq!(all.len(), 2);
         assert_eq!(all[0].name, "Doe, Pat");

@@ -368,7 +368,7 @@ export function ComposeWindow(props: { info: UiInfo; spec: ComposeSpec }) {
       setProblem("Add someone to send it to");
       return;
     }
-    const bad = [...to(), ...cc(), ...bcc()].filter((r) => !/^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(addressOf(r)));
+    const bad = [...to(), ...cc(), ...bcc()].filter((r) => !/^[^\s@<>:]+@[^\s@<>:]+\.[^\s@<>:]+$/.test(addressOf(r)));
     if (bad.length) {
       setProblem(`Check ${bad.join(", ")}`);
       return;
