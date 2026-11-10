@@ -120,7 +120,10 @@ mod tests {
     #[test]
     fn fresh_store_gets_every_table() {
         let mut c = mem();
-        assert_eq!(migrate(&mut c, MIGRATIONS).unwrap(), vec![1, 2, 3, 4, 5, 6, 7]);
+        assert_eq!(
+            migrate(&mut c, MIGRATIONS).unwrap(),
+            vec![1, 2, 3, 4, 5, 6, 7]
+        );
         assert_eq!(version(&c).unwrap(), SCHEMA_VERSION);
         assert_eq!(
             tables(&c),

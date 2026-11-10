@@ -65,12 +65,16 @@ pub fn parse_until(s: &str, now: i64, zone: &str) -> Result<i64, CommandError> {
             "next week" => at(next(Weekday::Mon), MORNING),
             _ => {
                 let w = parse_when(&t, today, None).ok_or_else(bad)?;
-                let mut u = at(w.date, w.time.map_or(MORNING, |x| (x.hour(), x.minute())));
+                let time = w.time.map_or(MORNING, |x| (x.hour(), x.minute()));
+                let u = at(w.date, time);
                 let names_day = t.split_whitespace().next().and_then(parse_weekday);
                 if u <= now && names_day.is_some() {
-                    u += 7 * 86_400;
+                    // A week on by the calendar, so the clock time holds over
+                    // a daylight saving change.
+                    at(w.date + Duration::days(7), time)
+                } else {
+                    u
                 }
-                u
             }
         }
     };
@@ -393,6 +397,13 @@ mod tests {
         // Today's name with a time gone by: next week.
         assert_eq!(p("tue 9am"), local("2026-11-17 09:00"));
         assert_eq!(p("tue 11am"), local("2026-11-10 11:00"));
+        // Over the change to daylight saving (Auckland, 5 April 2026 back
+        // an hour): still 9 am.
+        let before = local("2026-03-31 10:00");
+        assert_eq!(
+            parse_until("tue 9am", before, Z).unwrap(),
+            local("2026-04-07 09:00")
+        );
         assert!(parse_until("9am", now, Z).is_err());
         assert!(parse_until("2026-11-01", now, Z).is_err());
         assert!(parse_until("someday", now, Z).is_err());

@@ -1688,6 +1688,39 @@ fn unix_now() -> i64 {
         .map_or(0, |d| d.as_secs() as i64)
 }
 
+/// A snooze changes its time even when nothing moves (the message is
+/// already in Snoozed), so an agent needs write access for it either way.
+fn snooze_denial(
+    tx: &WriteTx<'_>,
+    grants: &crate::agent::Grants,
+    req: &WriteRequest,
+) -> Result<Option<crate::agent::Denial>, CommandError> {
+    let ids = match req {
+        WriteRequest::Snooze { messages, .. } | WriteRequest::Unsnooze { messages, .. } => messages,
+        _ => return Ok(None),
+    };
+    let accounts = tx.accounts().map_err(store_err)?;
+    for id in ids {
+        let Some(m) = tx.message(MessageId(*id)).map_err(store_err)? else {
+            continue;
+        };
+        let key = accounts
+            .iter()
+            .find(|a| a.id == m.account)
+            .map(|a| a.key.clone())
+            .unwrap_or_default();
+        if !grants.allows(&key, crate::registry::Access::Write) {
+            return Ok(Some(crate::agent::Denial {
+                account: m.account,
+                account_key: key,
+                access: crate::registry::Access::Write,
+                summary: format!("{} {:?}", req.command(), short(&m.subject)),
+            }));
+        }
+    }
+    Ok(None)
+}
+
 /// Records or ends the snoozes a request makes, before its ops apply (a
 /// snooze notes the folder the message is in now).
 fn snooze_effects(tx: &WriteTx<'_>, req: &WriteRequest) -> Result<(), CommandError> {
@@ -1950,6 +1983,9 @@ pub fn submit(
     let planned = plan(tx, &params.request)?;
     if crate::agent::is_agent(&params.source) {
         if let Some(d) = crate::agent::check(tx, grants, &planned) {
+            return Err(d.error());
+        }
+        if let Some(d) = snooze_denial(tx, grants, &params.request)? {
             return Err(d.error());
         }
     }
