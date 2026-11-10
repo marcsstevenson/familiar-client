@@ -182,6 +182,9 @@ fn addresses(v: &[MailAddress]) -> String {
         .map(|a| {
             if a.name.is_empty() || a.name == a.addr {
                 a.addr.clone()
+            } else if a.name.contains([',', ';']) {
+                // "Doe, Jane" would otherwise split into two addresses.
+                format!("\"{}\" <{}>", a.name.replace('"', ""), a.addr)
             } else {
                 format!("{} <{}>", a.name, a.addr)
             }
@@ -258,16 +261,29 @@ fn edit_file(
     edit: &dyn Fn(&Path) -> Result<(), CommandError>,
 ) -> Result<(Written, PathBuf), CommandError> {
     let path = temp_path(draft);
-    std::fs::write(&path, w.to_file())
+    write_private(&path, &w.to_file())
         .map_err(|e| CommandError::new(ErrorKind::Config, format!("{}: {e}", path.display())))?;
-    if let Err(e) = edit(&path) {
-        let _ = std::fs::remove_file(&path);
-        return Err(e);
-    }
+    // The editor may have saved before failing, so keep the file.
+    edit(&path).map_err(|e| kept(&path, e))?;
     let text = std::fs::read_to_string(&path)
         .map_err(|e| CommandError::new(ErrorKind::Config, format!("{}: {e}", path.display())))?;
     let edited = Written::parse(&text).map_err(|e| kept(&path, CommandError::usage(e)))?;
     Ok((edited, path))
+}
+
+/// Creates `path` afresh, readable only by this user on Unix (the temp
+/// directory there is shared; on Windows it is the user's own).
+fn write_private(path: &Path, text: &str) -> std::io::Result<()> {
+    use std::io::Write;
+    let _ = std::fs::remove_file(path);
+    let mut o = std::fs::OpenOptions::new();
+    o.write(true).create_new(true);
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::OpenOptionsExt;
+        o.mode(0o600);
+    }
+    o.open(path)?.write_all(text.as_bytes())
 }
 
 /// `e`, saying that the text is still in `path`.
@@ -462,6 +478,24 @@ mod tests {
             body: "Line one\nline two\n\n**bold**".into(),
         };
         assert_eq!(Written::parse(&w.to_file()).unwrap(), w);
+    }
+
+    #[test]
+    fn names_with_commas_are_quoted() {
+        let line = addresses(&[
+            MailAddress {
+                name: "Doe, Jane".into(),
+                addr: "jane@x.test".into(),
+            },
+            MailAddress {
+                name: "Bo".into(),
+                addr: "bo@x.test".into(),
+            },
+        ]);
+        assert_eq!(line, "\"Doe, Jane\" <jane@x.test>, Bo <bo@x.test>");
+        let back = Recipient::parse_all(&[line]).unwrap();
+        assert_eq!(back.len(), 2);
+        assert_eq!(back[0].name, "Doe, Jane");
     }
 
     #[test]
