@@ -290,9 +290,26 @@ Saves a new message in Drafts, with the account's new-message signature, and que
 - `--html`: The body is HTML.
 - `--importance <importance>`: low, normal or high.
 - `--inline <inline>` (repeatable): Add an inline image, referenced in an HTML body as cid:<file name>.
+- `--markdown`: The body is Markdown, sent as HTML (a line break stays a line break).
 - `--no-signature`: Leave the account's signature off.
 - `--subject <subject>`: Subject.
 - `--to <to>` (repeatable): To: an address or `Name <address>`; repeat, or separate with commas.
+- `--wait`: Wait until the server has the draft (needs famd).
+- `--wait-secs <wait-secs>`: Seconds --wait waits at most (default 60).
+
+## draft.edit
+
+Write a draft in your editor, in Markdown. Access: `draft`.
+
+```
+fam draft edit [DRAFT]
+```
+
+Opens a draft (or, without an ID, a new message) in $VISUAL or $EDITOR as To/Cc/Bcc/Subject lines, a blank line and the body in Markdown. Saving and closing the editor saves the changes, with the Markdown as HTML; the signature and quoted message below your text are kept. Use an editor command that waits, such as code --wait.
+
+- `--account <account>`: The account to write a new message from (config name or address); needed with more than one.
+- `DRAFT`: Local ID of the draft; leave it out to write a new message.
+- `--no-signature`: Leave the account's signature off a new message.
 - `--wait`: Wait until the server has the draft (needs famd).
 - `--wait-secs <wait-secs>`: Seconds --wait waits at most (default 60).
 
@@ -314,6 +331,7 @@ Saves a forward of a message (with its attachments) in Drafts, with your text an
 - `--dry-run`: Only show what would happen.
 - `--from <from>`: Send from this alias of the account; defaults to the alias the original was sent to.
 - `--html`: The body is HTML.
+- `--markdown`: The body is Markdown, sent as HTML (a line break stays a line break).
 - `MESSAGE` (required): Local ID of the message to forward.
 - `--no-signature`: Leave the account's reply signature off.
 - `--to <to>` (repeatable): To.
@@ -340,6 +358,7 @@ Saves a reply (or reply all with --all) in Drafts, threaded with the original, w
 - `--from <from>`: Send from this alias of the account; defaults to the alias the original was sent to.
 - `--html`: The body is HTML.
 - `--inline <inline>` (repeatable): Add an inline image.
+- `--markdown`: The body is Markdown, sent as HTML (a line break stays a line break).
 - `MESSAGE` (required): Local ID of the message to reply to.
 - `--no-signature`: Leave the account's reply signature off.
 - `--to <to>` (repeatable): Replace the recipients (default: the sender, or everyone with --all).
@@ -383,6 +402,7 @@ Changes a draft's recipients, subject or body, or adds and removes attachments. 
 - `--from <from>`: Send from this alias, or the account's own address.
 - `--html`: The body is HTML.
 - `--inline <inline>` (repeatable): Add an inline image.
+- `--markdown`: The body is Markdown, sent as HTML (a line break stays a line break).
 - `--remove-attachment <remove-attachment>` (repeatable): Take an attachment off, by file name (or Graph attachment ID); repeat for more.
 - `--subject <subject>`: New subject.
 - `--to <to>` (repeatable): Replace To (`""` empties it).
@@ -732,6 +752,7 @@ Saves a new message as a draft with the account's signature and queues it to sen
 - `--html`: The body is HTML.
 - `--importance <importance>`: low, normal or high.
 - `--inline <inline>` (repeatable): Add an inline image.
+- `--markdown`: The body is Markdown, sent as HTML (a line break stays a line break).
 - `--no-signature`: Leave the account's signature off.
 - `--now`: Skip the undo-send delay.
 - `--subject <subject>`: Subject.

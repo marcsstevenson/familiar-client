@@ -661,12 +661,27 @@ export type DraftCreateInput = {
   importance?: string | null;
   /** Add an inline image, referenced in an HTML body as cid:<file name>. */
   inline?: Array<string>;
+  /** The body is Markdown, sent as HTML (a line break stays a line break). */
+  markdown?: boolean;
   /** Leave the account's signature off. */
   no_signature?: boolean;
   /** Subject. */
   subject?: string | null;
   /** To: an address or `Name <address>`; repeat, or separate with commas. */
   to?: Array<string>;
+  /** Wait until the server has the draft (needs famd). */
+  wait?: boolean;
+  /** Seconds --wait waits at most (default 60). */
+  wait_secs?: number | null;
+};
+
+export type DraftEditInput = {
+  /** The account to write a new message from (config name or address); needed with more than one. */
+  account?: string | null;
+  /** Local ID of the draft; leave it out to write a new message. */
+  draft?: number | null;
+  /** Leave the account's signature off a new message. */
+  no_signature?: boolean;
   /** Wait until the server has the draft (needs famd). */
   wait?: boolean;
   /** Seconds --wait waits at most (default 60). */
@@ -690,6 +705,8 @@ export type DraftForwardInput = {
   from?: string | null;
   /** The body is HTML. */
   html?: boolean;
+  /** The body is Markdown, sent as HTML (a line break stays a line break). */
+  markdown?: boolean;
   /** Local ID of the message to forward. */
   message: number;
   /** Leave the account's reply signature off. */
@@ -723,6 +740,8 @@ export type DraftReplyInput = {
   html?: boolean;
   /** Add an inline image. */
   inline?: Array<string>;
+  /** The body is Markdown, sent as HTML (a line break stays a line break). */
+  markdown?: boolean;
   /** Local ID of the message to reply to. */
   message: number;
   /** Leave the account's reply signature off. */
@@ -771,6 +790,8 @@ export type DraftUpdateInput = {
   html?: boolean;
   /** Add an inline image. */
   inline?: Array<string>;
+  /** The body is Markdown, sent as HTML (a line break stays a line break). */
+  markdown?: boolean;
   /** Take an attachment off, by file name (or Graph attachment ID); repeat for more. */
   remove_attachment?: Array<string>;
   /** New subject. */
@@ -1249,6 +1270,8 @@ export type MailSendInput = {
   importance?: string | null;
   /** Add an inline image. */
   inline?: Array<string>;
+  /** The body is Markdown, sent as HTML (a line break stays a line break). */
+  markdown?: boolean;
   /** Leave the account's signature off. */
   no_signature?: boolean;
   /** Skip the undo-send delay. */
@@ -1757,6 +1780,8 @@ export interface Commands {
   "contacts.search": { input: ContactsSearchInput; output: ContactsSearchOutput };
   /** Save a new draft */
   "draft.create": { input: DraftCreateInput; output: WriteOutput };
+  /** Write a draft in your editor, in Markdown */
+  "draft.edit": { input: DraftEditInput; output: WriteOutput };
   /** Save a forward as a draft */
   "draft.forward": { input: DraftForwardInput; output: WriteOutput };
   /** Save a reply as a draft */
@@ -1855,6 +1880,7 @@ export const COMMAND_NAMES = [
   "config.validate",
   "contacts.search",
   "draft.create",
+  "draft.edit",
   "draft.forward",
   "draft.reply",
   "draft.send",

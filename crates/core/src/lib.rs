@@ -10,6 +10,7 @@ pub mod error;
 pub mod events;
 pub mod folder_prefs;
 pub mod ics;
+pub mod markdown;
 pub mod ops;
 pub mod parity;
 pub mod registry;

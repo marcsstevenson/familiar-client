@@ -12,6 +12,7 @@ pub mod check_spam;
 pub mod config;
 pub mod contacts;
 pub mod draft;
+pub mod draft_edit;
 pub mod folder;
 pub mod mail;
 pub mod mcp;

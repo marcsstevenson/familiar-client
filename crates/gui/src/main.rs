@@ -24,7 +24,7 @@ use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 const SOURCE_GUI: &str = "gui";
 
 /// Commands the window can't run: they need a terminal of their own.
-const NOT_FROM_GUI: &[&str] = &["mcp.serve"];
+const NOT_FROM_GUI: &[&str] = &["draft.edit", "mcp.serve"];
 
 /// One saved search.
 #[derive(Debug, Serialize)]
