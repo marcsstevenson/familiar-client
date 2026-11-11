@@ -251,6 +251,39 @@ fn list_index_of(id: i64, lists: tauri::State<'_, std::sync::Arc<list::Lists>>) 
     lists.index_of(id)
 }
 
+/// Whether every corner of the window is on some monitor. A saved size can be
+/// too big for where the window lands when its old monitor is gone, so it would
+/// hang off the edge; a window spread over two monitors side by side still counts.
+fn on_screen(window: &tauri::WebviewWindow) -> tauri::Result<bool> {
+    // Windows draws an invisible resize border of a few pixels outside the
+    // visible frame, so allow a little overhang.
+    const SLACK: i32 = 16;
+    let pos = window.outer_position()?;
+    let size = window.outer_size()?;
+    let (w, h) = (
+        i32::try_from(size.width).unwrap_or(i32::MAX),
+        i32::try_from(size.height).unwrap_or(i32::MAX),
+    );
+    let monitors = window.available_monitors()?;
+    let on_some_monitor = |x: i32, y: i32| {
+        monitors.iter().any(|m| {
+            let (mp, ms) = (m.position(), m.size());
+            x >= mp.x
+                && y >= mp.y
+                && i64::from(x) < i64::from(mp.x) + i64::from(ms.width)
+                && i64::from(y) < i64::from(mp.y) + i64::from(ms.height)
+        })
+    };
+    let (left, top) = (pos.x.saturating_add(SLACK), pos.y.saturating_add(SLACK));
+    let (right, bottom) = (
+        pos.x.saturating_add(w).saturating_sub(SLACK),
+        pos.y.saturating_add(h).saturating_sub(SLACK),
+    );
+    Ok([(left, top), (right, top), (left, bottom), (right, bottom)]
+        .into_iter()
+        .all(|(x, y)| on_some_monitor(x, y)))
+}
+
 fn main() {
     STARTED.get_or_init(std::time::Instant::now);
     tauri::Builder::default()
@@ -302,6 +335,9 @@ fn main() {
                 // Hidden until the window-state plugin has moved it back to
                 // where it was last time, so it doesn't jump on screen.
                 .visible(false)
+                // Where it opens when there is no saved place, or the saved
+                // monitor is gone.
+                .center()
                 // Off so messages can be dragged onto folders: on Windows the
                 // native file-drop handler swallows the page's own drag and drop.
                 // Only compose windows take dropped files.
@@ -314,7 +350,11 @@ fn main() {
                 .hidden_title(true);
             #[cfg(not(target_os = "macos"))]
             let builder = builder.decorations(false);
-            builder.build()?.show()?;
+            let window = builder.build()?;
+            if !window.is_maximized()? && !on_screen(&window)? {
+                window.center()?;
+            }
+            window.show()?;
             let handle = app.handle().clone();
             let shared = app.state::<daemon::Shared>().inner().clone();
             std::thread::spawn(move || daemon::keep_running(&handle, &shared));
