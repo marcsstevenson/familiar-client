@@ -3,14 +3,24 @@
 // report` for the reports), so it goes through the op queue and works offline.
 import { For, Show, createSignal, onMount } from "solid-js";
 import { isCommandError, run } from "../api";
-import { notify, removeFromList, setSpamDialog, spamSettings } from "../state";
+import { countLabel, notify, removeFromList, setMovePicker, setSpamDialog, spamSettings } from "../state";
 import { type Row, refreshViews } from "./api";
 import { snoozeChoices, snoozeLabel } from "./format";
 
-export function MessageMenu(props: { row: Row; x: number; y: number; onClose: () => void }) {
+export function MessageMenu(props: {
+  row: Row;
+  /** Open for the multiple selection rather than `row` alone. */
+  multi?: { ids: number[]; accounts: string[] };
+  x: number;
+  y: number;
+  onClose: () => void;
+}) {
   // A copy: the menu closes (and its props go stale) before a command runs.
   const row = { ...props.row };
-  const ids = [row.id];
+  const multi = props.multi ? { ids: [...props.multi.ids], accounts: [...props.multi.accounts] } : null;
+  const ids = multi?.ids ?? [row.id];
+  /** "Archived" for one message, "Archived: 3 messages" for several. */
+  const counted = (label: string) => (multi ? `${label}: ${countLabel(ids.length)}` : label);
   let box!: HTMLElement;
 
   onMount(() => {
@@ -25,16 +35,16 @@ export function MessageMenu(props: { row: Row; x: number; y: number; onClose: ()
     props.onClose();
     try {
       await job();
-      notify(label);
+      notify(counted(label));
     } catch (e) {
       notify(isCommandError(e) ? e.message : String(e), true);
     }
   }
 
-  /** For an action that takes the message out of the list: opens the next one. */
+  /** For an action that takes the messages out of the list: opens the next one. */
   function leave(label: string, job: () => Promise<unknown>) {
     props.onClose();
-    void removeFromList(row.id, label, job);
+    void removeFromList(ids, counted(label), job);
   }
 
   // The snooze choices open in place of the menu's lower part.
@@ -63,7 +73,7 @@ export function MessageMenu(props: { row: Row; x: number; y: number; onClose: ()
     <div
       class="folder-menu-backdrop"
       role="dialog"
-      aria-label={`Message ${row.subject || "(no subject)"}`}
+      aria-label={multi ? countLabel(ids.length) : `Message ${row.subject || "(no subject)"}`}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) props.onClose();
       }}
@@ -74,26 +84,32 @@ export function MessageMenu(props: { row: Row; x: number; y: number; onClose: ()
       onKeyDown={onKeyDown}
     >
       <div class="folder-menu" role="menu" ref={(el) => (box = el)} style={{ left: `${props.x}px`, top: `${props.y}px` }}>
-        <button
-          role="menuitem"
-          onClick={() =>
-            act(row.is_read ? "Marked unread" : "Marked read", () =>
-              run("mail.read", { messages: ids, unread: row.is_read }),
-            )
-          }
+        <Show when={multi}>
+          <div class="menu-heading">{countLabel(ids.length)}</div>
+        </Show>
+        <Show when={multi || !row.is_read}>
+          <button role="menuitem" onClick={() => act("Marked read", () => run("mail.read", { messages: ids, unread: false }))}>
+            Mark read
+          </button>
+        </Show>
+        <Show when={multi || row.is_read}>
+          <button role="menuitem" onClick={() => act("Marked unread", () => run("mail.read", { messages: ids, unread: true }))}>
+            Mark unread
+          </button>
+        </Show>
+        <Show when={multi || !row.is_flagged}>
+          <button role="menuitem" onClick={() => act("Flagged", () => run("mail.flag", { messages: ids, clear: false }))}>
+            Flag
+          </button>
+        </Show>
+        <Show when={multi || row.is_flagged}>
+          <button role="menuitem" onClick={() => act("Flag cleared", () => run("mail.flag", { messages: ids, clear: true }))}>
+            Clear flag
+          </button>
+        </Show>
+        <Show
+          when={!multi}
         >
-          {row.is_read ? "Mark unread" : "Mark read"}
-        </button>
-        <button
-          role="menuitem"
-          onClick={() =>
-            act(row.is_flagged ? "Flag cleared" : "Flagged", () =>
-              run("mail.flag", { messages: ids, clear: row.is_flagged }),
-            )
-          }
-        >
-          {row.is_flagged ? "Clear flag" : "Flag"}
-        </button>
         <Show
           when={row.follow_up_due !== null}
           fallback={
@@ -110,13 +126,23 @@ export function MessageMenu(props: { row: Row; x: number; y: number; onClose: ()
             Cancel reminder
           </button>
         </Show>
+        </Show>
+        <button
+          role="menuitem"
+          onClick={() => {
+            props.onClose();
+            setMovePicker({ ids, accounts: multi?.accounts ?? [row.account] });
+          }}
+        >
+          Move to folder…
+        </button>
         <button role="menuitem" onClick={() => leave("Archived", () => run("mail.archive", { messages: ids }))}>
           Archive
         </button>
         <button role="menuitem" onClick={() => leave("Moved to Deleted Items", () => run("mail.delete", { messages: ids }))}>
           Delete
         </button>
-        <Show when={row.snoozed_until}>
+        <Show when={!multi && row.snoozed_until}>
           {(t) => (
             <button
               role="menuitem"
@@ -166,7 +192,7 @@ export function MessageMenu(props: { row: Row; x: number; y: number; onClose: ()
           </div>
         </Show>
         <hr class="menu-rule" />
-        <Show when={spamSettings.accounts.includes(row.account)}>
+        <Show when={!multi && spamSettings.accounts.includes(row.account)}>
           <button
             role="menuitem"
             title="See how likely this is to be spam or a scam, from the mail server's checks and the AI tool"
@@ -179,7 +205,7 @@ export function MessageMenu(props: { row: Row; x: number; y: number; onClose: ()
           </button>
         </Show>
         <Show
-          when={row.in_junk}
+          when={!multi && row.in_junk}
           fallback={
             <button
               role="menuitem"

@@ -45,6 +45,14 @@ A background thread checks the store's `PRAGMA data_version` once a second and s
 
 Keys in the list: the arrow keys, Page Up/Down, Home and End (and `j`/`k` from anywhere, below).
 
+### Picking several messages
+
+As in Outlook and Apple Mail: Ctrl+click (Cmd+click on macOS) adds a message to the selection or takes it out, Shift+click picks the run from the last clicked row, Ctrl+Shift+click adds a run, and Shift with the arrow keys, Page Up/Down, Home and End extends it from the keyboard. Ctrl+A picks the whole list, up to 1,000 messages (the most any one pick takes). Hovering a row shows a tick box at its left edge that does what Ctrl+click does; while several are picked, every row shows one.
+
+With two or more picked, nothing is open: the reading pane shows how many, with Move to folder…, Archive, Delete, Mark read, Mark unread, Flag and Clear flag for them all. The keys (Delete, `e`, Ctrl+Shift+V, Ctrl+Q, Ctrl+U, `s`, Report junk and phishing in the palette) act on them all too, as does the right-click menu on a picked row, and the palette prefills `messages` with every picked ID. Dragging a picked row drags them all onto a folder, when they share one account. Move to folder… (also for one message) lists the account's folders with a filter; messages from several accounts can only go to a folder path each of them has, such as Inbox or Archive, because `mail.move` looks the path up in each message's own account. Esc, a plain click, or opening another folder ends the selection. Once picked messages leave the list, the row that takes the place of the first one opens.
+
+The selection lives in `picked` in `ui/src/state.ts` (message ID to account); `removeFromList` takes a list of IDs, and `listNav.leaving` tells the list which to land after.
+
 ## Search and smart folders
 
 The box above the list searches this device with the `fam mail search` query language (`from:`, `subject:`, `has:attachment`, `after:`, `is:unread`, "phrases" and so on); `/` jumps to it and Escape clears it. Rust runs the query against famd's index (`Searcher::all_ids`) and the list shows the newest 10,000 matches, newest first, through the same virtualised list as a folder. "Server too" runs `mail.search --scope all` and lists what only the server found, labelled online, above the results; those messages aren't on this device yet, so they can't be opened.
@@ -71,7 +79,7 @@ Actions and their default keys (`ui/src/actions/builtin.ts`):
 | --- | --- | --- | --- |
 | `palette` | Ctrl+K | | Show all commands |
 | `next`, `previous` | `j`, `k` | arrows (in the list) | Move through the list |
-| `close` | Esc | | Close the open message (dialogs, menus and the search box keep their own Esc) |
+| `close` | Esc | | Close the open message or end a multiple selection (dialogs, menus and the search box keep their own Esc) |
 | `archive` | `e` | Backspace | `fam mail archive` |
 | `process` | (none; set one in `[keys]`) | | `fam mail process` |
 | `delete` | `#` | Delete, Ctrl+D | `fam mail delete` |
@@ -79,14 +87,14 @@ Actions and their default keys (`ui/src/actions/builtin.ts`):
 | `flag` | `s` | Insert | `fam mail flag` (or `--clear`) |
 | `toggle_read` | `u` | | `fam mail read` (or `--unread`) |
 | `mark_read`, `mark_unread` | | Ctrl+Q, Ctrl+U | `fam mail read` / `--unread` |
-| `move` | | Ctrl+Shift+V | The palette's Move form |
+| `move` | | Ctrl+Shift+V | Move to folder…: pick a folder from a filtered list |
 | `add_to_calendar` | Ctrl+Shift+A | | Add to calendar: `fam cal propose`, then `fam cal add` or `fam cal rsvp` |
 | `reply`, `reply_all`, `forward` | `r`, `a`, `f` | Ctrl+R, Ctrl+Shift+R, Ctrl+F | Open a compose window replying to or forwarding the selected message |
 | `compose` | `c` | Ctrl+N | New message |
 | `search` | `/` | Ctrl+E, F3 | Go to the search box |
 | `theme` | | | Cycle the theme |
 
-The Outlook keys are bound as well as the single keys; `[keys]` changes only the single key. Hovering a row shows a delete button, and a tick for accounts with a `processed_folder` in config.toml that moves the message there (creating the folder if needed), and dragging a row onto a folder of the same account moves it there. Right-clicking a row (or the menu key) opens a menu with mark read, flag, archive, delete, Report junk (Not junk in Junk Email) and Report phishing, and, for accounts with `spam_check` or `spam_auto = true`, Check for spam or scam: a dialog with the AI's grade, its reasons and the facts behind it (see [spam.md](spam.md)), with the same reports, plus Remind me if no reply (or Cancel reminder; see [followups.md](followups.md)). A checked message shows its grade in a line under the reading pane's header, with Details to reopen it, when the grade disagrees with the folder (50% or more outside Junk Email, under 50% in it); otherwise the line shows only while the pointer is over the header. When the open message is deleted, archived, processed or moved, the next one down opens (or the one above, at the end of the list). Accounts and folders with subfolders collapse with their arrow (or Left and Right); the app remembers which.
+The Outlook keys are bound as well as the single keys; `[keys]` changes only the single key. Hovering a row shows a delete button, and a tick for accounts with a `processed_folder` in config.toml that moves the message there (creating the folder if needed), and dragging a row onto a folder of the same account moves it there. Right-clicking a row (or the menu key) opens a menu with mark read, flag, Move to folder…, archive, delete, Report junk (Not junk in Junk Email) and Report phishing, and, for accounts with `spam_check` or `spam_auto = true`, Check for spam or scam: a dialog with the AI's grade, its reasons and the facts behind it (see [spam.md](spam.md)), with the same reports, plus Remind me if no reply (or Cancel reminder; see [followups.md](followups.md)). A checked message shows its grade in a line under the reading pane's header, with Details to reopen it, when the grade disagrees with the folder (50% or more outside Junk Email, under 50% in it); otherwise the line shows only while the pointer is over the header. When the open message is deleted, archived, processed or moved, the next one down opens (or the one above, at the end of the list). Accounts and folders with subfolders collapse with their arrow (or Left and Right); the app remembers which.
 
 Change a key in `config.toml`, by action ID:
 

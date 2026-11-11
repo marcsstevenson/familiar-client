@@ -2,7 +2,7 @@
 // component asks for the rows on screen a page at a time and draws only those.
 import { For, Show, createEffect, createSignal, on, onCleanup, onMount } from "solid-js";
 import { isCommandError, run } from "../api";
-import { followUpView, leavingRows, listNav, processMessage, processedFolders, removeFromList, setDragged, searchQuery, selectedFolder, selectedMessage, setSelectedMessage, setSelectedRow } from "../state";
+import { countLabel, followUpView, leavingRows, listNav, multiPicked, notify, picked, pickedMessages, processMessage, processedFolders, removeFromList, setDragged, setPicked, searchQuery, selectedFolder, selectedMessage, selectedRow, setSelectedMessage, setSelectedRow } from "../state";
 import { OnlineHits, SearchBar } from "./SearchBar";
 import { type Row, type Sort, listIndexOf, listOpen, listRows, onStoreChanged } from "./api";
 import { shortDate, snoozeLabel } from "./format";
@@ -11,6 +11,8 @@ import { MessageMenu } from "./MessageMenu";
 export const ROW_H = 64;
 const PAGE = 100;
 const OVERSCAN = 8;
+/** The most messages Shift or Ctrl+A picks at once. */
+const MAX_PICK = 1000;
 
 const SORTS: { value: Sort; label: string }[] = [
   { value: "newest", label: "Newest" },
@@ -34,8 +36,21 @@ export function MessageList() {
   // slide up into its place.
   const [shiftFrom, setShiftFrom] = createSignal<number | null>(null);
   let shiftTimer: ReturnType<typeof setTimeout> | undefined;
-  // The message whose context menu is open, and where.
-  const [menu, setMenu] = createSignal<{ row: Row; x: number; y: number } | null>(null);
+  // The message whose context menu is open, and where; `multi` when it is
+  // open for the multiple selection.
+  const [menu, setMenu] = createSignal<{ row: Row; x: number; y: number; multi?: { ids: number[]; accounts: string[] } } | null>(null);
+  // Multiple selection: where Shift ranges start (an index), the message the
+  // keyboard cursor is on while nothing is open, and, after the open message
+  // or the selection left the list, where to open the next one.
+  let anchor: number | null = null;
+  let cursorId: number | null = null;
+  let landing: { ids: ReadonlySet<number>; at: number } | null = null;
+  const isPicked = (i: number) => {
+    const r = rowAt(i);
+    return r !== undefined && picked().has(r.id);
+  };
+  /** The message the list is on: the open one, or the cursor's in a multiple selection. */
+  const focusId = () => selectedMessage() ?? (multiPicked() ? cursorId : null);
   // On the listbox, where focus is: a right click opens the menu for the row
   // under the pointer (selecting it), the menu key or Shift+F10 for the
   // selected row.
@@ -43,7 +58,8 @@ export function MessageList() {
     e.preventDefault();
     const keyboard = e.clientX === 0 && e.clientY === 0;
     const under = (e.target as HTMLElement).closest(".list-row")?.id.match(/^msg-(\d+)$/);
-    if (!keyboard && under) select(Number(under[1]));
+    // A right click inside the multiple selection keeps it.
+    if (!keyboard && under && !(multiPicked() && isPicked(Number(under[1])))) select(Number(under[1]));
     const i = keyboard ? selIndex() : under ? Number(under[1]) : null;
     const row = i === null ? undefined : rowAt(i);
     if (i === null || !row) return;
@@ -52,6 +68,7 @@ export function MessageList() {
       row: { ...row },
       x: keyboard && r ? r.left + 24 : e.clientX,
       y: keyboard && r ? r.bottom : e.clientY,
+      multi: multiPicked() ? { ids: pickedMessages().ids, accounts: [...new Set(picked().values())] } : undefined,
     });
   };
 
@@ -91,7 +108,12 @@ export function MessageList() {
   /** Reopens the view; keeps the scroll position when `keepScroll`. */
   async function reopen(keepScroll: boolean) {
     const g = ++gen;
-    const wasAt = selIndex();
+    if (!keepScroll) {
+      // Another folder or search: the multiple selection belonged to the old one.
+      setPicked(new Map());
+      anchor = null;
+      landing = null;
+    }
     try {
       const opened = await listOpen({
         folders: selectedFolder() === null ? [] : [selectedFolder()!],
@@ -131,22 +153,27 @@ export function MessageList() {
         scroller.scrollTop = 0;
         setScrollTop(0);
       }
-      const sel = selectedMessage();
+      const sel = focusId();
       const ix = sel === null ? null : await listIndexOf(sel);
       if (g !== gen) return;
-      if (ix === null && sel !== null && sel === listNav.leaving && wasAt !== null) {
-        // The open message was deleted or moved: open the one that took its
-        // place (the next one down), or the new last one.
-        listNav.leaving = null;
-        setRev((x) => x + 1);
-        prefetch();
-        if (n === 0) setSelectedMessage(null);
-        else select(Math.min(wasAt, n - 1));
-        return;
+      if (landing && ix === null) {
+        // The open message (or the multiple selection) was deleted or moved:
+        // open the one that took its place (the next one down), or the new
+        // last one. Not yet if the refresh still has a leaving row there.
+        const to = Math.min(landing.at, n - 1);
+        const there = rowAt(to);
+        if (!there || !landing.ids.has(there.id)) {
+          landing = null;
+          setRev((x) => x + 1);
+          prefetch();
+          if (n === 0) setSelectedMessage(null);
+          else select(to);
+          return;
+        }
       }
       // A key may have moved the selection while this looked up the old one;
       // then the selection already has its new place.
-      if (selectedMessage() === sel) {
+      if (focusId() === sel) {
         setSelIndex(ix);
         if (ix !== null && !keepScroll) scrollIntoView(ix);
       }
@@ -216,10 +243,21 @@ export function MessageList() {
     );
   });
 
+  // A multiple selection cleared (Esc, Clear selection) leaves nothing open,
+  // so no row shows as selected either.
+  createEffect(
+    on(multiPicked, (multi, was) => {
+      if (was && !multi && selectedMessage() === null && landing === null) setSelIndex(null);
+    }),
+  );
+
   // `fam ui open` and other code can select a message by ID.
   createEffect(
     on(selectedMessage, async (id) => {
-      if (id === null) return setSelIndex(null);
+      // A multiple selection keeps the keyboard cursor with nothing open.
+      if (id === null) return multiPicked() ? undefined : setSelIndex(null);
+      // A message opened from elsewhere (`fam ui open`) ends it.
+      if (picked().size > 0) setPicked(new Map());
       const cur = selIndex();
       if (cur !== null && rowAt(cur)?.id === id) return;
       const ix = await listIndexOf(id);
@@ -237,6 +275,28 @@ export function MessageList() {
     });
     ro.observe(scroller);
     listNav.move = (d) => select((selIndex() ?? -1) + d);
+    listNav.leaving = (ids) => {
+      const gone = new Set(ids);
+      if (picked().size > 0) {
+        const left = new Map([...picked()].filter(([id]) => !gone.has(id)));
+        if (left.size === picked().size) return;
+        if (left.size >= 2) {
+          setPicked(left);
+          return;
+        }
+        // The selection is leaving: open what takes the place of its first row.
+        setPicked(new Map());
+        setSelectedMessage(null);
+        landing = { ids: gone, at: firstIndexOf(gone) ?? selIndex() ?? 0 };
+        return;
+      }
+      const at = selIndex();
+      const open = selectedMessage();
+      if (open !== null && gone.has(open) && at !== null) landing = { ids: gone, at };
+    };
+    listNav.stayed = () => {
+      landing = null;
+    };
     const stop = await onStoreChanged(() => void reopen(true));
     onCleanup(() => {
       ro.disconnect();
@@ -252,9 +312,24 @@ export function MessageList() {
     }
   }
 
+  /** The lowest index of a loaded row among `ids`. */
+  function firstIndexOf(ids: ReadonlySet<number>): number | null {
+    let best: number | null = null;
+    for (const [p, rows] of pages) {
+      rows.forEach((r, k) => {
+        if (ids.has(r.id) && (best === null || p * PAGE + k < best)) best = p * PAGE + k;
+      });
+    }
+    return best;
+  }
+
+  /** Opens row `i` on its own, ending any multiple selection. */
   function select(i: number) {
     if (total() === 0) return;
     const ix = Math.max(0, Math.min(total() - 1, i));
+    landing = null;
+    anchor = ix;
+    if (picked().size > 0) setPicked(new Map());
     setSelIndex(ix);
     scrollIntoView(ix);
     const row = rowAt(ix);
@@ -268,7 +343,99 @@ export function MessageList() {
     }
   }
 
+  /** Sets the multiple selection to `next`, with the cursor on row `cursor`.
+   * One message left opens it; none closes the reading pane. */
+  function applyPicked(next: Map<number, string>, cursor: number) {
+    if (next.size >= 2) {
+      setPicked(next);
+      setSelectedMessage(null);
+      setSelIndex(cursor);
+      cursorId = rowAt(cursor)?.id ?? null;
+      scrollIntoView(cursor);
+      return;
+    }
+    const only = [...next.keys()][0];
+    const keep = anchor;
+    if (only !== undefined && rowAt(cursor)?.id === only) select(cursor);
+    else {
+      setPicked(new Map());
+      setSelectedMessage(only ?? null);
+      if (only === undefined) setSelIndex(cursor);
+    }
+    anchor = keep;
+  }
+
+  /** The multiple selection to start from: the picked messages, or the open one. */
+  function pickedOrOpen(): Map<number, string> {
+    if (picked().size > 0) return new Map(picked());
+    const open = selectedRow();
+    return open && open.id === selectedMessage() ? new Map([[open.id, open.account]]) : new Map();
+  }
+
+  /** Ctrl+click: adds row `i` to the selection, or takes it out. */
+  function toggle(i: number) {
+    const row = rowAt(i);
+    if (!row) return;
+    const next = pickedOrOpen();
+    if (next.has(row.id)) next.delete(row.id);
+    else next.set(row.id, row.account);
+    anchor = i;
+    applyPicked(next, i);
+  }
+
+  /** Shift+click and Shift+arrows: picks the rows from the anchor to `i`
+   * (added to the selection with Ctrl). */
+  async function pickTo(i: number, add: boolean) {
+    if (total() === 0) return;
+    const ix = Math.max(0, Math.min(total() - 1, i));
+    const from = anchor ?? selIndex() ?? ix;
+    await pickRange(from, ix, ix, add);
+    anchor = from;
+  }
+
+  /** Picks rows `a` to `b` (either order), at most MAX_PICK of them, loading
+   * their pages first, with the cursor on `cursor`. */
+  async function pickRange(a: number, b: number, cursor: number, add: boolean) {
+    let lo = Math.min(a, b);
+    let hi = Math.max(a, b);
+    if (hi - lo + 1 > MAX_PICK) {
+      if (cursor === lo) hi = lo + MAX_PICK - 1;
+      else lo = hi - MAX_PICK + 1;
+      notify(`Picked ${countLabel(MAX_PICK)}, the most at once`);
+    }
+    const g = gen;
+    const need: number[] = [];
+    for (let p = Math.floor(lo / PAGE); p <= Math.floor(hi / PAGE); p++) need.push(p);
+    await Promise.all(need.map(loadPage));
+    if (g !== gen) return;
+    const next = add ? pickedOrOpen() : new Map<number, string>();
+    for (let k = lo; k <= hi; k++) {
+      const r = rowAt(k);
+      if (r) next.set(r.id, r.account);
+    }
+    applyPicked(next, cursor);
+  }
+
+  /** A press on row `i`: opens it, or with Ctrl or Shift changes the selection. */
+  function press(i: number, e: MouseEvent) {
+    // The context menu handles right clicks; a press on a picked row may be
+    // the start of dragging them all, so a plain click opens it instead.
+    if (e.button !== 0) return;
+    const add = e.ctrlKey || e.metaKey;
+    if (e.shiftKey) void pickTo(i, add);
+    else if (add) toggle(i);
+    else if (!(multiPicked() && isPicked(i))) select(i);
+  }
+
   function onKeyDown(e: KeyboardEvent) {
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === "a") {
+      e.preventDefault();
+      // From the top: past MAX_PICK it takes the first rows, cursor on the first.
+      if (total() > 0) void pickRange(0, total() - 1, 0, false).then(() => {
+        anchor = 0;
+      });
+      return;
+    }
     if (e.ctrlKey || e.metaKey || e.altKey) return;
     const cur = selIndex() ?? -1;
     const page = Math.max(1, Math.floor(scroller.clientHeight / ROW_H) - 1);
@@ -283,7 +450,8 @@ export function MessageList() {
     const to = moves[e.key];
     if (to === undefined) return;
     e.preventDefault();
-    select(to);
+    if (e.shiftKey) void pickTo(to, false);
+    else select(to);
   }
 
   return (
@@ -339,11 +507,27 @@ export function MessageList() {
         </Show>
         <div class="list-spacer" style={{ height: `${total() * ROW_H}px` }}>
           <For each={visible()}>
-            {(i) => <ListRow index={i} row={rowAt(i)} selected={selIndex() === i} shifting={(shiftFrom() ?? Infinity) <= i} onSelect={select} unified={selectedFolder() === null || searchQuery() !== null || followUpView()} />}
+            {(i) => (
+              <ListRow
+                index={i}
+                row={rowAt(i)}
+                selected={multiPicked() ? isPicked(i) : selIndex() === i}
+                cursor={multiPicked() && selIndex() === i}
+                multi={multiPicked()}
+                shifting={(shiftFrom() ?? Infinity) <= i}
+                onPress={press}
+                onClick={(i, e) => {
+                  // A plain click inside the multiple selection (not a drag) opens that row.
+                  if (e.button === 0 && !e.shiftKey && !e.ctrlKey && !e.metaKey && multiPicked() && isPicked(i)) select(i);
+                }}
+                onToggle={toggle}
+                unified={selectedFolder() === null || searchQuery() !== null || followUpView()}
+              />
+            )}
           </For>
         </div>
       </div>
-      <Show when={menu()}>{(m) => <MessageMenu row={m().row} x={m().x} y={m().y} onClose={() => {
+      <Show when={menu()}>{(m) => <MessageMenu row={m().row} multi={m().multi} x={m().x} y={m().y} onClose={() => {
         setMenu(null);
         scroller.focus();
       }} />}</Show>
@@ -355,9 +539,15 @@ function ListRow(props: {
   index: number;
   row: Row | undefined;
   selected: boolean;
+  /** The keyboard cursor, in a multiple selection. */
+  cursor: boolean;
+  /** A multiple selection is on: every row shows its tick box. */
+  multi: boolean;
   shifting: boolean;
   unified: boolean;
-  onSelect: (i: number) => void;
+  onPress: (i: number, e: MouseEvent) => void;
+  onClick: (i: number, e: MouseEvent) => void;
+  onToggle: (i: number) => void;
 }) {
   return (
     <div
@@ -365,6 +555,8 @@ function ListRow(props: {
       class="list-row"
       classList={{
         selected: props.selected,
+        cursor: props.cursor,
+        multi: props.multi,
         unread: props.row ? !props.row.is_read : false,
         leaving: props.row ? leavingRows().has(props.row.id) : false,
         "shift-up": props.shifting,
@@ -372,14 +564,17 @@ function ListRow(props: {
       role="option"
       aria-selected={props.selected}
       style={{ transform: `translateY(${props.index * ROW_H}px)` }}
-      onMouseDown={() => props.onSelect(props.index)}
+      onMouseDown={(e) => props.onPress(props.index, e)}
+      onClick={(e) => props.onClick(props.index, e)}
       draggable={props.row !== undefined}
       onDragStart={(e) => {
         const r = props.row;
         if (!r || !e.dataTransfer) return;
         e.dataTransfer.effectAllowed = "move";
-        e.dataTransfer.setData("text/plain", r.subject);
-        setDragged({ id: r.id, account: r.account });
+        // Dragging a picked row takes the whole multiple selection.
+        const all = props.multi && props.selected ? pickedMessages() : { ids: [r.id], account: r.account };
+        e.dataTransfer.setData("text/plain", all.ids.length > 1 ? countLabel(all.ids.length) : r.subject);
+        setDragged(all);
       }}
       onDragEnd={() => setDragged(null)}
     >
@@ -431,6 +626,20 @@ function ListRow(props: {
               </Show>
             </div>
             <div class="row-preview">{r().preview}</div>
+            {/* Tick box for picking several with the mouse (Ctrl+click does
+                the same); shown on hover and on every row while several are
+                picked. */}
+            <span
+              class="row-check"
+              classList={{ checked: props.multi && props.selected }}
+              title={props.multi && props.selected ? "Unpick" : "Pick (Ctrl+click)"}
+              aria-hidden="true"
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation();
+                props.onToggle(props.index);
+              }}
+            />
             {/* For the mouse; the keyboard has Delete (and a key for Processed
                 if one is set). Not buttons inside the option, so screen
                 readers keep one stop per row. */}

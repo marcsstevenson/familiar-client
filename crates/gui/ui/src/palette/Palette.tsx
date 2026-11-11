@@ -5,7 +5,7 @@ import type { CommandDoc, CommandName, SchemaDocument } from "../../../../../bin
 import { COMMAND_SURFACE } from "../actions/surface";
 import { type Action, allActions, keysOf } from "../actions/registry";
 import { isCommandError, run } from "../api";
-import { selectedMessage } from "../state";
+import { multiPicked, pickedMessages, selectedMessage } from "../state";
 import { type Field, type Values, cliLine, fieldsOf, inputOf } from "./schema";
 
 type Item =
@@ -17,13 +17,15 @@ const [docs] = createResource(async () => {
   return out.commands.filter((c) => COMMAND_SURFACE[c.name as CommandName] === "palette");
 });
 
-/** Prefills a form from the selection: `messages`, `message` and `id`-like fields. */
+/** Prefills a form from the selection: `messages` (every picked message) and
+ * `message` (the open one). */
 function prefill(fields: Field[]): Values {
   const id = selectedMessage();
   const v: Values = {};
-  if (id === null) return v;
+  const ids = multiPicked() ? pickedMessages().ids : id === null ? [] : [id];
   for (const f of fields) {
-    if (f.name === "messages" || f.name === "message") v[f.name] = String(id);
+    if (f.name === "messages" && ids.length > 0) v[f.name] = ids.join(", ");
+    if (f.name === "message" && id !== null) v[f.name] = String(id);
   }
   return v;
 }

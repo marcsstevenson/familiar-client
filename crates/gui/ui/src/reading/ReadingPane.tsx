@@ -8,7 +8,7 @@
 // marks it read.
 import { For, Show, createEffect, createSignal, on } from "solid-js";
 import { run } from "../api";
-import { type SpamResult, rememberSpam, selectedMessage, setEventDialog, setReadingFrom, setSpamDialog, spamResults, spamSettings } from "../state";
+import { type SpamResult, multiPicked, rememberSpam, selectedMessage, setEventDialog, setReadingFrom, setSpamDialog, spamResults, spamSettings } from "../state";
 import { gradeLevel, gradeWords } from "../spam/SpamDialog";
 import { resolvedTheme } from "../theme";
 import { Attachments } from "./Attachments";
@@ -16,6 +16,7 @@ import { CopyButton } from "./CopyButton";
 import { type MailFetchOutput, type ReadView, errorText, openLink, openMessage, trustSender } from "./api";
 import { mismatch } from "./links";
 import { type HoverLink, MessageFrame } from "./MessageFrame";
+import { PickedSummary } from "./PickedSummary";
 import "./reading.css";
 
 type Addr = MailFetchOutput["from"];
@@ -142,7 +143,9 @@ export function ReadingPane() {
         fallback={
           <div class="pane-empty">
             <Show when={!error() && selectedMessage() === null} fallback={error() ?? ""}>
-              <span class="reading-empty-kea" aria-hidden="true" />
+              <Show when={multiPicked()} fallback={<span class="reading-empty-kea" aria-hidden="true" />}>
+                <PickedSummary />
+              </Show>
             </Show>
           </div>
         }
