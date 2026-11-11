@@ -256,6 +256,8 @@ export function MessageList() {
     on(selectedMessage, async (id) => {
       // A multiple selection keeps the keyboard cursor with nothing open.
       if (id === null) return multiPicked() ? undefined : setSelIndex(null);
+      // A message opened from elsewhere (`fam ui open`) ends it.
+      if (picked().size > 0) setPicked(new Map());
       const cur = selIndex();
       if (cur !== null && rowAt(cur)?.id === id) return;
       const ix = await listIndexOf(id);
@@ -428,7 +430,8 @@ export function MessageList() {
   function onKeyDown(e: KeyboardEvent) {
     if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === "a") {
       e.preventDefault();
-      if (total() > 0) void pickRange(0, total() - 1, Math.min(selIndex() ?? 0, MAX_PICK - 1), false).then(() => {
+      // From the top: past MAX_PICK it takes the first rows, cursor on the first.
+      if (total() > 0) void pickRange(0, total() - 1, 0, false).then(() => {
         anchor = 0;
       });
       return;
