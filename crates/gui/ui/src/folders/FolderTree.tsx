@@ -1,7 +1,7 @@
 // The folder pane: the unified Inbox, then each account's folder tree.
 import { For, Show, createEffect, createMemo, createResource, createSignal, onCleanup, onMount } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
-import { type CommandError, isCommandError, run } from "../api";
+import { type CommandError, isCommandError, run, setUnreadBadge } from "../api";
 import type { FolderRow } from "../../../../../bindings/commands";
 import { onStoreChanged } from "../list/api";
 import { FolderMenu } from "./FolderMenu";
@@ -124,6 +124,12 @@ export function FolderTree(props: { views: { name: string; query: string }[] }) 
       .filter((f) => f.well_known === "inbox")
       .reduce((n, f) => n + f.unread, 0),
   );
+  // A mail overlay on the taskbar button while any inbox has unread mail.
+  // Only sent when it flips, not on every count change.
+  const anyUnread = createMemo(() => inboxUnread() > 0);
+  createEffect(() => {
+    void setUnreadBadge(anyUnread() ? 1 : 0).catch(() => {});
+  });
   const pinned = createMemo(() => folders.filter((f) => f.pinned));
   // A pinned folder's name gets its account only when another pinned folder
   // has the same name; the full path and account show on hover.

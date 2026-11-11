@@ -146,6 +146,31 @@ const BENCH_HOLD_ENV: &str = "FAMILIAR_BENCH_HOLD";
 /// When `main` started, for cold start timing.
 static STARTED: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
 
+/// Shows a mail overlay on the main window's taskbar button while `unread`
+/// is above zero, and clears it at zero. Windows only; elsewhere it does
+/// nothing.
+#[tauri::command]
+fn set_unread_badge(app: tauri::AppHandle, unread: u32) {
+    #[cfg(target_os = "windows")]
+    {
+        let Some(window) = app.get_webview_window("main") else {
+            return;
+        };
+        // 32x32 raw RGBA rendered from icons/unread-overlay.svg (raw so the
+        // app needs no PNG decoder): `magick unread-overlay.png -depth 8
+        // rgba:unread-overlay.rgba` after rendering the SVG with a
+        // transparent background.
+        let icon = (unread > 0).then(|| {
+            tauri::image::Image::new(include_bytes!("../icons/unread-overlay.rgba"), 32, 32)
+        });
+        if let Err(e) = window.set_overlay_icon(icon) {
+            eprintln!("familiar: set taskbar overlay: {e}");
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    let _ = (app, unread);
+}
+
 /// Milliseconds since the process started.
 #[tauri::command]
 fn bench_elapsed_ms() -> f64 {
@@ -325,7 +350,8 @@ fn main() {
             compose::open_compose,
             compose::file_info,
             compose::pick_files,
-            bench_elapsed_ms
+            bench_elapsed_ms,
+            set_unread_badge
         ])
         .setup(|app| {
             let builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
