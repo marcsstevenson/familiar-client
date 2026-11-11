@@ -26,6 +26,14 @@ const SOURCE_GUI: &str = "gui";
 /// Commands the window can't run: they need a terminal of their own.
 const NOT_FROM_GUI: &[&str] = &["draft.edit", "mcp.serve"];
 
+/// What the main window remembers between runs: where it was, how big, and
+/// whether it was maximised. Saved when the window closes or the app exits.
+/// If the monitor it was on is gone, the window opens where the OS puts it.
+pub(crate) const WINDOW_STATE: tauri_plugin_window_state::StateFlags =
+    tauri_plugin_window_state::StateFlags::POSITION
+        .union(tauri_plugin_window_state::StateFlags::SIZE)
+        .union(tauri_plugin_window_state::StateFlags::MAXIMIZED);
+
 /// One saved search.
 #[derive(Debug, Serialize)]
 struct View {
@@ -249,6 +257,14 @@ fn main() {
         .manage(std::sync::Arc::new(Registry::builtin()))
         .manage(daemon::Shared::default())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(
+            tauri_plugin_window_state::Builder::new()
+                .with_state_flags(WINDOW_STATE)
+                // Compose windows are numbered and short-lived; only the main
+                // window keeps its place.
+                .with_filter(|label| label == "main")
+                .build(),
+        )
         .manage(reading::Reading::load())
         .register_asynchronous_uri_scheme_protocol("famimg", |_ctx, request, responder| {
             tauri::async_runtime::spawn(async move {
@@ -283,6 +299,9 @@ fn main() {
                 .title("Familiar")
                 .inner_size(1280.0, 800.0)
                 .min_inner_size(720.0, 420.0)
+                // Hidden until the window-state plugin has moved it back to
+                // where it was last time, so it doesn't jump on screen.
+                .visible(false)
                 // Off so messages can be dragged onto folders: on Windows the
                 // native file-drop handler swallows the page's own drag and drop.
                 // Only compose windows take dropped files.
@@ -295,7 +314,7 @@ fn main() {
                 .hidden_title(true);
             #[cfg(not(target_os = "macos"))]
             let builder = builder.decorations(false);
-            builder.build()?;
+            builder.build()?.show()?;
             let handle = app.handle().clone();
             let shared = app.state::<daemon::Shared>().inner().clone();
             std::thread::spawn(move || daemon::keep_running(&handle, &shared));

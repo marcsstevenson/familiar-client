@@ -41,6 +41,8 @@ fn modified(path: &Path) -> Option<SystemTime> {
 #[tauri::command]
 pub async fn restart_app(app: AppHandle) {
     let _ = tauri::async_runtime::spawn_blocking(stop_famd).await;
+    // Restarting skips the window's close, so save its place first.
+    let _ = tauri_plugin_window_state::AppHandleExt::save_window_state(&app, crate::WINDOW_STATE);
     app.restart();
 }
 
