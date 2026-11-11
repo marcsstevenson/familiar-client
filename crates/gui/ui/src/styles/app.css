@@ -132,8 +132,12 @@ button {
   cursor: col-resize;
   touch-action: none;
 }
+/* Hover and drag show a see-through grey bar, like the scrollbar thumb;
+   keyboard focus keeps the accent so it stays easy to spot. */
 .splitter:hover,
-.splitter:active,
+.splitter:active {
+  background: linear-gradient(to right, transparent 2px, var(--scrollbar-thumb-hover) 2px, var(--scrollbar-thumb-hover) 5px, transparent 5px);
+}
 .splitter:focus-visible {
   background: linear-gradient(to right, transparent 2px, var(--accent) 2px, var(--accent) 5px, transparent 5px);
   outline: 0;
