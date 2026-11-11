@@ -27,6 +27,12 @@
   --duration-fast: 80ms;
   --duration-base: 120ms;
   --duration-slow: 180ms;
+
+  /* Scrollbars: a thin see-through grey thumb on no track, so it sits close
+     to whatever surface is behind it in both themes. */
+  --scrollbar-size: 10px;
+  --scrollbar-thumb: rgba(128, 128, 128, 0.35);
+  --scrollbar-thumb-hover: rgba(128, 128, 128, 0.6);
 }
 
 :root,

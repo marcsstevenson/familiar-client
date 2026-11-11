@@ -209,7 +209,12 @@ color:#1d2430;background:#fff;overflow-wrap:break-word}\
 img{max-width:100%}img:not([src$='#blocked']){height:auto}\
 img[src$='#blocked']{background:#e4e8ef;min-width:16px;min-height:16px}\
 pre.plain{white-space:pre-wrap;font:inherit;margin:0}\
-blockquote{margin:0 0 0 .8em;padding-left:.8em;border-left:2px solid #c9d0db}";
+blockquote{margin:0 0 0 .8em;padding-left:.8em;border-left:2px solid #c9d0db}\
+::-webkit-scrollbar{width:10px;height:10px;background:transparent}\
+::-webkit-scrollbar-thumb{background-color:rgba(128,128,128,.35);background-clip:padding-box;\
+border:2px solid transparent;border-radius:10px;min-height:32px}\
+::-webkit-scrollbar-thumb:hover{background-color:rgba(128,128,128,.6)}\
+::-webkit-scrollbar-corner{background:transparent}";
 
 /// Plain text as HTML: escaped, line breaks kept, web and mail addresses linked.
 pub fn text_to_html(text: &str) -> String {

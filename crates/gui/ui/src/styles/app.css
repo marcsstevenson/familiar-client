@@ -18,6 +18,29 @@ body {
   user-select: none;
 }
 
+/* Thin scrollbars (WebView2 and WebKitGTK both read ::-webkit-scrollbar).
+   The transparent border insets the thumb, so it shows 6px wide in a 10px
+   gutter and grows no wider on hover. */
+::-webkit-scrollbar {
+  width: var(--scrollbar-size);
+  height: var(--scrollbar-size);
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb);
+  background-clip: padding-box;
+  border: 2px solid transparent;
+  border-radius: var(--scrollbar-size);
+  min-height: 32px;
+}
+::-webkit-scrollbar-thumb:hover,
+::-webkit-scrollbar-thumb:active {
+  background-color: var(--scrollbar-thumb-hover);
+}
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 button {
   font: inherit;
   color: inherit;
