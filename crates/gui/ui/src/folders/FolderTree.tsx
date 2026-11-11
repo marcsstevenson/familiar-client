@@ -5,7 +5,7 @@ import { type CommandError, isCommandError, run, setUnreadBadge } from "../api";
 import type { FolderRow } from "../../../../../bindings/commands";
 import { onStoreChanged } from "../list/api";
 import { FolderMenu } from "./FolderMenu";
-import { dragged, followUpView, removeFromList, searchQuery, selectedFolder, setDragged, setFollowUpView, setSearchQuery, setSelectedFolder, setSelectedMessage } from "../state";
+import { countLabel, dragged, followUpView, removeFromList, searchQuery, selectedFolder, setDragged, setFollowUpView, setSearchQuery, setSelectedFolder, setSelectedMessage } from "../state";
 
 /** Well-known folders first, in this order; the rest keep the tree order. */
 const WELL_KNOWN = ["inbox", "drafts", "sentitems", "archive", "deleteditems", "junkemail"];
@@ -73,12 +73,13 @@ function parents(rows: FolderRow[]): Set<number> {
   return new Set(rows.filter((f, i) => (rows[i + 1]?.depth ?? -1) > f.depth).map((f) => f.id));
 }
 
-/** Moves the message dragged from the list into `f`. */
+/** Moves the messages dragged from the list into `f`. */
 function dropOn(f: FolderRow) {
   const d = dragged();
   setDragged(null);
   if (!d) return;
-  void removeFromList(d.id, `Moved to ${f.name}`, () => run("mail.move", { messages: [d.id], to: f.path }));
+  const what = d.ids.length > 1 ? `${countLabel(d.ids.length)} to ${f.name}` : `to ${f.name}`;
+  void removeFromList(d.ids, `Moved ${what}`, () => run("mail.move", { messages: d.ids, to: f.path }));
 }
 
 function choose(id: number | null) {

@@ -171,6 +171,56 @@ button {
   -webkit-mask: url("../assets/kea-mono.svg") center / contain no-repeat;
   mask: url("../assets/kea-mono.svg") center / contain no-repeat;
 }
+/* Several messages picked in the list: the reading pane shows how many and
+   what can be done to them all. */
+.picked-summary {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  color: var(--text);
+  text-align: center;
+  padding: var(--space-5);
+}
+.picked-summary .reading-empty-kea {
+  width: 96px;
+  height: 96px;
+}
+.picked-summary h2 {
+  margin: 0;
+  font-size: var(--text-xl);
+  font-weight: 600;
+}
+.picked-note {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+.picked-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--space-3);
+}
+.picked-actions button {
+  padding: var(--space-2) var(--space-4);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+}
+.picked-actions button:hover {
+  background: var(--bg-hover);
+}
+.picked-actions .danger {
+  color: var(--danger);
+}
+.picked-clear {
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  text-decoration: underline;
+}
 
 /* Status bar */
 .statusbar {
@@ -354,6 +404,11 @@ button {
 .folder-menu .danger {
   color: var(--danger);
 }
+.folder-menu .menu-heading {
+  padding: var(--space-2) var(--space-4);
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+}
 .folder-menu-colours {
   display: flex;
   flex-wrap: wrap;
@@ -493,9 +548,12 @@ button {
   left: 0;
   right: 0;
   height: 64px;
-  padding: var(--space-2) var(--space-4) var(--space-2) var(--space-5);
+  /* The left gap holds the unread dot and the tick box. */
+  padding: var(--space-2) var(--space-4) var(--space-2) 28px;
   border-bottom: 1px solid var(--border);
   overflow: hidden;
+  /* Shift+click picks rows, not text. */
+  user-select: none;
   cursor: default;
   will-change: transform;
 }
@@ -532,6 +590,45 @@ button {
 .row-action:hover {
   background: var(--bg);
 }
+/* The tick box for picking several messages with the mouse: on the left
+   edge, shown on hover and on every row while several are picked. */
+.row-check {
+  position: absolute;
+  left: 8px;
+  top: 50%;
+  translate: 0 -50%;
+  width: 14px;
+  height: 14px;
+  display: none;
+  box-sizing: border-box;
+  border: 1.5px solid var(--text-muted);
+  border-radius: 3px;
+  background: var(--bg);
+}
+.list-row:hover .row-check,
+.list-row.multi .row-check {
+  display: block;
+}
+.row-check.checked {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+.row-check.checked::after {
+  content: "";
+  position: absolute;
+  left: 3.5px;
+  top: 0.5px;
+  width: 3.5px;
+  height: 7px;
+  border: solid var(--text-on-accent);
+  border-width: 0 2px 2px 0;
+  rotate: 45deg;
+}
+/* The keyboard cursor inside a multiple selection. */
+.list-scroller:focus .list-row.cursor {
+  outline: 1px solid var(--accent);
+  outline-offset: -1px;
+}
 .list-row.selected {
   background: var(--bg-selected-inactive);
 }
@@ -543,7 +640,7 @@ button {
 .list-row::before {
   content: "";
   position: absolute;
-  left: 6px;
+  left: 12px;
   top: 10px;
   width: 6px;
   height: 6px;
@@ -714,6 +811,12 @@ kbd {
 }
 .palette-note {
   color: var(--text-muted);
+}
+.move-note {
+  margin: 0;
+  padding: var(--space-3) var(--space-5);
+  border-top: 1px solid var(--border);
+  font-size: var(--text-sm);
 }
 .command-form {
   display: flex;

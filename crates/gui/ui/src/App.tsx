@@ -9,10 +9,11 @@ import { type DaemonState, type UiInfo, watchDaemon } from "./api";
 import { ReadingPane } from "./reading/ReadingPane";
 import { Palette } from "./palette/Palette";
 import { EventDialog } from "./calendar/EventDialog";
-import { aiSettings, eventDialog, notice, processedFolders, setEventDialog, setFollowUpView, setSearchQuery, setSelectedFolder, setSelectedMessage, setSpamDialog, spamDialog, spamSettings } from "./state";
+import { aiSettings, eventDialog, movePicker, notice, processedFolders, setEventDialog, setFollowUpView, setMovePicker, setSearchQuery, setSelectedFolder, setSelectedMessage, setSpamDialog, spamDialog, spamSettings } from "./state";
 import { SpamDialog } from "./spam/SpamDialog";
 import { FolderTree } from "./folders/FolderTree";
 import { MessageList } from "./list/MessageList";
+import { MovePicker } from "./list/MovePicker";
 import { Splitters, paneColumns } from "./Splitters";
 import { TitleBar } from "./TitleBar";
 
@@ -100,6 +101,9 @@ export function App(props: { info: UiInfo }) {
       </Show>
       <Show when={spamDialog()}>
         {(d) => <SpamDialog message={d().message} saved={d().saved} onClose={() => setSpamDialog(null)} />}
+      </Show>
+      <Show when={movePicker()}>
+        {(m) => <MovePicker ids={m().ids} accounts={m().accounts} onClose={() => setMovePicker(null)} />}
       </Show>
       <Show when={palette()}>
         {(p) => <Palette initial={p().initial} onClose={() => setPalette(null)} />}

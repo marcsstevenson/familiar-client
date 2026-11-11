@@ -27,25 +27,45 @@ export function notify(text: string, error = false): void {
   noticeTimer = setTimeout(() => setNotice(null), error ? 8000 : 4000);
 }
 
-/** The message being dragged from the list, for the folder pane to drop on. */
-export const [dragged, setDragged] = createSignal<{ id: number; account: string } | null>(null);
+/** The messages being dragged from the list, for the folder pane to drop on.
+ * `account` is null when they come from more than one account (no folder
+ * takes them then). */
+export const [dragged, setDragged] = createSignal<{ ids: number[]; account: string | null } | null>(null);
+
+/** Messages picked with Ctrl or Shift (or Ctrl+A) in the list, by ID, with
+ * each one's account. Two or more make a multiple selection: nothing is open
+ * in the reading pane then, which shows what can be done to them all. With
+ * fewer the list is back to one open message. */
+export const [picked, setPicked] = createSignal<ReadonlyMap<number, string>>(new Map());
+export const multiPicked = () => picked().size >= 2;
 
 /** Moves the list selection; set by the list while it is mounted. */
 export const listNav = {
   move: (_delta: number): void => {},
-  /** A message about to leave the list (deleted, archived, moved). If it is the
-   * one open, the list then opens the next one down, or up at the end. */
-  leaving: null as number | null,
+  /** Called with messages about to leave the list (deleted, archived, moved).
+   * If the open message is one of them, or they are the multiple selection,
+   * the list then opens the one that takes their place, or the new last one. */
+  leaving: (_ids: readonly number[]): void => {},
+  /** Called if the command that was to take them out failed. */
+  stayed: (): void => {},
 };
+
+/** The multiple selection's IDs and its single account (null when mixed). */
+export function pickedMessages(): { ids: number[]; account: string | null } {
+  const accounts = new Set(picked().values());
+  return { ids: [...picked().keys()], account: accounts.size === 1 ? [...accounts][0]! : null };
+}
 
 /** Messages fading out of the list while the command that takes them out
  * (delete, archive, move) runs. The list draws their rows as leaving. */
 export const [leavingRows, setLeavingRows] = createSignal<ReadonlySet<number>>(new Set());
-const setLeaving = (id: number, on: boolean) =>
+const setLeaving = (ids: readonly number[], on: boolean) =>
   setLeavingRows((s) => {
     const next = new Set(s);
-    if (on) next.add(id);
-    else next.delete(id);
+    for (const id of ids) {
+      if (on) next.add(id);
+      else next.delete(id);
+    }
     return next;
   });
 
@@ -53,30 +73,57 @@ const setLeaving = (id: number, on: boolean) =>
 const LEAVE_MS = 140;
 const reducedMotion = () => window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
 
-/** Runs a command that takes message `id` out of the list (delete, archive,
- * move) and reports it in the status bar. The row fades out while the command
+/** Runs a command that takes messages `ids` out of the list (delete, archive,
+ * move) and reports it in the status bar. The rows fade out while the command
  * runs, then the list refreshes at once (the command has changed the store)
- * rather than at its next poll. If `id` is the open message, the list opens
- * the next one once the command has taken effect. */
-export async function removeFromList(id: number, label: string, job: () => Promise<unknown>): Promise<void> {
-  // Already on its way out (a second Delete press before the list moved on).
-  if (leavingRows().has(id)) return;
-  if (id === selectedMessage()) listNav.leaving = id;
-  setLeaving(id, true);
+ * rather than at its next poll. If the open message or the multiple selection
+ * is leaving, the list opens the next one once the command has taken effect. */
+export async function removeFromList(ids: number | readonly number[], label: string, job: () => Promise<unknown>): Promise<void> {
+  const all = typeof ids === "number" ? [ids] : ids;
+  // Already on their way out (a second Delete press before the list moved on).
+  const going = all.filter((id) => !leavingRows().has(id));
+  if (going.length === 0) return;
+  listNav.leaving(going);
+  setLeaving(going, true);
   const fade = new Promise((r) => setTimeout(r, reducedMotion() ? 0 : LEAVE_MS));
   try {
     await Promise.all([job(), fade]);
     notify(label);
     await refreshViews();
-    // The refresh has dropped the row by now; if not, it comes back until
+    // The refresh has dropped the rows by now; if not, they come back until
     // the next poll does.
-    setTimeout(() => setLeaving(id, false), 500);
+    setTimeout(() => setLeaving(going, false), 500);
   } catch (e) {
-    setLeaving(id, false);
-    if (listNav.leaving === id) listNav.leaving = null;
+    setLeaving(going, false);
+    listNav.stayed();
     notify(isCommandError(e) ? e.message : String(e), true);
   }
 }
+
+/** "3 messages" or "1 message". */
+export const countLabel = (n: number) => `${n.toLocaleString()} message${n === 1 ? "" : "s"}`;
+
+/** Runs a command on the multiple selection that leaves it in the list (mark
+ * read, flag), and reports it. */
+export async function onPicked(label: string, job: (ids: number[]) => Promise<unknown>): Promise<void> {
+  const { ids } = pickedMessages();
+  if (ids.length === 0) return;
+  try {
+    await job(ids);
+    notify(`${label}: ${countLabel(ids.length)}`);
+  } catch (e) {
+    notify(isCommandError(e) ? e.message : String(e), true);
+  }
+}
+
+/** Runs a command that takes the multiple selection out of the list. */
+export function removePicked(label: string, job: (ids: number[]) => Promise<unknown>): Promise<void> {
+  const { ids } = pickedMessages();
+  return removeFromList(ids, `${label}: ${countLabel(ids.length)}`, () => job(ids));
+}
+
+/** The Move to folder picker, open for these messages. */
+export const [movePicker, setMovePicker] = createSignal<{ ids: number[]; accounts: string[] } | null>(null);
 
 /** Each account's processed folder (config.toml `processed_folder`), by
  * account key; filled once at start. Accounts without one get no tick. */
