@@ -280,7 +280,7 @@ export function MessageList() {
       if (picked().size > 0) {
         const left = new Map([...picked()].filter(([id]) => !gone.has(id)));
         if (left.size === picked().size) return;
-        if (left.size >= 2) {
+        if (left.size >= 1) {
           setPicked(left);
           return;
         }
@@ -344,9 +344,10 @@ export function MessageList() {
   }
 
   /** Sets the multiple selection to `next`, with the cursor on row `cursor`.
-   * One message left opens it; none closes the reading pane. */
-  function applyPicked(next: Map<number, string>, cursor: number) {
-    if (next.size >= 2) {
+   * One message left opens it (stays picked with `keepOne`, for the tick
+   * box); none closes the reading pane. */
+  function applyPicked(next: Map<number, string>, cursor: number, keepOne = false) {
+    if (next.size >= 2 || (keepOne && next.size === 1)) {
       setPicked(next);
       setSelectedMessage(null);
       setSelIndex(cursor);
@@ -360,7 +361,6 @@ export function MessageList() {
     else {
       setPicked(new Map());
       setSelectedMessage(only ?? null);
-      if (only === undefined) setSelIndex(cursor);
     }
     anchor = keep;
   }
@@ -381,6 +381,18 @@ export function MessageList() {
     else next.set(row.id, row.account);
     anchor = i;
     applyPicked(next, i);
+  }
+
+  /** The tick box: picks row `i` or unpicks it. Unlike Ctrl+click, the open
+   * message isn't added, and a single tick stays ticked rather than opening. */
+  function tick(i: number) {
+    const row = rowAt(i);
+    if (!row) return;
+    const next = new Map(picked());
+    if (next.has(row.id)) next.delete(row.id);
+    else next.set(row.id, row.account);
+    anchor = i;
+    applyPicked(next, i, true);
   }
 
   /** Shift+click and Shift+arrows: picks the rows from the anchor to `i`
@@ -520,7 +532,7 @@ export function MessageList() {
                   // A plain click inside the multiple selection (not a drag) opens that row.
                   if (e.button === 0 && !e.shiftKey && !e.ctrlKey && !e.metaKey && multiPicked() && isPicked(i)) select(i);
                 }}
-                onToggle={toggle}
+                onToggle={tick}
                 unified={selectedFolder() === null || searchQuery() !== null || followUpView()}
               />
             )}

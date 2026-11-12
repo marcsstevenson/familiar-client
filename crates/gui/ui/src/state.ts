@@ -32,12 +32,12 @@ export function notify(text: string, error = false): void {
  * takes them then). */
 export const [dragged, setDragged] = createSignal<{ ids: number[]; account: string | null } | null>(null);
 
-/** Messages picked with Ctrl or Shift (or Ctrl+A) in the list, by ID, with
- * each one's account. Two or more make a multiple selection: nothing is open
- * in the reading pane then, which shows what can be done to them all. With
- * fewer the list is back to one open message. */
+/** Messages picked in the list (tick boxes, Ctrl or Shift, Ctrl+A), by ID,
+ * with each one's account. While any are picked nothing is open in the
+ * reading pane, which shows what can be done to them all. Ctrl+click down to
+ * one opens that one instead; a single tick box stays ticked. */
 export const [picked, setPicked] = createSignal<ReadonlyMap<number, string>>(new Map());
-export const multiPicked = () => picked().size >= 2;
+export const multiPicked = () => picked().size >= 1;
 
 /** Moves the list selection; set by the list while it is mounted. */
 export const listNav = {
