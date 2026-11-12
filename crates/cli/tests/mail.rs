@@ -365,3 +365,79 @@ fn folder_colours_and_pins_are_kept_on_this_device() {
     let (code, e) = fails(data, &["folder", "pin", "Nowhere"]);
     assert_eq!((code, e["kind"].as_str()), (6, Some("not_found")));
 }
+
+#[test]
+fn folders_can_be_reordered_on_this_device() {
+    let dir = tempfile::tempdir().unwrap();
+    let data = dir.path();
+    sync_store(data);
+
+    let list = || {
+        json(data, &["folder", "list"])["folders"]
+            .as_array()
+            .unwrap()
+            .clone()
+    };
+    let top = |rows: &[serde_json::Value]| -> Vec<String> {
+        rows.iter()
+            .filter(|f| f["depth"] == 0)
+            .map(|f| f["path"].as_str().unwrap().to_string())
+            .collect()
+    };
+    let rows = list();
+    let before = top(&rows);
+    // Well-known folders come first by default.
+    assert_eq!(before[0], "Inbox", "{before:?}");
+    let id = |p: &str| rows.iter().find(|f| f["path"] == p).unwrap()["id"].to_string();
+
+    // Put the last top-level folder first; the rest keep their order.
+    let mut wanted = before.clone();
+    wanted.rotate_right(1);
+    let mut args = vec!["folder".to_string(), "reorder".to_string()];
+    args.extend(wanted.iter().map(|p| id(p)));
+    let args: Vec<&str> = args.iter().map(String::as_str).collect();
+    let v = json(data, &args);
+    assert_eq!(v["folders"][0]["path"], wanted[0].as_str());
+    let rows = list();
+    assert_eq!(top(&rows), wanted);
+    // A subfolder still follows its parent.
+    let paths: Vec<&str> = rows.iter().map(|f| f["path"].as_str().unwrap()).collect();
+    let pos = |p: &str| paths.iter().position(|x| *x == p).unwrap();
+    assert_eq!(pos("Cricket Club") + 1, pos("Cricket Club/Juniors"));
+
+    // Folders under different parents can't be ordered together.
+    let (code, e) = fails(
+        data,
+        &["folder", "reorder", &id("Inbox"), &id("Inbox/Receipts")],
+    );
+    assert_eq!((code, e["kind"].as_str()), (2, Some("usage")));
+    let (code, e) = fails(data, &["folder", "reorder", "999999"]);
+    assert_eq!((code, e["kind"].as_str()), (6, Some("not_found")));
+
+    // Pinned folders get their own order, dropped when unpinned.
+    json(data, &["folder", "pin", "Inbox"]);
+    json(data, &["folder", "pin", "Inbox/Receipts"]);
+    json(
+        data,
+        &[
+            "folder",
+            "reorder",
+            "--pinned",
+            &id("Inbox/Receipts"),
+            &id("Inbox"),
+        ],
+    );
+    let rows = list();
+    let row = |p: &str| rows.iter().find(|f| f["path"] == p).unwrap().clone();
+    assert_eq!(row("Inbox/Receipts")["pin_order"], 0);
+    assert_eq!(row("Inbox")["pin_order"], 1);
+    json(data, &["folder", "unpin", "Inbox"]);
+    assert!(
+        list()
+            .iter()
+            .find(|f| f["path"] == "Inbox")
+            .unwrap()
+            .get("pin_order")
+            .is_none()
+    );
+}

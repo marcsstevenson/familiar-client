@@ -519,6 +519,19 @@ Renames a folder on this device at once and queues it for the server. Built-in f
 - `--wait`: Wait until the server has the change (needs famd).
 - `--wait-secs <wait-secs>`: Seconds --wait waits at most (default 60).
 
+## folder.reorder
+
+Set the order of folders in the folder pane. Access: `write`.
+
+```
+fam folder reorder <FOLDERS>...
+```
+
+Puts sibling folders (same account and parent) in the order given, or with --pinned the pinned folders. Give the whole group: folders left out keep any earlier place. Kept on this device only (folders.json in the data directory), not on the server. The desktop app sets it when a folder is dragged.
+
+- `FOLDERS` (required, repeatable): Local folder IDs (the id column of fam folder list --json), in the order wanted. They must share a parent folder and account, unless --pinned is given.
+- `--pinned`: Order the pinned folders (any accounts) instead of sibling folders.
+
 ## folder.unpin
 
 Unpin a mail folder. Access: `write`.

@@ -36,6 +36,7 @@ export const COMMAND_SURFACE = {
   "folder.move": "palette",
   "folder.pin": "palette",
   "folder.rename": "palette",
+  "folder.reorder": "palette",
   "folder.unpin": "palette",
   "followup.add": "palette",
   "followup.cancel": "palette",

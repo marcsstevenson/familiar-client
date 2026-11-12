@@ -895,7 +895,7 @@ export type FolderListInput = {
 };
 
 export type FolderListOutput = {
-  /** Folders by account, each account's tree depth first, siblings by name. */
+  /** Folders by account, each account's tree depth first. Siblings are in the order set with `fam folder reorder`, then well-known folders (Inbox, Drafts, Sent Items, Archive, Deleted Items, Junk Email), then by name. */
   folders: Array<FolderRow>;
 };
 
@@ -938,6 +938,18 @@ export type FolderRenameInput = {
   wait_secs?: number | null;
 };
 
+export type FolderReorderInput = {
+  /** Local folder IDs (the id column of fam folder list --json), in the order wanted. They must share a parent folder and account, unless --pinned is given. */
+  folders: Array<number>;
+  /** Order the pinned folders (any accounts) instead of sibling folders. */
+  pinned?: boolean;
+};
+
+export type FolderReorderOutput = {
+  /** The folders, in their new order. */
+  folders: Array<FolderRow>;
+};
+
 export type FolderRow = {
   /** Account name. */
   account: string;
@@ -953,6 +965,8 @@ export type FolderRow = {
   parent?: number | null;
   /** Full path from the top of the mailbox, such as `Inbox/Club`. Accepted by `fam mail list --folder`. */
   path: string;
+  /** Its place among the pinned folders (`fam folder reorder --pinned`); pinned folders without one follow in tree order. */
+  pin_order?: number | null;
   /** Pinned to the top of the folder pane (`fam folder pin`), on this device only. */
   pinned?: boolean;
   /** Graph folder ID. */
@@ -1927,6 +1941,8 @@ export interface Commands {
   "folder.pin": { input: FolderPinInput; output: FolderRow };
   /** Rename a mail folder */
   "folder.rename": { input: FolderRenameInput; output: WriteOutput };
+  /** Set the order of folders in the folder pane */
+  "folder.reorder": { input: FolderReorderInput; output: FolderReorderOutput };
   /** Unpin a mail folder */
   "folder.unpin": { input: FolderPinInput; output: FolderRow };
   /** Remind me if nobody replies to a message */
@@ -2029,6 +2045,7 @@ export const COMMAND_NAMES = [
   "folder.move",
   "folder.pin",
   "folder.rename",
+  "folder.reorder",
   "folder.unpin",
   "followup.add",
   "followup.cancel",

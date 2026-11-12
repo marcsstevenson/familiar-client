@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-//! Folder colours and pins: settings kept on this device only, in
+//! Folder colours, pins and order: settings kept on this device only, in
 //! `folders.json` in the data directory. Keyed by account and Graph folder ID,
 //! so they follow a folder through a rename or a move.
 
@@ -26,11 +26,18 @@ pub struct FolderPref {
     /// Listed at the top of the folder pane.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub pinned: bool,
+    /// Its place among its sibling folders (`fam folder reorder`), lowest
+    /// first. Folders without one follow, in the default order.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub order: Option<u32>,
+    /// Its place among the pinned folders (`fam folder reorder --pinned`).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pin_order: Option<u32>,
 }
 
 impl FolderPref {
     fn is_empty(&self) -> bool {
-        self.color.is_none() && !self.pinned
+        self == &Self::default()
     }
 }
 
