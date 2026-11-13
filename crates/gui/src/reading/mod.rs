@@ -315,7 +315,8 @@ pub enum Preview {
         src: String,
     },
     /// A PDF, as base64. The window turns it into a `blob:` URL for the
-    /// webview's own PDF viewer, which parses it in a sandboxed process.
+    /// webview's own PDF viewer, which parses it in a sandboxed process; on
+    /// Linux, where WebKitGTK has none, pdf.js draws it in a sandboxed frame.
     Pdf {
         /// The file, base64.
         data: String,
@@ -343,15 +344,12 @@ fn is_pdf(bytes: &[u8]) -> bool {
         .any(|w| w == b"%PDF-")
 }
 
-/// WebKitGTK has no PDF viewer, so Linux keeps Save only.
-const PDF_VIEWER: bool = cfg!(not(target_os = "linux"));
-
 fn previewable(a: &AttachmentInfo) -> bool {
     let ct = a.content_type.to_ascii_lowercase();
     let name = a.name.to_ascii_lowercase();
     // SVG can carry script; it is only ever shown through <img>, which never runs it.
     ct.starts_with("image/")
-        || (PDF_VIEWER && claims_pdf(a))
+        || claims_pdf(a)
         || ct.starts_with("text/plain")
         || ct == "text/csv"
         || [".txt", ".csv", ".log", ".md", ".json"]
@@ -441,7 +439,7 @@ mod tests {
     fn pdf_preview_needs_a_real_pdf_header() {
         let a = info("invoice.pdf", "application/octet-stream");
         let p = preview_of(&a, b"\r\n%PDF-1.7\n...");
-        assert_eq!(matches!(p, Preview::Pdf { .. }), PDF_VIEWER);
+        assert!(matches!(p, Preview::Pdf { .. }));
         // A file that only says it is a PDF gets no preview.
         assert!(matches!(preview_of(&a, b"<html><script>"), Preview::None));
         let late = [vec![b' '; 1024], b"%PDF-1.4".to_vec()].concat();

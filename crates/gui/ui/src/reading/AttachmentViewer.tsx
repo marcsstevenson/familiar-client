@@ -3,7 +3,9 @@
 //
 // PDFs go to the webview's own PDF viewer (WebView2's on Windows) as a
 // `blob:` URL in a frame. It parses the file in its own sandboxed process,
-// so an untrusted PDF never runs inside this window. Images get fit, zoom
+// so an untrusted PDF never runs inside this window. Linux's WebKitGTK has
+// no PDF viewer, so there pdf.js draws it in a sandboxed frame (PdfJsFrame,
+// src/pdfframe). Images get fit, zoom
 // and actual size; text is shown as is.
 import { Match, Show, Switch, createEffect, createSignal, on, onCleanup } from "solid-js";
 import { type AttachmentInfo, type Preview, errorText, previewAttachment } from "./api";
@@ -194,7 +196,31 @@ function PdfFrame(props: { data: string; name: string }) {
   const bin = atob(props.data);
   const bytes = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  if (document.documentElement.dataset.platform === "linux") return <PdfJsFrame bytes={bytes} name={props.name} />;
   const url = URL.createObjectURL(new Blob([bytes], { type: "application/pdf" }));
   onCleanup(() => URL.revokeObjectURL(url));
   return <iframe class="attachment-viewer-pdf" src={url} title={props.name} />;
+}
+
+// Linux: WebKitGTK has no PDF viewer, so pdf.js draws it inside a sandboxed
+// frame with an opaque origin (no allow-same-origin), which can't reach
+// Familiar's commands. The bytes go over postMessage once the frame is ready.
+function PdfJsFrame(props: { bytes: Uint8Array; name: string }) {
+  let frame!: HTMLIFrameElement;
+  const onMessage = (e: MessageEvent) => {
+    if (e.source !== frame.contentWindow || e.data !== "pdf-frame-ready") return;
+    const buf = props.bytes.buffer.slice(0) as ArrayBuffer;
+    frame.contentWindow!.postMessage(buf, "*", [buf]);
+  };
+  window.addEventListener("message", onMessage);
+  onCleanup(() => window.removeEventListener("message", onMessage));
+  return (
+    <iframe
+      ref={frame}
+      class="attachment-viewer-pdf"
+      sandbox="allow-scripts"
+      src="/pdf-frame.html"
+      title={props.name}
+    />
+  );
 }
