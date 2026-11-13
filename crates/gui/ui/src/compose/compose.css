@@ -258,16 +258,18 @@
    quoted message written for a white page would otherwise put black text on
    the app's dark grey. A filter changes only how it looks, so the HTML that
    is saved and sent keeps the message's own colours. The page under the
-   filter is light grey, which turns into the reading pane's #121212, and
-   pictures are turned back. */
+   filter is white, and inverting 93% turns white (the page, or a white box
+   in a quoted message) into the reading pane's #121212 and black text into
+   #ededed. Pictures get the opposite filter, so they keep their colours:
+   invert(1) contrast(1/0.86) undoes the page's x -> 0.93 - 0.86x. */
 :root[data-theme="dark"] .editor:not(.plain) {
-  background: #ededed;
-  color: #1c1c1c;
+  background: #fff;
+  color: #000;
   color-scheme: light;
-  filter: invert(1) hue-rotate(180deg);
+  filter: invert(0.93) hue-rotate(180deg);
 }
 :root[data-theme="dark"] .editor:not(.plain) :is(img, video) {
-  filter: invert(1) hue-rotate(180deg);
+  filter: hue-rotate(180deg) invert(1) contrast(1.163);
 }
 /* The box and corner handle over a picture being resized. */
 .img-resize {

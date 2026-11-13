@@ -170,8 +170,8 @@ export function ComposeWindow(props: { info: UiInfo; spec: ComposeSpec }) {
 
   // --- opening -------------------------------------------------------------
 
-  async function openDraft(id: number, fresh: boolean) {
-    const d = await loadDraft(id, bodyOf);
+  async function openDraft(id: number, fresh: boolean, source?: number) {
+    const d = await loadDraft(id, bodyOf, source);
     setDraftId(id);
     setAccount(d.account);
     const own = identity(d.account)?.email;
@@ -222,7 +222,7 @@ export function ComposeWindow(props: { info: UiInfo; spec: ComposeSpec }) {
         const id = createdDraft(out);
         if (id === null) throw new Error("the draft wasn't made");
         setIsResponse(true);
-        await openDraft(id, true);
+        await openDraft(id, true, spec.message);
       }
       setLoading(false);
       placeCaret();
