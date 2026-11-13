@@ -156,35 +156,6 @@
   white-space: nowrap;
   pointer-events: none;
 }
-.attachment-preview {
-  position: absolute;
-  inset: 0;
-  z-index: 2;
-  display: flex;
-  flex-direction: column;
-  background: var(--bg);
-}
-.attachment-preview-bar {
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-3) var(--space-5);
-  border-bottom: 1px solid var(--border);
-}
-.attachment-preview-body {
-  flex: 1;
-  overflow: auto;
-  padding: var(--space-5);
-}
-.attachment-preview-body img {
-  max-width: 100%;
-}
-.attachment-preview-body pre {
-  margin: 0;
-  white-space: pre-wrap;
-  font-family: var(--font-mono);
-  font-size: var(--text-sm);
-}
 /* Copy icons beside subject, sender and recipients: hidden until the
    pointer is over that field, or the icon has keyboard focus. */
 .reading button.reading-copy {
@@ -220,4 +191,88 @@
   stroke-width: 1.3;
   stroke-linecap: round;
   stroke-linejoin: round;
+}
+
+/* The attachment viewer (AttachmentViewer.tsx): fills the window below the
+   title bar, so PDFs and big images get the room they need. */
+.attachment-viewer {
+  position: fixed;
+  top: var(--titlebar-h);
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  outline: none;
+}
+.attachment-viewer-bar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-5);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-chrome);
+  white-space: nowrap;
+}
+.attachment-viewer-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 600;
+  min-width: 0;
+}
+.attachment-viewer-zoom {
+  min-width: 3.5em;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+.attachment-viewer-bar button[aria-pressed="true"] {
+  background: var(--bg-selected);
+}
+.attachment-viewer-image {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  background: var(--bg-sidebar);
+}
+.attachment-viewer-image img {
+  display: block;
+  margin: auto;
+  max-width: none;
+  cursor: zoom-out;
+}
+.attachment-viewer-image.fit {
+  display: flex;
+  overflow: hidden;
+  padding: var(--space-5);
+}
+.attachment-viewer-image.fit img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  cursor: zoom-in;
+}
+.attachment-viewer-pdf {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  border: 0;
+}
+.attachment-viewer-text {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  margin: 0;
+  padding: var(--space-5);
+  white-space: pre-wrap;
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+}
+.attachment-viewer-empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--space-6);
 }

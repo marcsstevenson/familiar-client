@@ -314,6 +314,12 @@ pub enum Preview {
         /// The `data:` URI.
         src: String,
     },
+    /// A PDF, as base64. The window turns it into a `blob:` URL for the
+    /// webview's own PDF viewer, which parses it in a sandboxed process.
+    Pdf {
+        /// The file, base64.
+        data: String,
+    },
     /// Text, shown as is.
     Text {
         /// The text.
@@ -323,11 +329,29 @@ pub enum Preview {
     None,
 }
 
+/// Whether the attachment says it is a PDF, by type or name.
+fn claims_pdf(a: &AttachmentInfo) -> bool {
+    a.content_type.eq_ignore_ascii_case("application/pdf")
+        || a.name.to_ascii_lowercase().ends_with(".pdf")
+}
+
+/// True if the bytes really are a PDF: the header must sit in the first
+/// 1024 bytes, as PDF readers allow.
+fn is_pdf(bytes: &[u8]) -> bool {
+    bytes[..bytes.len().min(1024)]
+        .windows(5)
+        .any(|w| w == b"%PDF-")
+}
+
+/// WebKitGTK has no PDF viewer, so Linux keeps Save only.
+const PDF_VIEWER: bool = cfg!(not(target_os = "linux"));
+
 fn previewable(a: &AttachmentInfo) -> bool {
     let ct = a.content_type.to_ascii_lowercase();
     let name = a.name.to_ascii_lowercase();
     // SVG can carry script; it is only ever shown through <img>, which never runs it.
     ct.starts_with("image/")
+        || (PDF_VIEWER && claims_pdf(a))
         || ct.starts_with("text/plain")
         || ct == "text/csv"
         || [".txt", ".csv", ".log", ".md", ".json"]
@@ -335,28 +359,36 @@ fn previewable(a: &AttachmentInfo) -> bool {
             .any(|e| name.ends_with(e))
 }
 
-/// Previews an attachment: images and plain text only.
+fn preview_of(info: &AttachmentInfo, bytes: &[u8]) -> Preview {
+    if !previewable(info) || bytes.len() > MAX_PREVIEW_BYTES {
+        return Preview::None;
+    }
+    if info.content_type.to_ascii_lowercase().starts_with("image/") {
+        Preview::Image {
+            src: data_uri(&info.content_type, bytes),
+        }
+    } else if claims_pdf(info) {
+        if is_pdf(bytes) {
+            Preview::Pdf {
+                data: base64::engine::general_purpose::STANDARD.encode(bytes),
+            }
+        } else {
+            Preview::None
+        }
+    } else {
+        Preview::Text {
+            text: String::from_utf8_lossy(bytes).into_owned(),
+        }
+    }
+}
+
+/// Previews an attachment: images, PDFs and plain text.
 #[tauri::command]
 pub async fn reading_preview(message: i64, attachment: String) -> Result<Preview, CommandError> {
     blocking(move || {
         let paths = DaemonPaths::resolve()?;
         let c = attachments::content_at(&paths, message, &attachment)?;
-        if !previewable(&c.info) || c.bytes.len() > MAX_PREVIEW_BYTES {
-            return Ok(Preview::None);
-        }
-        if c.info
-            .content_type
-            .to_ascii_lowercase()
-            .starts_with("image/")
-        {
-            Ok(Preview::Image {
-                src: data_uri(&c.info.content_type, &c.bytes),
-            })
-        } else {
-            Ok(Preview::Text {
-                text: String::from_utf8_lossy(&c.bytes).into_owned(),
-            })
-        }
+        Ok(preview_of(&c.info, &c.bytes))
     })
     .await
 }
@@ -391,4 +423,38 @@ pub fn reading_open_link(url: String) -> Result<(), CommandError> {
     }
     webbrowser::open(url.trim())
         .map_err(|e| CommandError::internal(format!("couldn't open {url}: {e}")))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn info(name: &str, content_type: &str) -> AttachmentInfo {
+        serde_json::from_value(serde_json::json!({
+            "id": "a", "name": name, "content_type": content_type,
+            "size": 1, "is_inline": false, "kind": "file"
+        }))
+        .unwrap()
+    }
+
+    #[test]
+    fn pdf_preview_needs_a_real_pdf_header() {
+        let a = info("invoice.pdf", "application/octet-stream");
+        let p = preview_of(&a, b"\r\n%PDF-1.7\n...");
+        assert_eq!(matches!(p, Preview::Pdf { .. }), PDF_VIEWER);
+        // A file that only says it is a PDF gets no preview.
+        assert!(matches!(preview_of(&a, b"<html><script>"), Preview::None));
+        let late = [vec![b' '; 1024], b"%PDF-1.4".to_vec()].concat();
+        assert!(matches!(preview_of(&a, &late), Preview::None));
+    }
+
+    #[test]
+    fn images_and_text_still_preview() {
+        let p = preview_of(&info("a.png", "image/png"), b"\x89PNG");
+        assert!(matches!(p, Preview::Image { .. }));
+        let p = preview_of(&info("notes.txt", "text/plain"), b"hi");
+        assert!(matches!(p, Preview::Text { .. }));
+        let p = preview_of(&info("a.docx", "application/msword"), b"PK");
+        assert!(matches!(p, Preview::None));
+    }
 }
