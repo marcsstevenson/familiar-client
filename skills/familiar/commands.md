@@ -373,8 +373,9 @@ Send a draft. Access: `send`.
 fam draft send <DRAFT>
 ```
 
-Queues a draft to send after the undo-send delay ([app] send_delay_seconds; --now skips it). Undo with fam ops cancel <op> before then. Offline, it waits in the queue until it can go.
+Queues a draft to send after the undo-send delay ([app] send_delay_seconds; --now skips it). Undo with fam ops cancel <op> before then. Offline, it waits in the queue until it can go. --at sends later: the server holds it and sends it at that time.
 
+- `--at <at>`: Send later: +2h, "tomorrow 9am", "2026-11-21 18:00" (local time). The server holds it and sends it then, even with this PC off.
 - `DRAFT` (required): Local ID of the draft.
 - `--dry-run`: Only show what would happen.
 - `--now`: Skip the undo-send delay.
@@ -791,9 +792,10 @@ Write and send a message. Access: `send`.
 fam mail send
 ```
 
-Saves a new message as a draft with the account's signature and queues it to send after the undo-send delay (--now skips it). Undo with fam ops cancel <op> before then.
+Saves a new message as a draft with the account's signature and queues it to send after the undo-send delay (--now skips it). Undo with fam ops cancel <op> before then. --at sends later: the server holds it and sends it at that time.
 
 - `--account <account>`: The account to send from (config name or address); needed with more than one.
+- `--at <at>`: Send later: +2h, "tomorrow 9am", "2026-11-21 18:00" (local time). The server holds it and sends it then, even with this PC off.
 - `--attach <attach>` (repeatable): Attach a file (up to 3 MB); repeat for more.
 - `--bcc <bcc>` (repeatable): Bcc.
 - `--body <body>`: Body text (plain text unless --html).

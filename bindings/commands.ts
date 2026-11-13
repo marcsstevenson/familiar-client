@@ -755,6 +755,8 @@ export type DraftReplyInput = {
 };
 
 export type DraftSendInput = {
+  /** Send later: +2h, "tomorrow 9am", "2026-11-21 18:00" (local time). The server holds it and sends it then, even with this PC off. */
+  at?: string | null;
   /** Local ID of the draft. */
   draft: number;
   /** Only show what would happen. */
@@ -1309,6 +1311,8 @@ export type MailSearchOutput = {
 export type MailSendInput = {
   /** The account to send from (config name or address); needed with more than one. */
   account?: string | null;
+  /** Send later: +2h, "tomorrow 9am", "2026-11-21 18:00" (local time). The server holds it and sends it then, even with this PC off. */
+  at?: string | null;
   /** Attach a file (up to 3 MB); repeat for more. */
   attach?: Array<string>;
   /** Bcc. */
@@ -1624,6 +1628,8 @@ export type QueuedOp = {
   kind: string;
   /** When it is due to go (RFC 3339), if held back by the undo-send delay. */
   not_before?: string | null;
+  /** Send later: when the server is to send the message (RFC 3339). */
+  send_at?: string | null;
   /** `planned` (dry run), `pending`, `in_flight`, `done` or `failed`. */
   state: string;
   /** What it does, in words. */

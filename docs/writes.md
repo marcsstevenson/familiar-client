@@ -30,8 +30,8 @@ until the server has them.
 | `fam draft forward <id> --to ... [--body ...]` | Save a forward with the original's attachments | draft |
 | `fam draft update <draft> [--to/--cc/--bcc] [--subject] [--body] [--attach] [--remove-attachment]` | Change a draft; a recipient flag replaces that line (`--cc ""` empties it), `--body` the whole body. Images the body embeds become inline attachments with content IDs taken from their bytes, so saving the same body again adds nothing, and inline images the new body no longer shows are taken off. `--remove-attachment` takes a file off by name or Graph attachment ID | draft |
 | `fam draft edit [<draft>] [--account] [--no-signature]` | Write a draft (or, without an ID, a new message) in your editor, in Markdown; see below | draft |
-| `fam draft send <draft> [--now] [--yes]` | Send after the undo-send delay | send |
-| `fam mail send --to ... --subject ... --body ... [--now] [--yes]` | Draft and send in one go | send |
+| `fam draft send <draft> [--now] [--yes] [--at <when>]` | Send after the undo-send delay, or later with `--at` | send |
+| `fam mail send --to ... --subject ... --body ... [--now] [--yes] [--at <when>]` | Draft and send in one go | send |
 | `fam cal add <subject> --start <when> [--end \| --minutes] [--calendar \| --purpose] [--attendee ...] [--repeat ...] [--from-mail <id>]` | Add an event (invitations go to attendees) | write |
 | `fam cal edit <event> [--subject] [--start] [--end \| --minutes] [--location] [--series]` | Change an event, or with `--series` every event of its series | write |
 | `fam cal delete <event> [--series] [--comment] [--yes]` | Delete; a meeting you organised is cancelled and attendees told (needs `--yes`) | delete |
@@ -114,6 +114,13 @@ each comes back and the folder it came from.
 - **Undo send.** A send waits `[app] send_delay_seconds` (default 10) in the
   queue. The output names the op; `fam ops cancel <op>` before then keeps
   the draft. `--now` skips the delay.
+- **Send later.** `--at <when>` (`+2h`, `+1d`, `tomorrow 9am`, `fri 8:30`,
+  `2026-11-21 18:00` in local time, or RFC 3339; a date alone is 9am) and the
+  compose window's *Later…* button. After the undo-send delay the op stamps
+  the draft with MAPI `PidTagDeferredSendTime` (Graph extended property
+  `SystemTime 0x3FEF`) and calls `/send`; Exchange then holds the message
+  and sends it at that time itself, so it goes with the PC off. The op is
+  done once the server has it; `send_at` on the op output gives the time.
 - **Outbox.** Offline, or with famd stopped, the draft and the send wait in
   the queue and go when they can. A send whose answer was lost is checked
   against Sent Items by Internet message ID before it is called failed.

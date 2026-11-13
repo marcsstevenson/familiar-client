@@ -90,6 +90,7 @@ fn draft(send: bool) -> WriteRequest {
         },
         send,
         send_delay_secs: 0,
+        send_at: None,
     }
 }
 

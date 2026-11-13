@@ -211,7 +211,15 @@ fn update_message(st: &mut MailboxState, id: &str, body: &Value, prefer: &Prefer
         ) || (is_draft
             && matches!(
                 key.as_str(),
-                "subject" | "body" | "toRecipients" | "ccRecipients" | "bccRecipients" | "from"
+                "subject"
+                    | "body"
+                    | "toRecipients"
+                    | "ccRecipients"
+                    | "bccRecipients"
+                    | "from"
+                    // Send later (PidTagDeferredSendTime); the mock accepts
+                    // it and still sends at once.
+                    | "singleValueExtendedProperties"
             ));
         if !allowed {
             return Err(bad_request(format!(
