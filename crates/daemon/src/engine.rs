@@ -30,8 +30,10 @@
 //!
 //! A failed step is recorded on the folder's sync state and in the live
 //! status, and the account waits `backoff_min` doubling to `backoff_max`
-//! before trying again. Throttling never gets this far: the provider's
-//! scheduler waits out `Retry-After` itself.
+//! before trying again. A network error (no connection at all) always waits
+//! just `backoff_min`, so sync resumes soon after the PC wakes or comes back
+//! online even after a long run of server errors. Throttling never gets this
+//! far: the provider's scheduler waits out `Retry-After` itself.
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
@@ -282,6 +284,13 @@ impl Engine {
                     let auth = matches!(e, GraphError::Auth(_));
                     let wait = if auth {
                         self.policy.backoff_max.max(Duration::from_secs(300))
+                    } else if matches!(e, GraphError::Network(_)) {
+                        // Couldn't connect at all (offline, or the PC has
+                        // just woken and the network isn't up yet). A failed
+                        // connection costs Microsoft nothing, so keep trying
+                        // at the short interval instead of escalating: the
+                        // first try after the network returns should work.
+                        self.policy.backoff_min
                     } else {
                         self.policy.backoff(self.failures)
                     };
