@@ -17,6 +17,7 @@ import { type MailFetchOutput, type ReadView, errorText, openLink, openMessage, 
 import { mismatch } from "./links";
 import { type HoverLink, MessageFrame } from "./MessageFrame";
 import { PickedSummary } from "./PickedSummary";
+import { ReplyBar } from "./ReplyBar";
 import "./reading.css";
 
 type Addr = MailFetchOutput["from"];
@@ -162,6 +163,7 @@ export function ReadingPane() {
                       <CopyButton text={() => m().subject} label="Copy subject" />
                     </Show>
                   </h1>
+                  <ReplyBar message={m()} />
                   <button
                     class="reading-calendar"
                     title="Add the events in this email to a calendar (Ctrl+Shift+A)"
