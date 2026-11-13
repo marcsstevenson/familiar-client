@@ -14,6 +14,8 @@ export function MessageMenu(props: {
   x: number;
   y: number;
   onClose: () => void;
+  /** Shows "Add to calendar…" first (the reading pane's More actions). */
+  onAddToCalendar?: () => void;
 }) {
   // A copy: the menu closes (and its props go stale) before a command runs.
   const row = { ...props.row };
@@ -86,6 +88,23 @@ export function MessageMenu(props: {
       <div class="folder-menu" role="menu" ref={(el) => (box = el)} style={{ left: `${props.x}px`, top: `${props.y}px` }}>
         <Show when={multi}>
           <div class="menu-heading">{countLabel(ids.length)}</div>
+        </Show>
+        <Show when={!multi && props.onAddToCalendar}>
+          {(add) => (
+            <>
+              <button
+                role="menuitem"
+                title="Add the events in this email to a calendar (Ctrl+Shift+A)"
+                onClick={() => {
+                  props.onClose();
+                  add()();
+                }}
+              >
+                Add to calendar…
+              </button>
+              <hr class="menu-rule" />
+            </>
+          )}
         </Show>
         <Show when={multi || !row.is_read}>
           <button role="menuitem" onClick={() => act("Marked read", () => run("mail.read", { messages: ids, unread: false }))}>

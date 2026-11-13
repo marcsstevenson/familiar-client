@@ -52,10 +52,6 @@
   fill: currentColor;
   stroke: none;
 }
-.reading-calendar {
-  flex: none;
-  white-space: nowrap;
-}
 .reading-mode {
   flex: none;
   padding: 2px 8px;

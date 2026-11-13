@@ -1,10 +1,11 @@
 // The icon toolbar in the reading pane's header: Reply, Reply all, Forward,
 // and "..." for the message menu (the same menu as a right click on the row
-// in the list).
+// in the list, with "Add to calendar…" first).
 import { Show, createSignal } from "solid-js";
 import { openCompose } from "../compose/spec";
 import { type Row, listIndexOf, listRows } from "../list/api";
 import { MessageMenu } from "../list/MessageMenu";
+import { setEventDialog } from "../state";
 import type { MailFetchOutput } from "./api";
 
 /** The list's row for the message, or one made from its header when the
@@ -102,6 +103,7 @@ export function ReplyBar(props: { message: MailFetchOutput }) {
             row={m().row}
             x={m().x}
             y={m().y}
+            onAddToCalendar={() => setEventDialog({ message: props.message.id, from: props.message.from.addr })}
             onClose={() => {
               setMenu(null);
               more?.focus();

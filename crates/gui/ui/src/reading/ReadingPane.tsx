@@ -8,7 +8,7 @@
 // marks it read.
 import { For, Show, createEffect, createSignal, on } from "solid-js";
 import { run } from "../api";
-import { type SpamResult, multiPicked, rememberSpam, selectedMessage, setEventDialog, setReadingFrom, setSpamDialog, spamResults, spamSettings } from "../state";
+import { type SpamResult, multiPicked, rememberSpam, selectedMessage, setReadingFrom, setSpamDialog, spamResults, spamSettings } from "../state";
 import { gradeLevel, gradeWords } from "../spam/SpamDialog";
 import { resolvedTheme } from "../theme";
 import { Attachments } from "./Attachments";
@@ -164,13 +164,6 @@ export function ReadingPane() {
                     </Show>
                   </h1>
                   <ReplyBar message={m()} />
-                  <button
-                    class="reading-calendar"
-                    title="Add the events in this email to a calendar (Ctrl+Shift+A)"
-                    onClick={() => setEventDialog({ message: m().id, from: m().from.addr })}
-                  >
-                    Add to calendar
-                  </button>
                   <Show when={resolvedTheme() === "dark" && v().html}>
                     <button
                       class="reading-mode"
