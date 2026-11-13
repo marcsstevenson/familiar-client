@@ -254,6 +254,21 @@
   max-width: 100%;
   height: auto;
 }
+/* In the dark theme the body shows dark the way the reading pane does: a
+   quoted message written for a white page would otherwise put black text on
+   the app's dark grey. A filter changes only how it looks, so the HTML that
+   is saved and sent keeps the message's own colours. The page under the
+   filter is light grey, which turns into the reading pane's #121212, and
+   pictures are turned back. */
+:root[data-theme="dark"] .editor:not(.plain) {
+  background: #ededed;
+  color: #1c1c1c;
+  color-scheme: light;
+  filter: invert(1) hue-rotate(180deg);
+}
+:root[data-theme="dark"] .editor:not(.plain) :is(img, video) {
+  filter: invert(1) hue-rotate(180deg);
+}
 /* The box and corner handle over a picture being resized. */
 .img-resize {
   position: absolute;
