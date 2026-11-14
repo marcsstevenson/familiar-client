@@ -2,7 +2,7 @@
 // component asks for the rows on screen a page at a time and draws only those.
 import { For, Show, createEffect, createSignal, on, onCleanup, onMount } from "solid-js";
 import { isCommandError, run } from "../api";
-import { countLabel, followUpView, leavingRows, listNav, multiPicked, notify, picked, pickedMessages, processMessage, processedFolders, removeFromList, setDragged, setPicked, searchQuery, selectedFolder, selectedMessage, selectedRow, setSelectedMessage, setSelectedRow } from "../state";
+import { countLabel, deleteMessages, deletesForGood, followUpView, leavingRows, listNav, multiPicked, notify, picked, pickedMessages, processMessage, processedFolders, setDragged, setPicked, searchQuery, selectedFolder, selectedMessage, selectedRow, setSelectedMessage, setSelectedRow } from "../state";
 import { OnlineHits, SearchBar } from "./SearchBar";
 import { type Row, type Sort, listIndexOf, listOpen, listRows, onStoreChanged } from "./api";
 import { shortDate, snoozeLabel } from "./format";
@@ -673,13 +673,12 @@ function ListRow(props: {
             </Show>
             <span
               class="row-action row-delete"
-              title="Delete"
+              title={deletesForGood() ? "Delete for good" : "Delete"}
               aria-hidden="true"
               onMouseDown={(e) => e.stopPropagation()}
               onClick={(e) => {
                 e.stopPropagation();
-                const id = r().id;
-                void removeFromList(id, "Moved to Deleted Items", () => run("mail.delete", { messages: [id] }));
+                deleteMessages([r().id]);
               }}
             >
               🗑

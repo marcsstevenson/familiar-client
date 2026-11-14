@@ -4,7 +4,7 @@
 // list's context menu.
 import { run } from "../api";
 import { pickMoveTarget } from "../actions/builtin";
-import { countLabel, onPicked, picked, removePicked, setPicked } from "../state";
+import { countLabel, deleteMessages, deletesForGood, onPicked, picked, pickedMessages, removePicked, setPicked } from "../state";
 
 export function PickedSummary() {
   const accounts = () => new Set(picked().values()).size;
@@ -18,8 +18,8 @@ export function PickedSummary() {
       <div class="picked-actions">
         <button onClick={pickMoveTarget}>Move to folder…</button>
         <button onClick={() => void removePicked("Archived", (ids) => run("mail.archive", { messages: ids }))}>Archive</button>
-        <button class="danger" onClick={() => void removePicked("Moved to Deleted Items", (ids) => run("mail.delete", { messages: ids }))}>
-          Delete
+        <button class="danger" onClick={() => deleteMessages(pickedMessages().ids)}>
+          {deletesForGood() ? "Delete for good…" : "Delete"}
         </button>
       </div>
       <div class="picked-actions">

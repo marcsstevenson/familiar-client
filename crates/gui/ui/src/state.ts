@@ -170,3 +170,37 @@ export const spamSettings: { accounts: string[] } = { accounts: [] };
 
 /** [ai] from config.toml: the tool, and the accounts whose mail may go to it. */
 export const aiSettings: { tool: string | null; accounts: string[] } = { tool: null, accounts: [] };
+
+/** True while the selected folder is an account's Deleted Items or a folder
+ * inside it; set by the folder pane, which knows the folder tree. */
+export const [deletedFolderShown, setDeletedFolderShown] = createSignal(false);
+
+/** Whether Delete removes messages for good: only when the list shows Deleted
+ * Items itself (not a search or the Follow up view, which mix folders). */
+export const deletesForGood = () => deletedFolderShown() && searchQuery() === null && !followUpView();
+
+/** A question to confirm before an action that can't be undone. */
+export type Confirm = { title: string; text: string; action: string; onConfirm: () => void };
+export const [confirmDialog, setConfirmDialog] = createSignal<Confirm | null>(null);
+
+/** Deletes messages `ids`: moves them to Deleted Items, or, while the list
+ * shows Deleted Items, asks and then deletes them for good
+ * (`fam mail delete --permanent`). Called by every Delete in the window. */
+export function deleteMessages(ids: readonly number[]): void {
+  const list = [...ids];
+  if (list.length === 0) return;
+  const counted = (label: string) => (list.length === 1 ? label : `${label}: ${countLabel(list.length)}`);
+  if (!deletesForGood()) {
+    void removeFromList(list, counted("Moved to Deleted Items"), () => run("mail.delete", { messages: list }));
+    return;
+  }
+  setConfirmDialog({
+    title: "Delete for good",
+    text: `Delete ${list.length === 1 ? "this message" : countLabel(list.length)} for good? This can't be undone.`,
+    action: "Delete",
+    onConfirm: () =>
+      void removeFromList(list, counted("Deleted for good"), () =>
+        run("mail.delete", { messages: list, permanent: true, yes: true }),
+      ),
+  });
+}

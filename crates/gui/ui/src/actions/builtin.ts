@@ -1,7 +1,7 @@
 // The built-in actions. The message actions run the same registry commands as
 // `fam`, on the selected message.
 import { isCommandError, run } from "../api";
-import { listNav, multiPicked, notify, onPicked, picked, pickedMessages, processMessage, processedFolders, readingFrom, removeFromList, removePicked, selectedMessage, selectedRow, setEventDialog, setMovePicker, setPicked, setSelectedMessage } from "../state";
+import { deleteMessages, deletesForGood, listNav, multiPicked, notify, onPicked, picked, pickedMessages, processMessage, processedFolders, readingFrom, removeFromList, removePicked, selectedMessage, selectedRow, setEventDialog, setMovePicker, setPicked, setSelectedMessage } from "../state";
 import { searchFocus } from "../list/SearchBar";
 import { cycleTheme } from "../theme";
 import { openCompose } from "../compose/spec";
@@ -110,8 +110,9 @@ export function registerBuiltinActions(openPalette: (prefill?: string) => void):
     key: "#",
     also: ["Delete", "Ctrl+D"],
     enabled: hasMessages,
-    cli: () => `fam mail delete ${targetArgs()}`,
-    run: () => onSelectedLeaves("Moved to Deleted Items", (ids) => run("mail.delete", { messages: ids })),
+    cli: () => `fam mail delete ${targetArgs()}${deletesForGood() ? " --permanent --yes" : ""}`,
+    // In Deleted Items this asks, then deletes for good.
+    run: () => deleteMessages(targets()),
   });
   registerAction({
     id: "flag",
