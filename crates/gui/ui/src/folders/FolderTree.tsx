@@ -5,7 +5,7 @@ import { type CommandError, isCommandError, run, setUnreadBadge } from "../api";
 import type { FolderRow } from "../../../../../bindings/commands";
 import { onStoreChanged } from "../list/api";
 import { FolderMenu } from "./FolderMenu";
-import { countLabel, dragged, followUpView, notify, removeFromList, searchQuery, selectedFolder, setDragged, setFollowUpView, setSearchQuery, setSelectedFolder, setSelectedMessage } from "../state";
+import { countLabel, dragged, followUpView, notify, removeFromList, searchQuery, selectedFolder, setDeletedFolderShown, setDragged, setFollowUpView, setSearchQuery, setSelectedFolder, setSelectedMessage } from "../state";
 
 /** Each account's folders, in tree order. `folder.list` already sorts
  * siblings: the order set by dragging, then well-known folders, then name. */
@@ -132,6 +132,14 @@ export function FolderTree(props: { views: { name: string; query: string }[] }) 
     if (f) setFolders(reconcile(f, { key: "id" }));
   });
   const accounts = createMemo(() => ordered(folders));
+  // Tell the other panes when the selected folder is Deleted Items (or in
+  // it), where Delete removes mail for good.
+  createEffect(() => {
+    const id = selectedFolder();
+    const f = id === null ? undefined : folders.find((x) => x.id === id);
+    const bin = f && folders.find((x) => x.account === f.account && x.well_known === "deleteditems");
+    setDeletedFolderShown(!!f && !!bin && (f.path === bin.path || f.path.startsWith(`${bin.path}/`)));
+  });
   const inboxUnread = createMemo(() =>
     folders
       .filter((f) => f.well_known === "inbox")

@@ -3,7 +3,7 @@
 // report` for the reports), so it goes through the op queue and works offline.
 import { For, Show, createSignal, onMount } from "solid-js";
 import { isCommandError, run } from "../api";
-import { countLabel, notify, removeFromList, setMovePicker, setSpamDialog, spamSettings } from "../state";
+import { countLabel, deleteMessages, deletesForGood, notify, removeFromList, setMovePicker, setSpamDialog, spamSettings } from "../state";
 import { type Row, refreshViews } from "./api";
 import { snoozeChoices, snoozeLabel } from "./format";
 
@@ -158,8 +158,14 @@ export function MessageMenu(props: {
         <button role="menuitem" onClick={() => leave("Archived", () => run("mail.archive", { messages: ids }))}>
           Archive
         </button>
-        <button role="menuitem" onClick={() => leave("Moved to Deleted Items", () => run("mail.delete", { messages: ids }))}>
-          Delete
+        <button
+          role="menuitem"
+          onClick={() => {
+            props.onClose();
+            deleteMessages(ids);
+          }}
+        >
+          {deletesForGood() ? "Delete for good…" : "Delete"}
         </button>
         <Show when={!multi && row.snoozed_until}>
           {(t) => (

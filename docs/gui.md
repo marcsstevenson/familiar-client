@@ -51,6 +51,8 @@ As in Outlook and Apple Mail: Ctrl+click (Cmd+click on macOS) adds a message to 
 
 While any are picked, nothing is open: the reading pane shows how many, with Move to folder…, Archive, Delete, Mark read, Mark unread, Flag and Clear flag for them all. The keys (Delete, `e`, Ctrl+Shift+V, Ctrl+Q, Ctrl+U, `s`, Report junk and phishing in the palette) act on them all too, as does the right-click menu on a picked row, and the palette prefills `messages` with every picked ID. Dragging a picked row drags them all onto a folder, when they share one account. Move to folder… (also for one message) lists the account's folders with a filter; messages from several accounts can only go to a folder path each of them has, such as Inbox or Archive, because `mail.move` looks the path up in each message's own account. Esc, a plain click, or opening another folder ends the selection. Once picked messages leave the list, the row that takes the place of the first one opens.
 
+In Deleted Items (or a folder inside it), every Delete (the keys, the row's bin, the right-click menu and the picked-messages button) deletes for good: it asks first (Enter confirms, Esc cancels), then runs `mail.delete` with `permanent` and `yes`, as `fam mail delete --permanent --yes` does. The menu and button say Delete for good… there. A search or the Follow up view always moves to Deleted Items, since its rows can come from any folder.
+
 The selection lives in `picked` in `ui/src/state.ts` (message ID to account); `removeFromList` takes a list of IDs, and `listNav.leaving` tells the list which to land after.
 
 ## Search and smart folders

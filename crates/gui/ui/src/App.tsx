@@ -9,8 +9,9 @@ import { type DaemonState, type UiInfo, watchDaemon } from "./api";
 import { ReadingPane } from "./reading/ReadingPane";
 import { Palette } from "./palette/Palette";
 import { EventDialog } from "./calendar/EventDialog";
-import { aiSettings, eventDialog, movePicker, notice, processedFolders, setEventDialog, setFollowUpView, setMovePicker, setSearchQuery, setSelectedFolder, setSelectedMessage, setSpamDialog, spamDialog, spamSettings } from "./state";
+import { aiSettings, confirmDialog, eventDialog, movePicker, notice, processedFolders, setConfirmDialog, setEventDialog, setFollowUpView, setMovePicker, setSearchQuery, setSelectedFolder, setSelectedMessage, setSpamDialog, spamDialog, spamSettings } from "./state";
 import { SpamDialog } from "./spam/SpamDialog";
+import { ConfirmDialog } from "./ConfirmDialog";
 import { FolderTree } from "./folders/FolderTree";
 import { MessageList } from "./list/MessageList";
 import { MovePicker } from "./list/MovePicker";
@@ -53,6 +54,7 @@ export function App(props: { info: UiInfo }) {
       setPalette(null);
       setEventDialog(null);
       setSpamDialog(null);
+      setConfirmDialog(null);
       setSearchQuery(null);
       setFollowUpView(false);
       setSelectedFolder(c.folder);
@@ -104,6 +106,9 @@ export function App(props: { info: UiInfo }) {
       </Show>
       <Show when={movePicker()}>
         {(m) => <MovePicker ids={m().ids} accounts={m().accounts} onClose={() => setMovePicker(null)} />}
+      </Show>
+      <Show when={confirmDialog()}>
+        {(c) => <ConfirmDialog confirm={c()} onClose={() => setConfirmDialog(null)} />}
       </Show>
       <Show when={palette()}>
         {(p) => <Palette initial={p().initial} onClose={() => setPalette(null)} />}
