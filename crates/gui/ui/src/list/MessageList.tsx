@@ -440,7 +440,7 @@ export function MessageList() {
   }
 
   function onKeyDown(e: KeyboardEvent) {
-    if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === "a") {
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "a") {
       e.preventDefault();
       // From the top: past MAX_PICK it takes the first rows, cursor on the first.
       if (total() > 0) void pickRange(0, total() - 1, 0, false).then(() => {

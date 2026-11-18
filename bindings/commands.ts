@@ -491,6 +491,8 @@ export type CalProposeInput = {
   no_ai?: boolean;
   /** Time zone to give times in (IANA or Windows). Default: this computer's. */
   tz?: string | null;
+  /** Include editable email text and possible guests for ordinary messages. */
+  with_mail?: boolean;
 };
 
 export type CalProposeOutput = {
@@ -500,6 +502,8 @@ export type CalProposeOutput = {
   events: Array<ProposedEvent>;
   /** Set when the email is a meeting request or cancellation; answer it with `fam cal rsvp` (or remove it with `fam cal delete`) instead. */
   invitation?: Invitation | null;
+  /** Ordinary email details when requested. */
+  mail?: ProposalMail | null;
   /** The email. */
   message: number;
   /** What was skipped or guessed. */
@@ -1614,6 +1618,15 @@ export type PinResult = {
   message: number;
   /** Whether the body is now pinned. */
   pinned: boolean;
+};
+
+export type ProposalMail = {
+  /** Sender, To and Cc addresses excluding this user's identities. */
+  participants: Array<string>;
+  /** Original subject. */
+  subject: string;
+  /** Plain-text body, or the cached preview when the body is unavailable. */
+  text: string;
 };
 
 export type ProposedEvent = {

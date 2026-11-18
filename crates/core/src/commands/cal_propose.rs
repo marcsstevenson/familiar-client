@@ -54,6 +54,9 @@ pub struct CalProposeInput {
     /// Don't ask the AI tool, even when [ai] is enabled.
     #[serde(default)]
     pub no_ai: bool,
+    /// Include editable email text and possible guests for ordinary messages.
+    #[serde(default)]
+    pub with_mail: bool,
 }
 
 /// A repeat, in `fam cal add`'s terms.
@@ -115,6 +118,17 @@ pub struct Invitation {
     pub response: Option<String>,
 }
 
+/// Mail content offered in the editor when the user chooses to use it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, JsonSchema)]
+pub struct ProposalMail {
+    /// Original subject.
+    pub subject: String,
+    /// Plain-text body, or the cached preview when the body is unavailable.
+    pub text: String,
+    /// Sender, To and Cc addresses excluding this user's identities.
+    pub participants: Vec<String>,
+}
+
 /// Output of `fam cal propose`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, JsonSchema)]
 pub struct CalProposeOutput {
@@ -130,6 +144,9 @@ pub struct CalProposeOutput {
     /// Set when the email is a meeting request or cancellation; answer it
     /// with `fam cal rsvp` (or remove it with `fam cal delete`) instead.
     pub invitation: Option<Invitation>,
+    /// Ordinary email details when requested.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub mail: Option<ProposalMail>,
     /// What was skipped or guessed.
     pub notes: Vec<String>,
 }
@@ -549,6 +566,7 @@ pub fn propose_at(
         source: "none".into(),
         events: Vec::new(),
         invitation: None,
+        mail: None,
         notes: Vec::new(),
     };
 
@@ -599,6 +617,30 @@ pub fn propose_at(
     let mut asked_ai = false;
     if out.events.is_empty() && !cancels {
         let (subject, text, at, _) = mail_text(&r, input.from_mail)?;
+        if input.with_mail {
+            let mut seen: std::collections::HashSet<String> = r
+                .accounts()
+                .map_err(store_err)?
+                .into_iter()
+                .map(|a| a.email.trim().to_lowercase())
+                .collect();
+            for account in cfg.into_iter().flat_map(|cfg| cfg.accounts.values()) {
+                seen.insert(account.email.trim().to_lowercase());
+                seen.extend(account.aliases.iter().map(|a| a.trim().to_lowercase()));
+            }
+            let participants = std::iter::once(&m.from)
+                .chain(&m.to)
+                .chain(&m.cc)
+                .map(|a| a.addr.trim())
+                .filter(|a| !a.is_empty() && seen.insert(a.to_lowercase()))
+                .map(String::from)
+                .collect();
+            out.mail = Some(ProposalMail {
+                subject: subject.clone(),
+                text: text.clone(),
+                participants,
+            });
+        }
         // "Tonight" and "Saturday" are from when it was sent.
         let sent = if at > 0 {
             today_in(at, &zone)

@@ -212,6 +212,7 @@ Reads an email and says which calendar events it suggests, for you to check befo
 - `--from-mail <from-mail>` (required): The email (local message ID).
 - `--no-ai`: Don't ask the AI tool, even when [ai] is enabled.
 - `--tz <tz>`: Time zone to give times in (IANA or Windows). Default: this computer's.
+- `--with-mail`: Include editable email text and possible guests for ordinary messages.
 
 ## cal.rsvp
 

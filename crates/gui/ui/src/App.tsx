@@ -87,7 +87,7 @@ export function App(props: { info: UiInfo }) {
           </svg>
         </button>
       </TitleBar>
-      <main class="panes" style={{ "grid-template-columns": paneColumns() }}>
+      <main class="panes" classList={{ "reviewing-proposal": !!eventDialog() }} style={{ "grid-template-columns": paneColumns() }}>
         <Splitters />
         <nav class="pane folders" aria-label="Folders">
           <FolderTree views={props.info.views} />
@@ -97,7 +97,10 @@ export function App(props: { info: UiInfo }) {
         </section>
         <div class="reader-calendar">
           <ReadingPane />
-          <Show when={calendarOpen()}><DayPanel onClose={toggleCalendar} /></Show>
+          <Show when={calendarOpen() && !eventDialog()}><DayPanel onClose={toggleCalendar} /></Show>
+          <Show when={eventDialog()} keyed>
+            {d => <EventDialog message={d.message} from={d.from} onClose={() => setEventDialog(null)} />}
+          </Show>
         </div>
       </main>
       <footer class="statusbar" role="status">
@@ -117,9 +120,6 @@ export function App(props: { info: UiInfo }) {
         <span class="statusbar-spacer" />
         <span>Familiar {props.info.version}</span>
       </footer>
-      <Show when={eventDialog()}>
-        {(d) => <EventDialog message={d().message} from={d().from} onClose={() => setEventDialog(null)} />}
-      </Show>
       <Show when={spamDialog()}>
         {(d) => <SpamDialog message={d().message} saved={d().saved} onClose={() => setSpamDialog(null)} />}
       </Show>
