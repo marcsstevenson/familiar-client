@@ -37,8 +37,10 @@ type UiCommand =
 
 export function App(props: { info: UiInfo }) {
   const [calendarOpen, setCalendarOpen] = createSignal(false);
+  const [fullCalendar, setFullCalendar] = createSignal(false);
   let calendarToggle!: HTMLButtonElement;
   function toggleCalendar() {
+    setFullCalendar(false);
     setCalendarOpen(!calendarOpen());
     if (!calendarOpen()) calendarToggle.focus();
   }
@@ -59,6 +61,7 @@ export function App(props: { info: UiInfo }) {
     const stopUi = await listen<UiCommand>("ui_command", (e) => {
       const c = e.payload;
       setCalendarOpen(false);
+      setFullCalendar(false);
       setPalette(null);
       setEventDialog(null);
       setSpamDialog(null);
@@ -87,7 +90,7 @@ export function App(props: { info: UiInfo }) {
           </svg>
         </button>
       </TitleBar>
-      <main class="panes" classList={{ "reviewing-proposal": !!eventDialog() }} style={{ "grid-template-columns": paneColumns() }}>
+      <main class="panes" classList={{ "reviewing-proposal": !!eventDialog(), "calendar-expanded": fullCalendar() }} style={{ "grid-template-columns": paneColumns() }}>
         <Splitters />
         <nav class="pane folders" aria-label="Folders">
           <FolderTree views={props.info.views} />
@@ -97,7 +100,7 @@ export function App(props: { info: UiInfo }) {
         </section>
         <div class="reader-calendar">
           <ReadingPane />
-          <Show when={calendarOpen() && !eventDialog()}><DayPanel onClose={toggleCalendar} /></Show>
+          <Show when={calendarOpen() && !eventDialog()}><DayPanel full={fullCalendar()} expand={() => setFullCalendar(true)} onClose={toggleCalendar} /></Show>
           <Show when={eventDialog()} keyed>
             {d => <EventDialog message={d.message} from={d.from} onClose={() => setEventDialog(null)} />}
           </Show>

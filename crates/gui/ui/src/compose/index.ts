@@ -9,7 +9,7 @@ export { type ComposeSpec, composeSpec, openCompose } from "./spec";
 /** Ctrl+N (Cmd+N) in the main window opens a new message. */
 export function installComposeKeys(): void {
   window.addEventListener("keydown", (e) => {
-    if (e.target instanceof Element && e.target.closest(".day-panel")) return;
+    if (document.querySelector(".calendar-expanded") || (e.target instanceof Element && e.target.closest(".day-panel"))) return;
     if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "n") {
       e.preventDefault();
       void openCompose({ kind: "new" });

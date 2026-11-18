@@ -6,7 +6,7 @@ import { type Calendar, type Draft, addInput, draftOf, problem } from "./proposa
 
 export function NewEvent(props: {
   date: string; time: string; zone: string; calendars: Calendar[];
-  onClose: () => void; onSaved: (calendar: Calendar, date: string) => void;
+  onClose: () => void; onSaved: (calendar: Calendar, date: string, time: string | undefined, zone: string) => void;
 }) {
   const [draft, setDraft] = createStore(draftOf({
     subject: "", start: props.date + " " + props.time, all_day: false, time_zone: props.zone,
@@ -25,7 +25,7 @@ export function NewEvent(props: {
     setBusy(true);
     try {
       await run("cal.add", addInput(draft, undefined, c));
-      props.onSaved(c, draft.startDate);
+      props.onSaved(c, draft.startDate, draft.allDay ? undefined : draft.startTime, draft.zone);
     } catch (e) {
       setError(isCommandError(e) ? e.message : String(e));
     } finally {
