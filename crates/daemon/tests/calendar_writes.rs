@@ -368,6 +368,57 @@ async fn events_added_changed_answered_and_deleted() {
             .all(|s| s.location == "Pool")
     );
 
+    // Moving one occurrence preserves the other starts. A refused PATCH
+    // restores its previous time locally as well as on the server.
+    let moving = &swims[1];
+    let move_to = |hour| {
+        edit_request(
+            &env.reader(),
+            &CalEditInput {
+                event: moving.id.0,
+                start: Some(format!("{} {hour}:00", d6 + chrono::Duration::days(7))),
+                ..Default::default()
+            },
+            NZ,
+            t,
+        )
+        .unwrap()
+    };
+    submit(&env, move_to(18), waiting()).await.unwrap();
+    let edited = env.reader().event(moving.id).unwrap().unwrap();
+    assert_eq!(edited.data.start_at, moving.data.start_at + 3600);
+    for other in swims.iter().filter(|s| s.id != moving.id) {
+        assert_eq!(
+            env.reader().event(other.id).unwrap().unwrap().data.start_at,
+            other.data.start_at
+        );
+    }
+    env.mock.push_fault(
+        Fault::access_denied()
+            .on_method("PATCH")
+            .on_path("events")
+            .times(1),
+    );
+    assert!(submit(&env, move_to(19), waiting()).await.is_err());
+    assert_eq!(
+        env.reader()
+            .event(moving.id)
+            .unwrap()
+            .unwrap()
+            .data
+            .start_at,
+        edited.data.start_at
+    );
+    assert_eq!(
+        env.mock
+            .mailbox(KEY)
+            .event(&moving.data.remote_id)
+            .unwrap()
+            .start
+            .timestamp(),
+        edited.data.start_at
+    );
+
     // Delete one occurrence: it leaves the calendar before the server has it.
     env.stop().await;
     let r = env.reader();

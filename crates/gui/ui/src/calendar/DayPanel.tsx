@@ -3,6 +3,7 @@ import type { CalEvent } from "../../../../../bindings/commands";
 import { isCommandError, run } from "../api";
 import { onStoreChanged } from "../list/api";
 import { notify } from "../state";
+import { EventDetails } from "./EventDetails";
 import { NewEvent } from "./NewEvent";
 import { localDate, nextDate, timedBlocks } from "./timeline";
 import "./day-panel.css";
@@ -29,7 +30,7 @@ export function DayPanel(props: { onClose: () => void }) {
   const writable = createMemo(() => calendars().filter(c => c.can_edit));
   const visible = createMemo(() => (result()?.from.slice(0, 10) === date() ? result()?.events ?? [] : [])
     .filter(e => !e.cancelled && !hidden().includes(e.calendar_id)));
-  const detail = () => visible().find(e => e.id === selected());
+  const [revision, setRevision] = createSignal(0);
   const start = () => new Date(date() + "T00:00:00").getTime();
   const end = () => new Date(nextDate(date(), 1) + "T00:00:00").getTime();
   const slots = createMemo(() => Array.from({ length: Math.ceil((end() - start()) / HALF_HOUR) }, (_, n) => start() + n * HALF_HOUR));
@@ -46,7 +47,7 @@ export function DayPanel(props: { onClose: () => void }) {
     heading.focus();
     scroll.scrollTop = (date() === localDate(new Date()) ? Math.max(0, new Date().getHours() - 1) : 8) * 64;
     const timer = setInterval(() => setNow(Date.now()), 60_000);
-    const stop = onStoreChanged(() => { void refreshDay(); void refreshCalendars(); });
+    const stop = onStoreChanged(() => { void refreshDay(); void refreshCalendars(); if (selected() !== undefined) setRevision(n => n + 1); });
     onCleanup(() => { clearInterval(timer); void stop.then(f => f()); });
   });
 
@@ -64,7 +65,7 @@ export function DayPanel(props: { onClose: () => void }) {
   }
   return (
     <aside class="day-panel" aria-label="Day calendar" onKeyDown={e => {
-      if (e.key === "Escape" && !slot()) { e.preventDefault(); props.onClose(); }
+      if (e.key === "Escape" && !slot() && selected() === undefined) { e.preventDefault(); props.onClose(); }
     }}>
       <header><h2 ref={heading} tabindex="-1">Calendar</h2>
         <button aria-label="Close calendar" onClick={props.onClose}>×</button>
@@ -90,11 +91,6 @@ export function DayPanel(props: { onClose: () => void }) {
       <For each={result()?.from.slice(0, 10) === date() ? result()?.warnings : []}>{w => <p class="day-warning">{w}</p>}</For>
       <Show when={range.loading && result()?.from.slice(0, 10) !== date()}><p role="status">Loading schedule…</p></Show>
       <div class="day-all"><span>All day</span><div><For each={visible().filter(e => e.all_day)}>{card}</For></div></div>
-      <Show when={detail()}>{e => <section class="day-detail" aria-label="Selected event">
-        <strong>{e().subject || "(No subject)"}</strong>
-        <span>{e().all_day ? "All day" : time(Date.parse(e().start)) + " – " + time(Date.parse(e().end))} · {e().account} · {e().calendar}</span>
-        <Show when={e().location}><span>{e().location}</span></Show>
-      </section>}</Show>
       <div class="day-scroll" ref={scroll}>
         <div class="day-grid" style={{ height: slots().length * 32 + "px" }}>
           <For each={slots()}>{at => <button class="day-slot" disabled={!writable().length}
@@ -111,6 +107,8 @@ export function DayPanel(props: { onClose: () => void }) {
         </div>
       </div>
       <footer>{zone.replaceAll("_", " ")}</footer>
+      <Show when={selected()}>{id => <EventDetails id={id()} revision={revision()}
+        onClose={() => { select(undefined); heading.focus(); }} onChanged={() => void refreshDay()} />}</Show>
       <Show when={slot()}>{t => <NewEvent date={date()} time={t()} zone={zone} calendars={writable()} onClose={() => setSlot(undefined)}
         onSaved={(c, day) => {
           navigate(day);

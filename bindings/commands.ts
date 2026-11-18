@@ -445,6 +445,17 @@ export type CalEvent = {
   time_zone?: string | null;
 };
 
+export type CalGuest = {
+  /** Email address. */
+  addr: string;
+  /** Required, optional or resource. */
+  kind: string;
+  /** Display name. */
+  name: string;
+  /** Guest's response. */
+  response: string;
+};
+
 export type CalListInput = {
   /** Only this account (its name in config.toml). */
   account?: string | null;
@@ -514,6 +525,30 @@ export type CalRsvpInput = {
   wait?: boolean;
   /** Seconds --wait waits at most (default 60). */
   wait_secs?: number | null;
+};
+
+export type CalShowInput = {
+  /** Local event ID from cal list. */
+  event: number;
+};
+
+export type CalShowOutput = {
+  /** The guests recorded on this event. */
+  attendees: Array<CalGuest>;
+  /** The stored occurrence has a series master that can be addressed. */
+  can_act_on_series: boolean;
+  /** The calendar permits changes. */
+  can_edit: boolean;
+  /** Zone in which the start and end are returned. */
+  display_zone: string;
+  /** Event summary, including its calendar ID. */
+  event: CalEvent;
+  /** The account organised the event. */
+  is_organizer: boolean;
+  /** Locally cached plain-text excerpt of the notes. */
+  notes_preview: string;
+  /** Minutes before the start, or null when off. */
+  reminder_minutes?: number | null;
 };
 
 export type CheckReport = {
@@ -1917,6 +1952,8 @@ export interface Commands {
   "cal.propose": { input: CalProposeInput; output: CalProposeOutput };
   /** Answer a meeting invitation */
   "cal.rsvp": { input: CalRsvpInput; output: WriteOutput };
+  /** Show an event, its guests, reminder and notes preview */
+  "cal.show": { input: CalShowInput; output: CalShowOutput };
   /** Show which config file is used */
   "config.path": { input: ConfigPathInput; output: ConfigPathOutput };
   /** Check config.toml for errors */
@@ -2037,6 +2074,7 @@ export const COMMAND_NAMES = [
   "cal.list",
   "cal.propose",
   "cal.rsvp",
+  "cal.show",
   "config.path",
   "config.validate",
   "contacts.search",

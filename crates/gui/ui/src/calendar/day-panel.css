@@ -63,7 +63,6 @@
 }
 .day-all > span, .day-panel footer { color: var(--text-muted); font-size: var(--text-xs); }
 .day-all > div { display: grid; gap: 2px; }
-.day-detail { display: grid; gap: 2px; padding: var(--space-3) var(--space-4); background: var(--bg-sidebar); overflow-wrap: anywhere; }
 .day-scroll { flex: 1 0 100px; overflow-y: auto; min-height: 0; }
 .day-grid { position: relative; }
 .day-slot {
@@ -89,3 +88,5 @@
 .day-panel footer { padding: var(--space-2) var(--space-4); border-top: 1px solid var(--border); }
 .new-event { color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 0; }
 .new-event::backdrop { background: rgb(0 0 0 / .25); }
+.event-guests { margin: var(--space-2) 0; padding-left: var(--space-5); overflow-wrap: anywhere; }
+.event-preview { white-space: pre-wrap; overflow-wrap: anywhere; }
