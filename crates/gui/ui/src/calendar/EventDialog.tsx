@@ -256,7 +256,7 @@ export function EventDialog(props: { message: number; from: string; onClose: () 
           <Match when={true}>
             <div class="event-body">
               <h2>Add to calendar</h2>
-              <div class="event-scroll">
+              <div class="event-scroll" inert={busy()}>
               <For each={proposal()?.notes ?? []}>{(n) => <p class="muted event-note">{n}</p>}</For>
               <Show when={drafts.length === 0}>
                 <p>No events found in this email.</p>
@@ -305,7 +305,7 @@ export function EventDialog(props: { message: number; from: string; onClose: () 
               </div>
               <label class="event-calendar">
                 Calendar:
-                <select value={chosen()} onChange={(e) => setChosen(e.currentTarget.value)}>
+                <select disabled={busy()} value={chosen()} onChange={(e) => setChosen(e.currentTarget.value)}>
                   <For each={accounts()}>
                     {(a) => (
                       <optgroup label={a}>
