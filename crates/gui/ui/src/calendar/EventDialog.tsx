@@ -3,14 +3,13 @@
 // chosen calendar's other events on those days. Add runs `cal add` once per
 // ticked event. A meeting invitation is answered with `cal rsvp` instead.
 import { For, Match, Show, Switch, createEffect, createResource, createSignal, onCleanup, onMount } from "solid-js";
-import { createStore, produce } from "solid-js/store";
+import { EventFields } from "./EventFields";
+import { createStore } from "solid-js/store";
 import { isCommandError, run } from "../api";
 import { aiSettings, notify } from "../state";
 import {
   type Calendar,
-  DAYS,
   type Draft,
-  type Every,
   addInput,
   calendarKey,
   dateWords,
@@ -18,7 +17,6 @@ import {
   draftOf,
   problem,
   rememberCalendar,
-  repeatWords,
   sourceWords,
   toolWords,
 } from "./proposals";
@@ -288,95 +286,8 @@ export function EventDialog(props: { message: number; from: string; onClose: () 
                         onChange={(e) => set(i(), "add", e.currentTarget.checked)}
                       />
                       <div class="event-fields">
-                        <input
-                          class="event-subject"
-                          aria-label="Subject"
-                          placeholder="Subject"
-                          value={d.subject}
-                          onInput={(e) => set(i(), "subject", e.currentTarget.value)}
-                        />
-                        <div class="event-when">
-                          <input
-                            type="date"
-                            aria-label="Start date"
-                            value={d.startDate}
-                            onInput={(e) => {
-                              const v = e.currentTarget.value;
-                              // Moving the start moves a same-day end with it.
-                              setDrafts(
-                                i(),
-                                produce((x) => {
-                                  if (x.endDate === x.startDate) x.endDate = v;
-                                  x.startDate = v;
-                                }),
-                              );
-                            }}
-                          />
-                          <Show when={!d.allDay}>
-                            <input
-                              type="time"
-                              aria-label="Start time"
-                              value={d.startTime}
-                              onInput={(e) => set(i(), "startTime", e.currentTarget.value)}
-                            />
-                          </Show>
-                          <span>to</span>
-                          <input
-                            type="date"
-                            aria-label="End date"
-                            value={d.endDate}
-                            onInput={(e) => set(i(), "endDate", e.currentTarget.value)}
-                          />
-                          <Show when={!d.allDay}>
-                            <input
-                              type="time"
-                              aria-label="End time"
-                              value={d.endTime}
-                              onInput={(e) => set(i(), "endTime", e.currentTarget.value)}
-                            />
-                          </Show>
-                          <label class="event-check">
-                            <input
-                              type="checkbox"
-                              checked={d.allDay}
-                              onChange={(e) => set(i(), "allDay", e.currentTarget.checked)}
-                            />
-                            All day
-                          </label>
-                          <input
-                            class="event-zone"
-                            aria-label="Time zone"
-                            value={d.zone}
-                            onInput={(e) => set(i(), "zone", e.currentTarget.value)}
-                          />
-                        </div>
-                        <input
-                          aria-label="Location"
-                          placeholder="Location"
-                          value={d.location}
-                          onInput={(e) => set(i(), "location", e.currentTarget.value)}
-                        />
-                        <div class="event-repeat">
-                          <span>Repeats: {repeatWords(d)}</span>
-                          <button
-                            class="event-link"
-                            aria-expanded={editing() === i()}
-                            onClick={() => setEditing(editing() === i() ? null : i())}
-                          >
-                            {editing() === i() ? "done" : "change"}
-                          </button>
-                        </div>
-                        <Show when={editing() === i()}>
-                          <RepeatEditor draft={d} set={(k, v) => set(i(), k, v)} />
-                        </Show>
-                        <Show when={d.notes}>
-                          <textarea
-                            aria-label="Notes"
-                            rows={2}
-                            value={d.notes}
-                            onInput={(e) => set(i(), "notes", e.currentTarget.value)}
-                          />
-                        </Show>
+                        <EventFields draft={d} set={(k, v) => set(i(), k, v)} editing={editing() === i()}
+                          toggleRepeat={() => setEditing(editing() === i() ? null : i())} />
                         <div class="event-meta muted">
                           <Show when={d.evidence}>{(q) => <q>{q()}</q>}</Show>
                           <span class="spacer" />
@@ -448,80 +359,6 @@ export function EventDialog(props: { message: number; from: string; onClose: () 
           </Match>
         </Switch>
       </div>
-    </div>
-  );
-}
-
-const EVERY: { value: Every; label: string }[] = [
-  { value: "none", label: "Doesn't repeat" },
-  { value: "daily", label: "Daily" },
-  { value: "weekly", label: "Weekly" },
-  { value: "monthly", label: "Monthly" },
-  { value: "yearly", label: "Yearly" },
-];
-
-function RepeatEditor(props: { draft: Draft; set: <K extends keyof Draft>(k: K, v: Draft[K]) => void }) {
-  const d = () => props.draft;
-  return (
-    <div class="event-repeat-editor">
-      <select aria-label="Repeat" value={d().every} onChange={(e) => props.set("every", e.currentTarget.value as Every)}>
-        <For each={EVERY}>{(o) => <option value={o.value}>{o.label}</option>}</For>
-      </select>
-      <Show when={d().every !== "none"}>
-        <label>
-          every
-          <input
-            type="number"
-            min="1"
-            aria-label="Interval"
-            value={d().interval}
-            onInput={(e) => props.set("interval", Math.max(1, Number(e.currentTarget.value) || 1))}
-          />
-        </label>
-        <Show when={d().every === "weekly"}>
-          <span class="event-days">
-            <For each={DAYS}>
-              {(w) => (
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={d().on.includes(w)}
-                    onChange={(e) =>
-                      props.set(
-                        "on",
-                        e.currentTarget.checked
-                          ? DAYS.filter((x) => x === w || d().on.includes(x))
-                          : d().on.filter((x) => x !== w),
-                      )
-                    }
-                  />
-                  {w.charAt(0).toUpperCase() + w.slice(1)}
-                </label>
-              )}
-            </For>
-          </span>
-        </Show>
-        <select aria-label="Ends" value={d().ends} onChange={(e) => props.set("ends", e.currentTarget.value as Draft["ends"])}>
-          <option value="until">until</option>
-          <option value="count">for</option>
-          <option value="never">with no end</option>
-        </select>
-        <Show when={d().ends === "until"}>
-          <input type="date" aria-label="Until" value={d().until} onInput={(e) => props.set("until", e.currentTarget.value)} />
-        </Show>
-        <Show when={d().ends === "count"}>
-          <label>
-            <input
-              type="number"
-              min="1"
-              aria-label="Times"
-              value={d().count}
-              onInput={(e) => props.set("count", Math.max(1, Number(e.currentTarget.value) || 1))}
-            />
-            times
-          </label>
-        </Show>
-      </Show>
     </div>
   );
 }

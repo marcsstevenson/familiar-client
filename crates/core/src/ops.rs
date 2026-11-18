@@ -401,6 +401,8 @@ pub enum WriteRequest {
     },
     /// Add an event.
     EventCreate {
+        /// Exact local calendar ID, when selected from the catalogue.
+        calendar_id: Option<i64>,
         /// Account key or address; found from the calendar when left out.
         account: Option<String>,
         /// Calendar name; the account's default calendar when left out.
@@ -1284,6 +1286,7 @@ pub fn plan(tx: &WriteTx<'_>, req: &WriteRequest) -> Result<Vec<Planned>, Comman
             });
         }
         WriteRequest::EventCreate {
+            calendar_id,
             account,
             calendar,
             event,
@@ -1292,6 +1295,7 @@ pub fn plan(tx: &WriteTx<'_>, req: &WriteRequest) -> Result<Vec<Planned>, Comman
             tx,
             account.as_deref(),
             calendar.as_deref(),
+            *calendar_id,
             event,
             *from_mail,
         )?),
@@ -1475,19 +1479,21 @@ fn plan_event_create(
     tx: &WriteTx<'_>,
     account: Option<&str>,
     calendar: Option<&str>,
+    calendar_id: Option<i64>,
     f: &EventFields,
     from_mail: Option<i64>,
 ) -> Result<Planned, CommandError> {
     let mut found = Vec::new();
-    let accounts = match (account, calendar) {
-        (None, Some(_)) => tx.accounts().map_err(store_err)?,
+    let accounts = match account {
+        None if calendar.is_some() || calendar_id.is_some() => tx.accounts().map_err(store_err)?,
         _ => vec![pick_account(tx, account)?],
     };
     for a in &accounts {
         for c in tx.calendars(a.id).map_err(store_err)? {
-            let ok = match calendar {
-                Some(n) => c.name.eq_ignore_ascii_case(n.trim()),
-                None => c.is_default,
+            let ok = match (calendar_id, calendar) {
+                (Some(id), _) => c.id.0 == id,
+                (_, Some(n)) => c.name.eq_ignore_ascii_case(n.trim()),
+                _ => c.is_default,
             };
             if ok {
                 found.push((a.clone(), c));
@@ -1497,9 +1503,10 @@ fn plan_event_create(
     let (acc, cal) = match found.len() {
         1 => found.remove(0),
         0 => {
-            let what = match calendar {
-                Some(n) => format!("no calendar called {n:?}"),
-                None => "no default calendar has synced yet".into(),
+            let what = match (calendar_id, calendar) {
+                (Some(id), _) => format!("no calendar with local ID {id} for the selected account"),
+                (_, Some(n)) => format!("no calendar called {n:?}"),
+                _ => "no default calendar has synced yet".into(),
             };
             return Err(CommandError::new(ErrorKind::NotFound, what));
         }

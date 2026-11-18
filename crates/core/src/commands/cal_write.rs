@@ -217,6 +217,8 @@ pub struct CalAddInput {
     /// ("family"). Default: the account's main calendar.
     #[serde(default)]
     pub calendar: Option<String>,
+    /// Exact local destination ID from cal calendars.
+    pub calendar_id: Option<i64>,
     /// A purpose from [calendar.purposes], such as family.
     #[serde(default)]
     pub purpose: Option<String>,
@@ -397,6 +399,11 @@ pub fn add_request(
         ));
     }
     let body = i.body.as_deref().map(text_to_html).unwrap_or_default();
+    if i.calendar_id.is_some() && (i.calendar.is_some() || i.purpose.is_some()) {
+        return Err(CommandError::usage(
+            "choose either --calendar-id or a calendar name or purpose",
+        ));
+    }
     let (mut account, calendar) = target(
         cfg,
         i.calendar.as_deref(),
@@ -404,7 +411,7 @@ pub fn add_request(
         i.account.as_deref(),
     )?;
     // From an email with nothing else naming one: the email's account.
-    if account.is_none() && calendar.is_none() {
+    if account.is_none() && calendar.is_none() && i.calendar_id.is_none() {
         account = mail_account;
     }
     if i.reminder.is_some() && i.no_reminder {
@@ -413,6 +420,7 @@ pub fn add_request(
         ));
     }
     Ok(WriteRequest::EventCreate {
+        calendar_id: i.calendar_id,
         account,
         calendar,
         from_mail: i.from_mail,

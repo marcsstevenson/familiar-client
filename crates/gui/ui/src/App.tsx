@@ -6,6 +6,7 @@ import { Show, createSignal, onCleanup, onMount } from "solid-js";
 import { registerBuiltinActions } from "./actions/builtin";
 import { onGlobalKey, setKeyOverrides } from "./actions/registry";
 import { type DaemonState, type UiInfo, watchDaemon } from "./api";
+import { DayPanel } from "./calendar/DayPanel";
 import { ReadingPane } from "./reading/ReadingPane";
 import { Palette } from "./palette/Palette";
 import { EventDialog } from "./calendar/EventDialog";
@@ -35,6 +36,12 @@ type UiCommand =
   | { kind: "folder"; folder: number | null };
 
 export function App(props: { info: UiInfo }) {
+  const [calendarOpen, setCalendarOpen] = createSignal(false);
+  let calendarToggle!: HTMLButtonElement;
+  function toggleCalendar() {
+    setCalendarOpen(!calendarOpen());
+    if (!calendarOpen()) calendarToggle.focus();
+  }
   const [daemon, setDaemon] = createSignal<DaemonState>({ state: "starting" });
   // The palette: closed, open on the list, or open on one command's form.
   // config.toml changed since the app started: offer a restart.
@@ -45,12 +52,13 @@ export function App(props: { info: UiInfo }) {
   aiSettings.tool = props.info.ai_tool;
   aiSettings.accounts = props.info.ai_accounts;
   spamSettings.accounts = props.info.spam_accounts;
-  registerBuiltinActions((initial) => setPalette({ initial }));
+  registerBuiltinActions((initial) => setPalette({ initial }), toggleCalendar);
   onMount(async () => {
     window.addEventListener("keydown", onGlobalKey);
     const stopDaemon = await watchDaemon(setDaemon);
     const stopUi = await listen<UiCommand>("ui_command", (e) => {
       const c = e.payload;
+      setCalendarOpen(false);
       setPalette(null);
       setEventDialog(null);
       setSpamDialog(null);
@@ -70,7 +78,15 @@ export function App(props: { info: UiInfo }) {
   });
   return (
     <div class="app">
-      <TitleBar platform={props.info.platform} />
+      <TitleBar platform={props.info.platform}>
+        <button ref={calendarToggle} class="titlebar-tool calendar-toggle" title="Calendar" aria-label="Calendar"
+          aria-expanded={calendarOpen()} onClick={toggleCalendar}>
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
+            <rect x="3.5" y="5.5" width="17" height="15.5" rx="2.5" />
+            <path d="M7.5 3v5m9-5v5m-13 2.5h17" />
+          </svg>
+        </button>
+      </TitleBar>
       <main class="panes" style={{ "grid-template-columns": paneColumns() }}>
         <Splitters />
         <nav class="pane folders" aria-label="Folders">
@@ -79,7 +95,10 @@ export function App(props: { info: UiInfo }) {
         <section class="pane list" aria-label="Messages">
           <MessageList />
         </section>
-        <ReadingPane />
+        <div class="reader-calendar">
+          <ReadingPane />
+          <Show when={calendarOpen()}><DayPanel onClose={toggleCalendar} /></Show>
+        </div>
       </main>
       <footer class="statusbar" role="status">
         <span classList={{ warn: daemon().state === "unavailable" }}>{daemonText(daemon())}</span>
