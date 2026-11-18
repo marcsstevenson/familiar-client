@@ -1,3 +1,6 @@
+@import "../styles/tokens.css";
+@import "./readingActions.css";
+
 .fam-quoted-from {
   display: inline-block;
   width: 100%;
@@ -5,8 +8,6 @@
 }
 .fam-quoted-actions {
   float: right;
-  display: inline-flex;
-  gap: 2px;
   margin-inline-start: 6px;
   opacity: 0;
   pointer-events: none;
@@ -16,16 +17,6 @@
   opacity: 1;
   pointer-events: auto;
 }
-.fam-quoted-actions button {
-  font: 12px/1.35 system-ui, sans-serif;
-  color: ButtonText;
-  background: ButtonFace;
-  border: 1px solid GrayText;
-  border-radius: 4px;
-  padding: 1px 5px;
-  cursor: pointer;
-}
-.fam-quoted-actions button:disabled { color: GrayText; cursor: default; }
 @media (hover: none) {
   .fam-quoted-actions { opacity: 1; pointer-events: auto; }
 }

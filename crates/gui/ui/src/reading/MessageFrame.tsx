@@ -37,7 +37,7 @@ export function MessageFrame(props: {
     const doc = frame.contentDocument;
     if (!doc) return;
     if (props.dark) darken(doc);
-    addQuotedActions(doc, props.onQuote);
+    addQuotedActions(doc, props.onQuote, props.dark);
     // Keys pressed while the body has focus don't reach the app's window.
     doc.addEventListener("keydown", onGlobalKey);
     doc.addEventListener("mouseover", (e) => {
