@@ -35,3 +35,39 @@ export function nextDate(date: string, days: number) {
   d.setDate(d.getDate() + days);
   return localDate(d);
 }
+
+export const views = ["Day", "Week", "Month", "Agenda"] as const;
+export type CalendarView = typeof views[number];
+
+export function monday(date: string) {
+  return nextDate(date, -((new Date(date + "T12:00").getDay() + 6) % 7));
+}
+
+export function shiftMonth(date: string, months: number) {
+  const d = new Date(date + "T12:00");
+  const last = new Date(d.getFullYear(), d.getMonth() + months + 1, 0, 12);
+  last.setDate(Math.min(d.getDate(), last.getDate()));
+  return localDate(last);
+}
+
+export function datesFrom(first: string, count: number) {
+  return Array.from({ length: count }, (_, i) => nextDate(first, i));
+}
+
+export function calendarRange(view: CalendarView, date: string) {
+  if (view === "Week") return { from: monday(date), days: 7 };
+  if (view !== "Month") return { from: date, days: view === "Day" ? 1 : 30 };
+  const first = date.slice(0, 8) + "01";
+  const from = monday(first);
+  const next = shiftMonth(first, 1);
+  let days = 28;
+  while (nextDate(from, days) < next) days += 7;
+  return { from, days };
+}
+
+/** All-day end dates are exclusive. Timed endpoints are instants in the display zone. */
+export function onDay(e: CalEvent, date: string) {
+  if (e.all_day) return e.start <= date && date < e.end;
+  return Date.parse(e.start) < new Date(nextDate(date, 1) + "T00:00").getTime() &&
+    Date.parse(e.end) > new Date(date + "T00:00").getTime();
+}

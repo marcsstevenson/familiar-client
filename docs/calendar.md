@@ -137,6 +137,17 @@ When `[ai]` is on (see [ai.md](ai.md)), the dialog says which tool the email
 may go to while it waits. Closing it then leaves the tool to finish or time
 out on its own.
 
+### Full calendar in the app
+
+Choose **Open full calendar** from the day panel or an event's details. The date,
+calendar filters and open event carry over. Use the mini month to pick a date,
+or step through Day, Week, Month and the 30-day Agenda with the arrow buttons.
+In Month, a date or **more** opens its day. In Day and Week, select a half-hour
+to start an event. Calendar visibility and the last full view are saved on this device.
+
+**Back to Mail** returns to the open message and list. A `fam ui open` or
+`fam ui folder` request also returns to Mail and selects its requested item.
+
 ### Day calendar in the app
 
 Open Calendar at the right of the title bar (Ctrl+Shift+L) to see the local day

@@ -23,7 +23,7 @@ function times(d: CalShowOutput) {
 }
 
 export function EventDetails(props: {
-  id: number; revision: number; onClose: () => void; onChanged: () => void;
+  id: number; revision: number; expand?: () => void; onClose: () => void; onChanged: () => void;
 }) {
   const [details, { refetch }] = createResource(() => [props.id, props.revision] as const,
     ([event]) => run("cal.show", { event }));
@@ -131,7 +131,8 @@ export function EventDetails(props: {
         </>;
       }}</Show>
       <Show when={error()}>{msg => <p class="warn" role="alert">{msg()}</p>}</Show>
-      <div class="event-actions"><span class="spacer" /><button disabled={busy()} onClick={props.onClose}>Close</button></div>
+      <div class="event-actions"><Show when={props.expand && mode() === "view"}><button disabled={busy()} onClick={props.expand}>Open full calendar</button></Show>
+        <span class="spacer" /><button disabled={busy()} onClick={props.onClose}>Close</button></div>
     </div>
   </dialog>;
 }
