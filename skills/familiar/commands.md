@@ -99,6 +99,7 @@ Adds an event to a calendar on this device at once and queues it for the server.
 - `--attendee <attendee>` (repeatable): Invite someone ("Name <addr>" or an address); repeat or separate with commas.
 - `--body <body>`: Notes (plain text).
 - `--calendar <calendar>`: Calendar name ("Family Room") or a purpose from [calendar.purposes] ("family"). Default: the account's main calendar.
+- `--calendar-id <calendar-id>`: Exact local destination ID from cal calendars.
 - `--category <category>` (repeatable): Outlook category; repeat for more.
 - `--count <count>`: Or: repeat this many times.
 - `--days <days>`: All-day: how many days when there's no --end (default 1).
@@ -211,6 +212,7 @@ Reads an email and says which calendar events it suggests, for you to check befo
 - `--from-mail <from-mail>` (required): The email (local message ID).
 - `--no-ai`: Don't ask the AI tool, even when [ai] is enabled.
 - `--tz <tz>`: Time zone to give times in (IANA or Windows). Default: this computer's.
+- `--with-mail`: Include editable email text and possible guests for ordinary messages.
 
 ## cal.rsvp
 
@@ -230,6 +232,18 @@ Accepts, tentatively accepts or declines a meeting on this device at once and qu
 - `--series`: Answer for the whole recurring series.
 - `--wait`: Wait until the server has it (needs famd).
 - `--wait-secs <wait-secs>`: Seconds --wait waits at most (default 60).
+
+## cal.show
+
+Show an event, its guests, reminder and notes preview. Access: `read`.
+
+```
+fam cal show <EVENT>
+```
+
+Reads a local event by ID, offline. Times use the event's original zone when known.
+
+- `EVENT` (required): Local event ID from cal list.
 
 ## config.path
 
@@ -519,6 +533,19 @@ Renames a folder on this device at once and queues it for the server. Built-in f
 - `NAME` (required): Its new name.
 - `--wait`: Wait until the server has the change (needs famd).
 - `--wait-secs <wait-secs>`: Seconds --wait waits at most (default 60).
+
+## folder.reorder
+
+Set the order of folders in the folder pane. Access: `write`.
+
+```
+fam folder reorder <FOLDERS>...
+```
+
+Puts sibling folders (same account and parent) in the order given, or with --pinned the pinned folders. Give the whole group: folders left out keep any earlier place. Kept on this device only (folders.json in the data directory), not on the server. The desktop app sets it when a folder is dragged.
+
+- `FOLDERS` (required, repeatable): Local folder IDs (the id column of fam folder list --json), in the order wanted. They must share a parent folder and account, unless --pinned is given.
+- `--pinned`: Order the pinned folders (any accounts) instead of sibling folders.
 
 ## folder.unpin
 

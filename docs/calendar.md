@@ -121,8 +121,12 @@ The reading pane's **Add to calendar** button (Ctrl+Shift+A) runs
   calendar start unticked.
 - One calendar for all of them, picked from every writable calendar on
   every account. It starts on the calendar last used for that sender, else
-  the receiving account's main calendar. Under it are the calendar's other
-  events on each of those days.
+  the receiving account's main calendar. The email stays open beside the editor.
+  **Show day** selects a draft. Its schedule follows changes to the date, time
+  zone and destination and highlights appointments that overlap its proposed time.
+- For ordinary mail, edit the subject and optionally copy the email text into notes.
+  **Invite email participants** previews the guests for that draft. Own addresses
+  and repeated addresses are excluded. **Add and send invitations** confirms the list.
 - **Add** runs `fam cal add --from-mail` once per ticked event, and the
   dialog then offers **Undo**, which deletes them again.
 - A meeting request shows the meeting with **Accept**, **Tentative** and
@@ -133,3 +137,43 @@ When `[ai]` is on (see [ai.md](ai.md)), the dialog says which tool the email
 may go to while it waits. Closing it then leaves the tool to finish or time
 out on its own.
 
+### Full calendar in the app
+
+Choose **Open full calendar** from the day panel or an event's details. The date,
+calendar filters and open event carry over. Use the mini month to pick a date,
+or step through Day, Week, Month and the 30-day Agenda with the arrow buttons.
+In Month, a date or **more** opens its day. In Day and Week, select a half-hour
+to start an event. Calendar visibility and the last full view are saved on this device.
+
+**Back to Mail** returns to the open message and list. A `fam ui open` or
+`fam ui folder` request also returns to Mail and selects its requested item.
+
+### Day calendar in the app
+
+Open Calendar at the right of the title bar (Ctrl+Shift+L) to see the local day
+beside the message you're reading. Use Today, the arrows or the date picker to
+navigate. Calendars lists the visible calendars across accounts, including
+read-only ones. Expand an appointment to see its time, location and calendar.
+Click a half-hour slot or New event to add an appointment to a writable
+calendar. Offline saves queue on this device and sync when famd can connect.
+The panel overlays the reader in narrow windows. Escape or Close calendar
+returns to Mail.
+
+### Open and change an event
+
+Click an appointment to see its calendar, dates, time zone, organiser,
+guest responses, reminder and cached notes preview. The same details are
+available offline with `fam cal show <event-id>`. Find the ID with
+`fam cal list --json`.
+
+On a writable calendar, an organiser can edit the title, times, location
+and reminder, delete a personal event, or cancel a meeting. Familiar shows
+the guests before you confirm a cancellation. Invitees can change their
+reminder or choose Accept, Tentative or Decline, with the option to tell
+the organiser. Read-only calendars show details for inspection.
+
+Recurring meetings default to **This occurrence**. Select **Entire series**
+before an edit, cancellation or RSVP to apply it to the series. To reschedule
+the series, enter the start and end of its first event. Edits and answers
+use the same offline queue as the CLI. A server refusal restores the
+previous calendar data.

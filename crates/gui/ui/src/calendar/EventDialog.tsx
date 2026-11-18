@@ -3,22 +3,21 @@
 // chosen calendar's other events on those days. Add runs `cal add` once per
 // ticked event. A meeting invitation is answered with `cal rsvp` instead.
 import { For, Match, Show, Switch, createEffect, createResource, createSignal, onCleanup, onMount } from "solid-js";
-import { createStore, produce } from "solid-js/store";
+import { ProposalSchedule } from "./ProposalSchedule";
+import { localDate } from "./timeline";
+import { EventFields } from "./EventFields";
+import { createStore } from "solid-js/store";
 import { isCommandError, run } from "../api";
 import { aiSettings, notify } from "../state";
 import {
   type Calendar,
-  DAYS,
   type Draft,
-  type Every,
   addInput,
   calendarKey,
-  dateWords,
   defaultCalendar,
   draftOf,
   problem,
   rememberCalendar,
-  repeatWords,
   sourceWords,
   toolWords,
 } from "./proposals";
@@ -26,10 +25,10 @@ import "./calendar.css";
 
 const errorText = (e: unknown) => (isCommandError(e) ? e.message : String(e));
 
-type Created = { id: number | null; event: number | null; series: boolean };
+type Created = { id: number | null; event: number | null; series: boolean; guests: boolean };
 
 export function EventDialog(props: { message: number; from: string; onClose: () => void }) {
-  const [proposal] = createResource(() => run("cal.propose", { from_mail: props.message }));
+  const [proposal] = createResource(() => run("cal.propose", { from_mail: props.message, with_mail: true }));
   const [calendars] = createResource(async () =>
     (await run("cal.calendars", {})).calendars.filter((c) => c.can_edit),
   );
@@ -41,14 +40,20 @@ export function EventDialog(props: { message: number; from: string; onClose: () 
   const [created, setCreated] = createSignal<Created[] | null>(null);
   const [tell, setTell] = createSignal(true);
 
+  const [active, setActive] = createSignal(0);
+  const [guests, setGuests] = createStore<Record<number, string[]>>({});
+  let heading!: HTMLDivElement;
   // Drafts and the calendar are filled once both answers are in.
   let filled = false;
   createEffect(() => {
+    if (proposal.error || calendars.error) return;
     const p = proposal();
     const cals = calendars();
     if (!p || !cals || filled) return;
     filled = true;
-    setDrafts(p.events.map(draftOf));
+    setDrafts(p.events.map(e => draftOf(p.mail && p.events.length === 1 ? { ...e, subject: p.mail.subject } : e)));
+    if (!drafts.length && p.mail) addBlank();
+    setActive(Math.max(0, drafts.findIndex(d => d.add)));
     const d = defaultCalendar(cals, p.account, props.from);
     if (d) setChosen(calendarKey(d));
   });
@@ -59,33 +64,12 @@ export function EventDialog(props: { message: number; from: string; onClose: () 
   const blocking = () => ticked().map(problem).find((p) => p !== null) ?? null;
   const accounts = () => [...new Set((calendars() ?? []).map((c) => c.account))];
 
-  // The chosen calendar's events on each ticked event's first day.
-  const [clashes] = createResource(
-    () => {
-      const c = calendar();
-      if (!c) return null;
-      const days = [...new Set(ticked().map((d) => `${d.startDate}|${d.zone}`))].sort();
-      return { c, days };
-    },
-    async ({ c, days }) =>
-      Promise.all(
-        days.map(async (k) => {
-          const [date = "", tz = ""] = k.split("|");
-          try {
-            const out = await run("cal.list", { from: date, days: 1, account: c.account, calendar: c.name, tz });
-            // Warnings mean the day isn't fully synced here, so "nothing" isn't known.
-            return { date, events: out.events.filter((e) => !e.cancelled), known: (out.warnings ?? []).length === 0 };
-          } catch {
-            return { date, events: [], known: false };
-          }
-        }),
-      ),
-  );
-
   onMount(() => {
+    heading.focus();
     const esc = (e: KeyboardEvent) => {
       if (e.key !== "Escape" || e.defaultPrevented) return;
       e.preventDefault();
+      if (busy()) return;
       if (editing() !== null) setEditing(null);
       else props.onClose();
     };
@@ -96,11 +80,11 @@ export function EventDialog(props: { message: number; from: string; onClose: () 
   const set = <K extends keyof Draft>(i: number, k: K, v: Draft[K]) => setDrafts(i, k, v);
 
   function addBlank() {
-    const today = new Date();
-    const d = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    const d = localDate(new Date());
+    setActive(drafts.length);
     setDrafts(drafts.length, {
       ...draftOf({
-        subject: "",
+        subject: proposal()?.mail?.subject ?? "",
         start: `${d} 09:00`,
         end: `${d} 10:00`,
         all_day: false,
@@ -111,14 +95,16 @@ export function EventDialog(props: { message: number; from: string; onClose: () 
 
   async function add() {
     const c = calendar();
-    if (!c) return;
+    if (!c || busy()) return;
     setBusy(true);
     setError(null);
     const done: Created[] = [];
     try {
-      for (const d of ticked()) {
-        const out = await run("cal.add", addInput(d, props.message, c));
-        for (const op of out.ops) done.push({ id: op.id ?? null, event: op.item ?? null, series: d.every !== "none" });
+      for (const [index, d] of drafts.entries()) {
+        if (!d.add) continue;
+        const attendee = guests[index] ?? [];
+        const out = await run("cal.add", { ...addInput(d, props.message, c), attendee, yes: attendee.length > 0 });
+        for (const op of out.ops) done.push({ id: op.id ?? null, event: op.item ?? null, series: d.every !== "none", guests: attendee.length > 0 });
       }
       rememberCalendar(props.from, c);
       notify(done.length === 1 ? `Added to ${c.account} · ${c.name}` : `Added ${done.length} events to ${c.account} · ${c.name}`);
@@ -139,7 +125,7 @@ export function EventDialog(props: { message: number; from: string; onClose: () 
       for (const c of list) {
         // A create still queued is cancelled; one the server has is deleted.
         const cancelled = c.id !== null && (await run("ops.cancel", { id: c.id })).changed;
-        if (!cancelled && c.event !== null) await run("cal.delete", { event: c.event, series: c.series });
+        if (!cancelled && c.event !== null) await run("cal.delete", { event: c.event, series: c.series, yes: c.guests });
       }
       notify(list.length === 1 ? "Event removed" : `${list.length} events removed`);
       props.onClose();
@@ -167,11 +153,10 @@ export function EventDialog(props: { message: number; from: string; onClose: () 
   const failed = () => (proposal.error ? errorText(proposal.error) : calendars.error ? errorText(calendars.error) : null);
 
   return (
-    <div class="palette-backdrop" onMouseDown={(e) => e.target === e.currentTarget && !busy() && props.onClose()}>
+    <section class="proposal-workspace" role="dialog" aria-label="Add to calendar">
       <div
-        class="palette event-dialog"
-        role="dialog"
-        aria-label={proposal()?.invitation ? "Invitation" : "Add to calendar"}
+        class="proposal-editor"
+        tabindex="-1" ref={heading}
       >
         <Switch>
           <Match when={failed()}>
@@ -259,7 +244,7 @@ export function EventDialog(props: { message: number; from: string; onClose: () 
                 </p>
                 <Show when={error()}>{(e) => <p class="warn" role="alert">{e()}</p>}</Show>
                 <div class="event-actions">
-                  <button onClick={() => void undo()} disabled={busy()}>Undo</button>
+                  <button onClick={() => void undo()} disabled={busy()}>{list().some(e => e.guests) ? "Undo and cancel invitations" : "Undo"}</button>
                   <span class="spacer" />
                   <button class="primary" ref={(el) => queueMicrotask(() => el.focus())} onClick={props.onClose}>
                     Close
@@ -271,7 +256,7 @@ export function EventDialog(props: { message: number; from: string; onClose: () 
           <Match when={true}>
             <div class="event-body">
               <h2>Add to calendar</h2>
-              <div class="event-scroll">
+              <div class="event-scroll" inert={busy()}>
               <For each={proposal()?.notes ?? []}>{(n) => <p class="muted event-note">{n}</p>}</For>
               <Show when={drafts.length === 0}>
                 <p>No events found in this email.</p>
@@ -279,7 +264,7 @@ export function EventDialog(props: { message: number; from: string; onClose: () 
               <ul class="event-list">
                 <For each={drafts}>
                   {(d, i) => (
-                    <li class="event-item" classList={{ off: !d.add }}>
+                    <li class="event-item" classList={{ off: !d.add }} onFocusIn={() => setActive(i())}>
                       <input
                         type="checkbox"
                         class="event-tick"
@@ -288,95 +273,20 @@ export function EventDialog(props: { message: number; from: string; onClose: () 
                         onChange={(e) => set(i(), "add", e.currentTarget.checked)}
                       />
                       <div class="event-fields">
-                        <input
-                          class="event-subject"
-                          aria-label="Subject"
-                          placeholder="Subject"
-                          value={d.subject}
-                          onInput={(e) => set(i(), "subject", e.currentTarget.value)}
-                        />
-                        <div class="event-when">
-                          <input
-                            type="date"
-                            aria-label="Start date"
-                            value={d.startDate}
-                            onInput={(e) => {
-                              const v = e.currentTarget.value;
-                              // Moving the start moves a same-day end with it.
-                              setDrafts(
-                                i(),
-                                produce((x) => {
-                                  if (x.endDate === x.startDate) x.endDate = v;
-                                  x.startDate = v;
-                                }),
-                              );
-                            }}
-                          />
-                          <Show when={!d.allDay}>
-                            <input
-                              type="time"
-                              aria-label="Start time"
-                              value={d.startTime}
-                              onInput={(e) => set(i(), "startTime", e.currentTarget.value)}
-                            />
+                        <Show when={drafts.length > 1}><button class="event-link" aria-pressed={active() === i()}
+                          onClick={() => setActive(i())}>Show day</button></Show>
+                        <EventFields draft={d} showNotes={!!proposal()?.mail} set={(k, v) => set(i(), k, v)} editing={editing() === i()}
+                          toggleRepeat={() => setEditing(editing() === i() ? null : i())} />
+                        <Show when={proposal()?.mail}>{mail => <>
+                          <Show when={mail().text}><button class="event-link" onClick={() => set(i(), "notes",
+                            [d.notes.trim(), mail().text].filter(Boolean).join("\n\n"))}>Use email text as notes</button></Show>
+                          <Show when={mail().participants.length}>
+                            <label class="event-check"><input type="checkbox" checked={!!guests[i()]?.length}
+                              onChange={e => setGuests(i(), e.currentTarget.checked ? mail().participants : [])} />
+                              Invite email participants</label>
+                            <Show when={guests[i()]?.length}><ul class="event-guests"><For each={guests[i()]}>{addr => <li>{addr}</li>}</For></ul></Show>
                           </Show>
-                          <span>to</span>
-                          <input
-                            type="date"
-                            aria-label="End date"
-                            value={d.endDate}
-                            onInput={(e) => set(i(), "endDate", e.currentTarget.value)}
-                          />
-                          <Show when={!d.allDay}>
-                            <input
-                              type="time"
-                              aria-label="End time"
-                              value={d.endTime}
-                              onInput={(e) => set(i(), "endTime", e.currentTarget.value)}
-                            />
-                          </Show>
-                          <label class="event-check">
-                            <input
-                              type="checkbox"
-                              checked={d.allDay}
-                              onChange={(e) => set(i(), "allDay", e.currentTarget.checked)}
-                            />
-                            All day
-                          </label>
-                          <input
-                            class="event-zone"
-                            aria-label="Time zone"
-                            value={d.zone}
-                            onInput={(e) => set(i(), "zone", e.currentTarget.value)}
-                          />
-                        </div>
-                        <input
-                          aria-label="Location"
-                          placeholder="Location"
-                          value={d.location}
-                          onInput={(e) => set(i(), "location", e.currentTarget.value)}
-                        />
-                        <div class="event-repeat">
-                          <span>Repeats: {repeatWords(d)}</span>
-                          <button
-                            class="event-link"
-                            aria-expanded={editing() === i()}
-                            onClick={() => setEditing(editing() === i() ? null : i())}
-                          >
-                            {editing() === i() ? "done" : "change"}
-                          </button>
-                        </div>
-                        <Show when={editing() === i()}>
-                          <RepeatEditor draft={d} set={(k, v) => set(i(), k, v)} />
-                        </Show>
-                        <Show when={d.notes}>
-                          <textarea
-                            aria-label="Notes"
-                            rows={2}
-                            value={d.notes}
-                            onInput={(e) => set(i(), "notes", e.currentTarget.value)}
-                          />
-                        </Show>
+                        </>}</Show>
                         <div class="event-meta muted">
                           <Show when={d.evidence}>{(q) => <q>{q()}</q>}</Show>
                           <span class="spacer" />
@@ -395,7 +305,7 @@ export function EventDialog(props: { message: number; from: string; onClose: () 
               </div>
               <label class="event-calendar">
                 Calendar:
-                <select value={chosen()} onChange={(e) => setChosen(e.currentTarget.value)}>
+                <select disabled={busy()} value={chosen()} onChange={(e) => setChosen(e.currentTarget.value)}>
                   <For each={accounts()}>
                     {(a) => (
                       <optgroup label={a}>
@@ -412,26 +322,6 @@ export function EventDialog(props: { message: number; from: string; onClose: () 
                   </For>
                 </select>
               </label>
-              <Show when={clashes()}>
-                {(list) => (
-                  <ul class="event-clashes muted">
-                    <For each={list()}>
-                      {(c) => (
-                        <li>
-                          {dateWords(c.date)} in {calendar()?.name}:{" "}
-                          {c.events.length === 0
-                            ? c.known
-                              ? "nothing else"
-                              : "not synced on this computer, so not checked"
-                            : c.events
-                                .map((e) => `${e.all_day ? "all day" : e.start.slice(11, 16)} ${e.subject}`)
-                                .join(", ")}
-                        </li>
-                      )}
-                    </For>
-                  </ul>
-                )}
-              </Show>
               <Show when={error()}>{(e) => <p class="warn" role="alert">{e()}</p>}</Show>
               <div class="event-actions">
                 <span class="spacer" />
@@ -441,87 +331,15 @@ export function EventDialog(props: { message: number; from: string; onClose: () 
                   disabled={busy() || ticked().length === 0 || blocking() !== null || !calendar()}
                   onClick={() => void add()}
                 >
-                  {busy() ? "Adding…" : ticked().length === 1 ? "Add 1 event" : `Add ${ticked().length} events`}
+                  {busy() ? "Adding…" : drafts.some((d, i) => d.add && guests[i]?.length) ? "Add and send invitations" : ticked().length === 1 ? "Add 1 event" : `Add ${ticked().length} events`}
                 </button>
               </div>
             </div>
           </Match>
         </Switch>
       </div>
-    </div>
-  );
-}
-
-const EVERY: { value: Every; label: string }[] = [
-  { value: "none", label: "Doesn't repeat" },
-  { value: "daily", label: "Daily" },
-  { value: "weekly", label: "Weekly" },
-  { value: "monthly", label: "Monthly" },
-  { value: "yearly", label: "Yearly" },
-];
-
-function RepeatEditor(props: { draft: Draft; set: <K extends keyof Draft>(k: K, v: Draft[K]) => void }) {
-  const d = () => props.draft;
-  return (
-    <div class="event-repeat-editor">
-      <select aria-label="Repeat" value={d().every} onChange={(e) => props.set("every", e.currentTarget.value as Every)}>
-        <For each={EVERY}>{(o) => <option value={o.value}>{o.label}</option>}</For>
-      </select>
-      <Show when={d().every !== "none"}>
-        <label>
-          every
-          <input
-            type="number"
-            min="1"
-            aria-label="Interval"
-            value={d().interval}
-            onInput={(e) => props.set("interval", Math.max(1, Number(e.currentTarget.value) || 1))}
-          />
-        </label>
-        <Show when={d().every === "weekly"}>
-          <span class="event-days">
-            <For each={DAYS}>
-              {(w) => (
-                <label>
-                  <input
-                    type="checkbox"
-                    checked={d().on.includes(w)}
-                    onChange={(e) =>
-                      props.set(
-                        "on",
-                        e.currentTarget.checked
-                          ? DAYS.filter((x) => x === w || d().on.includes(x))
-                          : d().on.filter((x) => x !== w),
-                      )
-                    }
-                  />
-                  {w.charAt(0).toUpperCase() + w.slice(1)}
-                </label>
-              )}
-            </For>
-          </span>
-        </Show>
-        <select aria-label="Ends" value={d().ends} onChange={(e) => props.set("ends", e.currentTarget.value as Draft["ends"])}>
-          <option value="until">until</option>
-          <option value="count">for</option>
-          <option value="never">with no end</option>
-        </select>
-        <Show when={d().ends === "until"}>
-          <input type="date" aria-label="Until" value={d().until} onInput={(e) => props.set("until", e.currentTarget.value)} />
-        </Show>
-        <Show when={d().ends === "count"}>
-          <label>
-            <input
-              type="number"
-              min="1"
-              aria-label="Times"
-              value={d().count}
-              onInput={(e) => props.set("count", Math.max(1, Number(e.currentTarget.value) || 1))}
-            />
-            times
-          </label>
-        </Show>
-      </Show>
-    </div>
+      <Show when={!failed() && !created() && drafts[active()] && calendar()}>{c =>
+        <ProposalSchedule draft={drafts[active()]!} calendar={c()} />}</Show>
+    </section>
   );
 }

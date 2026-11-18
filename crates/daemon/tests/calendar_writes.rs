@@ -368,6 +368,57 @@ async fn events_added_changed_answered_and_deleted() {
             .all(|s| s.location == "Pool")
     );
 
+    // Moving one occurrence preserves the other starts. A refused PATCH
+    // restores its previous time locally as well as on the server.
+    let moving = &swims[1];
+    let move_to = |hour| {
+        edit_request(
+            &env.reader(),
+            &CalEditInput {
+                event: moving.id.0,
+                start: Some(format!("{} {hour}:00", d6 + chrono::Duration::days(7))),
+                ..Default::default()
+            },
+            NZ,
+            t,
+        )
+        .unwrap()
+    };
+    submit(&env, move_to(18), waiting()).await.unwrap();
+    let edited = env.reader().event(moving.id).unwrap().unwrap();
+    assert_eq!(edited.data.start_at, moving.data.start_at + 3600);
+    for other in swims.iter().filter(|s| s.id != moving.id) {
+        assert_eq!(
+            env.reader().event(other.id).unwrap().unwrap().data.start_at,
+            other.data.start_at
+        );
+    }
+    env.mock.push_fault(
+        Fault::access_denied()
+            .on_method("PATCH")
+            .on_path("events")
+            .times(1),
+    );
+    assert!(submit(&env, move_to(19), waiting()).await.is_err());
+    assert_eq!(
+        env.reader()
+            .event(moving.id)
+            .unwrap()
+            .unwrap()
+            .data
+            .start_at,
+        edited.data.start_at
+    );
+    assert_eq!(
+        env.mock
+            .mailbox(KEY)
+            .event(&moving.data.remote_id)
+            .unwrap()
+            .start
+            .timestamp(),
+        edited.data.start_at
+    );
+
     // Delete one occurrence: it leaves the calendar before the server has it.
     env.stop().await;
     let r = env.reader();
@@ -529,21 +580,40 @@ async fn events_added_changed_answered_and_deleted() {
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
 async fn offline_adds_wait_and_refusals_undo() {
     let mut env = Env::new(60).await;
+    let destination = env
+        .mock
+        .mailbox(KEY)
+        .add_calendar(familiar_mock_graph::Calendar {
+            id: String::new(),
+            name: "Calendar".into(),
+            is_default: false,
+            color: "auto".into(),
+            owner: None,
+        });
     env.start(policy());
     env.until("first sync", LIMIT, |e| e.settled(30)).await;
     env.until("calendar", LIMIT, |e| {
-        !e.reader().calendars(e.account()).unwrap().is_empty()
+        e.reader()
+            .calendar_by_remote(e.account(), &destination)
+            .unwrap()
+            .is_some()
     })
     .await;
     env.stop().await;
 
-    // Without famd: the event is on this device's calendar at once.
+    let calendar = env
+        .reader()
+        .calendar_by_remote(env.account(), &destination)
+        .unwrap()
+        .unwrap();
+    // Select the non-default calendar by ID, even with famd stopped.
     let d2 = day(&env, 2);
     let out = add(
         &env,
         CalAddInput {
             all_day: true,
             days: Some(2),
+            calendar_id: Some(calendar.id.0),
             ..base("Camp", d2.format("%Y-%m-%d").to_string())
         },
         WriteFlags::default(),
@@ -552,6 +622,7 @@ async fn offline_adds_wait_and_refusals_undo() {
     .unwrap();
     let camp = env.reader().event(EventId(created(&out))).unwrap().unwrap();
     assert!(camp.data.remote_id.starts_with(LOCAL_REMOTE_PREFIX));
+    assert_eq!(camp.data.calendar, calendar.id);
     assert!(camp.data.is_all_day);
     assert_eq!(camp.data.end_at - camp.data.start_at, 2 * 86_400);
     assert_eq!(local_named(&env, "Camp").len(), 1);

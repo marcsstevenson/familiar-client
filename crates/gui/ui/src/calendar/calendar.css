@@ -176,3 +176,20 @@
   flex-direction: column;
   gap: var(--space-2);
 }
+
+.reviewing-proposal > :is(.folders, .list, .splitter) { display: none; }
+.reviewing-proposal > .reader-calendar { grid-column: 1 / -1; }
+.proposal-workspace { flex: 0 1 70%; min-width: 0; display: flex; border-left: 1px solid var(--border); }
+.proposal-editor { flex: 1; display: flex; min-width: 0; overflow: auto; }
+.proposal-editor > .event-body { flex: 1; min-width: 0; }
+.proposal-schedule { flex: 0 0 28%; min-width: 0; overflow: auto; overflow-wrap: anywhere; padding: var(--space-4); background: var(--bg-sidebar); border-left: 1px solid var(--border); }
+.proposal-schedule h3 { margin: 0; }
+.proposal-schedule .proposed-slot, .schedule-entry { padding: var(--space-3); border-left: 3px solid var(--border); background: var(--bg); }
+.proposal-schedule .proposed-slot { border-color: var(--accent); }
+.schedule-entry.conflict { border-color: var(--warn); }
+.proposal-schedule :is(strong, small) { display: block; }
+.schedule-entry small { color: var(--warn); }
+@media (max-width: 960px) {
+  .proposal-workspace { flex-direction: column; }
+  .proposal-schedule { border-left: 0; border-top: 1px solid var(--border); }
+}

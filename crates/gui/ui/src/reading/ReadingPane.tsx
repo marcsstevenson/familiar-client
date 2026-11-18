@@ -8,7 +8,7 @@
 // marks it read.
 import { For, Show, createEffect, createSignal, on } from "solid-js";
 import { run } from "../api";
-import { type SpamResult, rememberSpam, selectedMessage, setEventDialog, setReadingFrom, setSpamDialog, spamResults, spamSettings } from "../state";
+import { type SpamResult, multiPicked, rememberSpam, selectedMessage, setReadingFrom, setSpamDialog, spamResults, spamSettings } from "../state";
 import { gradeLevel, gradeWords } from "../spam/SpamDialog";
 import { resolvedTheme } from "../theme";
 import { Attachments } from "./Attachments";
@@ -16,6 +16,8 @@ import { CopyButton } from "./CopyButton";
 import { type MailFetchOutput, type ReadView, errorText, openLink, openMessage, trustSender } from "./api";
 import { mismatch } from "./links";
 import { type HoverLink, MessageFrame } from "./MessageFrame";
+import { PickedSummary } from "./PickedSummary";
+import { ReplyBar } from "./ReplyBar";
 import "./reading.css";
 
 type Addr = MailFetchOutput["from"];
@@ -142,7 +144,9 @@ export function ReadingPane() {
         fallback={
           <div class="pane-empty">
             <Show when={!error() && selectedMessage() === null} fallback={error() ?? ""}>
-              <span class="reading-empty-kea" aria-hidden="true" />
+              <Show when={multiPicked()} fallback={<span class="reading-empty-kea" aria-hidden="true" />}>
+                <PickedSummary />
+              </Show>
             </Show>
           </div>
         }
@@ -159,13 +163,7 @@ export function ReadingPane() {
                       <CopyButton text={() => m().subject} label="Copy subject" />
                     </Show>
                   </h1>
-                  <button
-                    class="reading-calendar"
-                    title="Add the events in this email to a calendar (Ctrl+Shift+A)"
-                    onClick={() => setEventDialog({ message: m().id, from: m().from.addr })}
-                  >
-                    Add to calendar
-                  </button>
+                  <ReplyBar message={m()} />
                   <Show when={resolvedTheme() === "dark" && v().html}>
                     <button
                       class="reading-mode"

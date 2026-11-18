@@ -45,6 +45,9 @@ export type UiInfo = {
 
 export const uiInfo = (): Promise<UiInfo> => invoke<UiInfo>("ui_info");
 
+/** Shows (unread > 0) or clears the mail overlay on the taskbar button. Windows only. */
+export const setUnreadBadge = (unread: number): Promise<void> => invoke("set_unread_badge", { unread });
+
 export type DaemonState =
   | { state: "starting" }
   | { state: "running"; started_by_app: boolean }

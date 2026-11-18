@@ -1,0 +1,92 @@
+.reader-calendar {
+  min-width: 0;
+  min-height: 0;
+  display: flex;
+  container-type: inline-size;
+}
+.reader-calendar > .reading { flex: 1; min-width: 0; }
+.calendar-toggle[aria-expanded="true"] { color: var(--accent); background: var(--bg-selected); }
+
+.day-panel {
+  display: flex;
+  flex-direction: column;
+  width: 344px;
+  max-width: 100vw;
+  flex: none;
+  min-height: 0;
+  overflow: auto;
+  background: var(--bg);
+  border-left: 1px solid var(--border);
+}
+@container (max-width: 664px) {
+  .day-panel {
+    position: absolute;
+    inset: 0 0 0 auto;
+    z-index: 6;
+    box-shadow: -5px 0 18px rgb(0 0 0 / 0.12);
+  }
+}
+.day-panel > header, .day-nav, .day-tools {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+}
+.day-panel > header { justify-content: space-between; padding-top: var(--space-4); }
+.day-panel h2 { margin: 0; font-size: var(--text-xl); font-weight: 600; }
+.day-panel button, .day-nav input { font: inherit; color: inherit; }
+.day-panel > header button, .day-nav button, .day-tools button {
+  background: var(--bg-sidebar);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  cursor: pointer;
+}
+.day-nav input { flex: 1; min-width: 0; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.day-tools { align-items: baseline; justify-content: space-between; }
+.day-tools details { flex: 1; min-width: 0; }
+.day-tools summary { cursor: pointer; }
+.day-tools details label { display: flex; gap: var(--space-2); align-items: baseline; margin-top: var(--space-2); overflow-wrap: anywhere; }
+.day-tools i { width: 8px; height: 8px; border-radius: 50%; flex: none; }
+.day-tools .day-create { background: var(--bg-selected); color: var(--accent); font-weight: 600; }
+.day-panel button:disabled { opacity: .55; cursor: default; }
+.day-panel > p { margin: var(--space-2) var(--space-4); }
+.day-warning { color: var(--warn); font-size: var(--text-sm); }
+.day-all {
+  border-block: 1px solid var(--border);
+  padding: var(--space-3);
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr);
+  align-items: start;
+  max-height: 22%;
+  overflow: auto;
+}
+.day-all > span, .day-panel footer { color: var(--text-muted); font-size: var(--text-xs); }
+.day-all > div { display: grid; gap: 2px; }
+.day-scroll { flex: 1 0 100px; overflow-y: auto; min-height: 0; }
+.day-grid { position: relative; }
+.day-slot {
+  display: block; width: 100%; height: 32px; background: transparent;
+  border: 0; border-top: 1px solid var(--border); padding: 2px 5px;
+  text-align: left; font-variant-numeric: tabular-nums;
+}
+.day-panel .day-slot { font-size: var(--text-xs); color: var(--text-muted); }
+.day-slot:nth-child(even) { border-top-style: dotted; }
+.day-slot:hover:enabled { background: var(--bg-hover); }
+.day-blocks { position: absolute; inset: 0 3px 0 48px; pointer-events: none; }
+.day-block { position: absolute; padding: 1px 1px 0 0; }
+.day-event {
+  display: flex; flex-direction: column; align-items: start; width: 100%; height: 100%;
+  pointer-events: auto; text-align: left; background: var(--bg-selected);
+  border: 0; border-left: 3px solid var(--accent); border-radius: var(--radius-sm);
+  padding: 1px var(--space-2); overflow: hidden; cursor: pointer;
+}
+.day-event strong, .day-event small { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.day-event small { color: var(--text-muted); }
+.day-event[aria-expanded="true"] { outline: 1px solid var(--accent); outline-offset: -1px; }
+.day-now { position: absolute; left: 44px; right: 0; border-top: 2px solid var(--accent); pointer-events: none; }
+.day-panel footer { padding: var(--space-2) var(--space-4); border-top: 1px solid var(--border); }
+.new-event { color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 0; }
+.new-event::backdrop { background: rgb(0 0 0 / .25); }
+.event-guests { margin: var(--space-2) 0; padding-left: var(--space-5); overflow-wrap: anywhere; }
+.event-preview { white-space: pre-wrap; overflow-wrap: anywhere; }

@@ -190,9 +190,11 @@ impl Registry {
         r.register(crate::commands::folder::FolderColor);
         r.register(crate::commands::folder::FolderPin);
         r.register(crate::commands::folder::FolderUnpin);
+        r.register(crate::commands::folder::FolderReorder);
         r.register(crate::commands::api::Api);
         r.register(crate::commands::search::MailSearch);
         r.register(crate::commands::cal::CalList);
+        r.register(crate::commands::cal::CalShow);
         r.register(crate::commands::cal::CalCalendars);
         r.register(crate::commands::cal_write::CalAdd);
         r.register(crate::commands::cal_write::CalEdit);

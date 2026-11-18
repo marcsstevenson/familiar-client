@@ -267,6 +267,8 @@ export type CalAddInput = {
   body?: string | null;
   /** Calendar name ("Family Room") or a purpose from [calendar.purposes] ("family"). Default: the account's main calendar. */
   calendar?: string | null;
+  /** Exact local destination ID from cal calendars. */
+  calendar_id?: number | null;
   /** Outlook category; repeat for more. */
   category?: Array<string>;
   /** Or: repeat this many times. */
@@ -320,10 +322,14 @@ export type CalCalendar = {
   account: string;
   /** You can add and change events. */
   can_edit: boolean;
+  /** Provider colour, when supplied. */
+  color?: string | null;
   /** The last sync error, if the last sync failed. */
   error?: string | null;
   /** Events on this device. */
   events: number;
+  /** Local calendar ID. */
+  id: number;
   /** The account's default calendar. */
   is_default: boolean;
   /** When the events last synced (RFC 3339, UTC). */
@@ -413,6 +419,8 @@ export type CalEvent = {
   all_day: boolean;
   /** Calendar name. */
   calendar: string;
+  /** Local calendar ID. */
+  calendar_id: number;
   /** Cancelled meeting. */
   cancelled: boolean;
   /** End: RFC 3339 in the output zone, or the day after the last day for all-day events. */
@@ -435,6 +443,17 @@ export type CalEvent = {
   subject: string;
   /** The organiser's time zone (IANA), when known. */
   time_zone?: string | null;
+};
+
+export type CalGuest = {
+  /** Email address. */
+  addr: string;
+  /** Required, optional or resource. */
+  kind: string;
+  /** Display name. */
+  name: string;
+  /** Guest's response. */
+  response: string;
 };
 
 export type CalListInput = {
@@ -472,6 +491,8 @@ export type CalProposeInput = {
   no_ai?: boolean;
   /** Time zone to give times in (IANA or Windows). Default: this computer's. */
   tz?: string | null;
+  /** Include editable email text and possible guests for ordinary messages. */
+  with_mail?: boolean;
 };
 
 export type CalProposeOutput = {
@@ -481,6 +502,8 @@ export type CalProposeOutput = {
   events: Array<ProposedEvent>;
   /** Set when the email is a meeting request or cancellation; answer it with `fam cal rsvp` (or remove it with `fam cal delete`) instead. */
   invitation?: Invitation | null;
+  /** Ordinary email details when requested. */
+  mail?: ProposalMail | null;
   /** The email. */
   message: number;
   /** What was skipped or guessed. */
@@ -506,6 +529,30 @@ export type CalRsvpInput = {
   wait?: boolean;
   /** Seconds --wait waits at most (default 60). */
   wait_secs?: number | null;
+};
+
+export type CalShowInput = {
+  /** Local event ID from cal list. */
+  event: number;
+};
+
+export type CalShowOutput = {
+  /** The guests recorded on this event. */
+  attendees: Array<CalGuest>;
+  /** The stored occurrence has a series master that can be addressed. */
+  can_act_on_series: boolean;
+  /** The calendar permits changes. */
+  can_edit: boolean;
+  /** Zone in which the start and end are returned. */
+  display_zone: string;
+  /** Event summary, including its calendar ID. */
+  event: CalEvent;
+  /** The account organised the event. */
+  is_organizer: boolean;
+  /** Locally cached plain-text excerpt of the notes. */
+  notes_preview: string;
+  /** Minutes before the start, or null when off. */
+  reminder_minutes?: number | null;
 };
 
 export type CheckReport = {
@@ -897,7 +944,7 @@ export type FolderListInput = {
 };
 
 export type FolderListOutput = {
-  /** Folders by account, each account's tree depth first, siblings by name. */
+  /** Folders by account, each account's tree depth first. Siblings are in the order set with `fam folder reorder`, then well-known folders (Inbox, Drafts, Sent Items, Archive, Deleted Items, Junk Email), then by name. */
   folders: Array<FolderRow>;
 };
 
@@ -940,6 +987,18 @@ export type FolderRenameInput = {
   wait_secs?: number | null;
 };
 
+export type FolderReorderInput = {
+  /** Local folder IDs (the id column of fam folder list --json), in the order wanted. They must share a parent folder and account, unless --pinned is given. */
+  folders: Array<number>;
+  /** Order the pinned folders (any accounts) instead of sibling folders. */
+  pinned?: boolean;
+};
+
+export type FolderReorderOutput = {
+  /** The folders, in their new order. */
+  folders: Array<FolderRow>;
+};
+
 export type FolderRow = {
   /** Account name. */
   account: string;
@@ -955,6 +1014,8 @@ export type FolderRow = {
   parent?: number | null;
   /** Full path from the top of the mailbox, such as `Inbox/Club`. Accepted by `fam mail list --folder`. */
   path: string;
+  /** Its place among the pinned folders (`fam folder reorder --pinned`); pinned folders without one follow in tree order. */
+  pin_order?: number | null;
   /** Pinned to the top of the folder pane (`fam folder pin`), on this device only. */
   pinned?: boolean;
   /** Graph folder ID. */
@@ -1563,6 +1624,15 @@ export type PinResult = {
   pinned: boolean;
 };
 
+export type ProposalMail = {
+  /** Sender, To and Cc addresses excluding this user's identities. */
+  participants: Array<string>;
+  /** Original subject. */
+  subject: string;
+  /** Plain-text body, or the cached preview when the body is unavailable. */
+  text: string;
+};
+
 export type ProposedEvent = {
   /** All day. */
   all_day: boolean;
@@ -1901,6 +1971,8 @@ export interface Commands {
   "cal.propose": { input: CalProposeInput; output: CalProposeOutput };
   /** Answer a meeting invitation */
   "cal.rsvp": { input: CalRsvpInput; output: WriteOutput };
+  /** Show an event, its guests, reminder and notes preview */
+  "cal.show": { input: CalShowInput; output: CalShowOutput };
   /** Show which config file is used */
   "config.path": { input: ConfigPathInput; output: ConfigPathOutput };
   /** Check config.toml for errors */
@@ -1933,6 +2005,8 @@ export interface Commands {
   "folder.pin": { input: FolderPinInput; output: FolderRow };
   /** Rename a mail folder */
   "folder.rename": { input: FolderRenameInput; output: WriteOutput };
+  /** Set the order of folders in the folder pane */
+  "folder.reorder": { input: FolderReorderInput; output: FolderReorderOutput };
   /** Unpin a mail folder */
   "folder.unpin": { input: FolderPinInput; output: FolderRow };
   /** Remind me if nobody replies to a message */
@@ -2019,6 +2093,7 @@ export const COMMAND_NAMES = [
   "cal.list",
   "cal.propose",
   "cal.rsvp",
+  "cal.show",
   "config.path",
   "config.validate",
   "contacts.search",
@@ -2035,6 +2110,7 @@ export const COMMAND_NAMES = [
   "folder.move",
   "folder.pin",
   "folder.rename",
+  "folder.reorder",
   "folder.unpin",
   "followup.add",
   "followup.cancel",

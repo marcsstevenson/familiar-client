@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //! `fam folder list` (WP 1.10): every folder on this device with its counts,
-//! and `fam folder color` / `pin` / `unpin`: settings kept on this device only
-//! ([`crate::folder_prefs`]).
+//! and `fam folder color` / `pin` / `unpin` / `reorder`: settings kept on this
+//! device only ([`crate::folder_prefs`]).
 //!
 //! Reads the store directly, so it works offline and without `famd`.
 
@@ -60,14 +60,31 @@ pub struct FolderRow {
     /// Pinned to the top of the folder pane (`fam folder pin`), on this device only.
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub pinned: bool,
+    /// Its place among the pinned folders (`fam folder reorder --pinned`);
+    /// pinned folders without one follow in tree order.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub pin_order: Option<u32>,
 }
 
 /// Output of `fam folder list`.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct FolderListOutput {
-    /// Folders by account, each account's tree depth first, siblings by name.
+    /// Folders by account, each account's tree depth first. Siblings are in
+    /// the order set with `fam folder reorder`, then well-known folders
+    /// (Inbox, Drafts, Sent Items, Archive, Deleted Items, Junk Email), then
+    /// by name.
     pub folders: Vec<FolderRow>,
 }
+
+/// Well-known folders come first among their siblings, in this order.
+const WELL_KNOWN: &[&str] = &[
+    "inbox",
+    "drafts",
+    "sentitems",
+    "archive",
+    "deleteditems",
+    "junkemail",
+];
 
 /// Each folder's path (`Inbox/Club`) within its account.
 pub(crate) fn folder_paths(folders: &[Folder]) -> HashMap<FolderId, String> {
@@ -109,10 +126,17 @@ pub fn folder_list_at(
             let parent = f.parent.filter(|p| known.contains(p));
             children.entry(parent).or_default().push(f);
         }
+        let key = |f: &Folder| {
+            let order = prefs.get(&a.key, &f.remote_id).order.unwrap_or(u32::MAX);
+            let known = f
+                .well_known
+                .as_deref()
+                .and_then(|w| WELL_KNOWN.iter().position(|k| *k == w))
+                .unwrap_or(WELL_KNOWN.len());
+            (order, known, f.name.to_lowercase(), f.id.0)
+        };
         for list in children.values_mut() {
-            list.sort_by(|x, y| {
-                (x.name.to_lowercase(), x.id.0).cmp(&(y.name.to_lowercase(), y.id.0))
-            });
+            list.sort_by_cached_key(|f| key(f));
         }
         let mut stack: Vec<(&Folder, usize)> = children
             .get(&None)
@@ -133,6 +157,7 @@ pub fn folder_list_at(
                 remote_id: f.remote_id.clone(),
                 color: pref.color,
                 pinned: pref.pinned,
+                pin_order: pref.pin_order,
             });
             if depth < 64
                 && let Some(kids) = children.get(&Some(f.id))
@@ -330,6 +355,9 @@ pub fn folder_pin_at(
 ) -> Result<FolderRow, CommandError> {
     change_pref_at(paths, &input.folder, input.account.as_deref(), |p| {
         p.pinned = pinned;
+        if !pinned {
+            p.pin_order = None;
+        }
     })
 }
 
@@ -376,5 +404,112 @@ impl Command for FolderUnpin {
 
     fn render_text(&self, o: &FolderRow) -> String {
         render_row(o)
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Order
+
+/// `fam folder reorder`.
+pub struct FolderReorder;
+
+/// Input for `fam folder reorder`.
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FolderReorderInput {
+    /// Local folder IDs (the id column of fam folder list --json), in the
+    /// order wanted. They must share a parent folder and account, unless
+    /// --pinned is given.
+    #[schemars(extend("x-positional" = 0))]
+    pub folders: Vec<i64>,
+    /// Order the pinned folders (any accounts) instead of sibling folders.
+    #[serde(default)]
+    pub pinned: bool,
+}
+
+/// Output of `fam folder reorder`.
+#[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
+pub struct FolderReorderOutput {
+    /// The folders, in their new order.
+    pub folders: Vec<FolderRow>,
+}
+
+/// Reorders folders from the store at `paths`. Used by the command and by tests.
+pub fn folder_reorder_at(
+    paths: &DaemonPaths,
+    input: &FolderReorderInput,
+) -> Result<FolderReorderOutput, CommandError> {
+    let all = folder_list_at(paths, &FolderListInput::default())?.folders;
+    let mut picked = Vec::new();
+    for id in &input.folders {
+        let row = all.iter().find(|f| f.id == *id).ok_or_else(|| {
+            CommandError::new(
+                ErrorKind::NotFound,
+                format!("no folder with id {id} on this device (see fam folder list --json)"),
+            )
+        })?;
+        if picked.iter().any(|f: &FolderRow| f.id == *id) {
+            return Err(CommandError::usage(format!("folder {id} is listed twice")));
+        }
+        picked.push(row.clone());
+    }
+    if !input.pinned
+        && let Some(first) = picked.first()
+        && picked
+            .iter()
+            .any(|f| f.account != first.account || f.parent != first.parent)
+    {
+        return Err(CommandError::usage(
+            "the folders must share a parent folder and account (or give --pinned)",
+        ));
+    }
+    let mut prefs = FolderPrefs::load(&paths.data_dir);
+    for (i, f) in picked.iter().enumerate() {
+        let place = Some(i as u32);
+        prefs.update(&f.account, &f.remote_id, |p| {
+            if input.pinned {
+                p.pin_order = place;
+            } else {
+                p.order = place;
+            }
+        });
+    }
+    prefs
+        .save(&paths.data_dir)
+        .map_err(|e| CommandError::internal(format!("save {}: {e}", crate::folder_prefs::FILE)))?;
+    let all = folder_list_at(paths, &FolderListInput::default())?.folders;
+    let folders = input
+        .folders
+        .iter()
+        .filter_map(|id| all.iter().find(|f| f.id == *id).cloned())
+        .collect();
+    Ok(FolderReorderOutput { folders })
+}
+
+impl Command for FolderReorder {
+    type Input = FolderReorderInput;
+    type Output = FolderReorderOutput;
+    const SPEC: CommandSpec = CommandSpec {
+        path: &["folder", "reorder"],
+        summary: "Set the order of folders in the folder pane",
+        description: "Puts sibling folders (same account and parent) in the order given, or with --pinned the pinned folders. Give the whole group: folders left out keep any earlier place. Kept on this device only (folders.json in the data directory), not on the server. The desktop app sets it when a folder is dragged.",
+        access: Access::Write,
+        errors: &[ErrorKind::NotFound, ErrorKind::Usage],
+    };
+
+    fn run(
+        &self,
+        _ctx: &Context<'_>,
+        input: FolderReorderInput,
+    ) -> Result<FolderReorderOutput, CommandError> {
+        folder_reorder_at(&DaemonPaths::resolve()?, &input)
+    }
+
+    fn render_text(&self, o: &FolderReorderOutput) -> String {
+        o.folders
+            .iter()
+            .map(|f| format!("{} / {}", f.account, f.path))
+            .collect::<Vec<_>>()
+            .join("\n")
     }
 }

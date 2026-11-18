@@ -1,16 +1,14 @@
 // The folder pane: the unified Inbox, then each account's folder tree.
 import { For, Show, createEffect, createMemo, createResource, createSignal, onCleanup, onMount } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
-import { type CommandError, isCommandError, run } from "../api";
+import { type CommandError, isCommandError, run, setUnreadBadge } from "../api";
 import type { FolderRow } from "../../../../../bindings/commands";
 import { onStoreChanged } from "../list/api";
 import { FolderMenu } from "./FolderMenu";
-import { dragged, followUpView, removeFromList, searchQuery, selectedFolder, setDragged, setFollowUpView, setSearchQuery, setSelectedFolder, setSelectedMessage } from "../state";
+import { countLabel, dragged, followUpView, notify, removeFromList, searchQuery, selectedFolder, setDeletedFolderShown, setDragged, setFollowUpView, setSearchQuery, setSelectedFolder, setSelectedMessage } from "../state";
 
-/** Well-known folders first, in this order; the rest keep the tree order. */
-const WELL_KNOWN = ["inbox", "drafts", "sentitems", "archive", "deleteditems", "junkemail"];
-
-/** Each account's folders with the well-known top-level ones first. */
+/** Each account's folders, in tree order. `folder.list` already sorts
+ * siblings: the order set by dragging, then well-known folders, then name. */
 function ordered(rows: FolderRow[]): Map<string, FolderRow[]> {
   const byAccount = new Map<string, FolderRow[]>();
   for (const r of rows) {
@@ -18,21 +16,35 @@ function ordered(rows: FolderRow[]): Map<string, FolderRow[]> {
     list.push(r);
     byAccount.set(r.account, list);
   }
-  for (const [account, list] of byAccount) {
-    // Split into top-level subtrees, then put the well-known ones first.
-    const trees: FolderRow[][] = [];
-    for (const r of list) {
-      if (r.depth === 0 || trees.length === 0) trees.push([r]);
-      else trees[trees.length - 1]!.push(r);
-    }
-    const rank = (t: FolderRow[]) => {
-      const i = WELL_KNOWN.indexOf(t[0]?.well_known ?? "");
-      return i < 0 ? WELL_KNOWN.length : i;
-    };
-    trees.sort((a, b) => rank(a) - rank(b));
-    byAccount.set(account, trees.flat());
-  }
   return byAccount;
+}
+
+/** The folder being dragged to a new place, and the group (siblings, or the
+ * pinned folders) it can move within. */
+const [movingFolder, setMovingFolder] = createSignal<{ id: number; group: string } | null>(null);
+
+/** Moves folder `id` before or after `target` within `group` (in its shown
+ * order) and saves the group's new order. */
+async function reorder(group: FolderRow[], id: number, target: number, before: boolean, pinned: boolean, done: () => void) {
+  const ids = group.map((f) => f.id).filter((x) => x !== id);
+  const at = ids.indexOf(target);
+  if (at < 0 || id === target) return;
+  ids.splice(before ? at : at + 1, 0, id);
+  if (ids.every((x, i) => x === group[i]?.id)) return;
+  try {
+    await run("folder.reorder", { folders: ids, pinned });
+  } catch (e) {
+    notify(isCommandError(e) ? e.message : "Couldn't move the folder", true);
+  }
+  done();
+}
+
+/** Moves folder `f` one place up or down within `group` (Alt+Up/Down). */
+function step(group: FolderRow[], f: FolderRow, dir: -1 | 1, pinned: boolean, done: () => void) {
+  const i = group.findIndex((x) => x.id === f.id);
+  const other = group[i + dir];
+  if (i < 0 || !other) return;
+  void reorder(group, f.id, other.id, dir < 0, pinned, done);
 }
 
 // Collapsed accounts (`a:<key>`) and folders (`f:<id>`), kept between runs.
@@ -73,12 +85,13 @@ function parents(rows: FolderRow[]): Set<number> {
   return new Set(rows.filter((f, i) => (rows[i + 1]?.depth ?? -1) > f.depth).map((f) => f.id));
 }
 
-/** Moves the message dragged from the list into `f`. */
+/** Moves the messages dragged from the list into `f`. */
 function dropOn(f: FolderRow) {
   const d = dragged();
   setDragged(null);
   if (!d) return;
-  void removeFromList(d.id, `Moved to ${f.name}`, () => run("mail.move", { messages: [d.id], to: f.path }));
+  const what = d.ids.length > 1 ? `${countLabel(d.ids.length)} to ${f.name}` : `to ${f.name}`;
+  void removeFromList(d.ids, `Moved ${what}`, () => run("mail.move", { messages: d.ids, to: f.path }));
 }
 
 function choose(id: number | null) {
@@ -119,12 +132,30 @@ export function FolderTree(props: { views: { name: string; query: string }[] }) 
     if (f) setFolders(reconcile(f, { key: "id" }));
   });
   const accounts = createMemo(() => ordered(folders));
+  // Tell the other panes when the selected folder is Deleted Items (or in
+  // it), where Delete removes mail for good.
+  createEffect(() => {
+    const id = selectedFolder();
+    const f = id === null ? undefined : folders.find((x) => x.id === id);
+    const bin = f && folders.find((x) => x.account === f.account && x.well_known === "deleteditems");
+    setDeletedFolderShown(!!f && !!bin && (f.path === bin.path || f.path.startsWith(`${bin.path}/`)));
+  });
   const inboxUnread = createMemo(() =>
     folders
       .filter((f) => f.well_known === "inbox")
       .reduce((n, f) => n + f.unread, 0),
   );
-  const pinned = createMemo(() => folders.filter((f) => f.pinned));
+  // A mail overlay on the taskbar button while any inbox has unread mail.
+  // Only sent when it flips, not on every count change.
+  const anyUnread = createMemo(() => inboxUnread() > 0);
+  createEffect(() => {
+    void setUnreadBadge(anyUnread() ? 1 : 0).catch(() => {});
+  });
+  // Pinned folders in the order set by dragging; the rest after, in tree order.
+  const pinned = createMemo(() =>
+    folders.filter((f) => f.pinned).sort((a, b) => (a.pin_order ?? Infinity) - (b.pin_order ?? Infinity)),
+  );
+  const saved = () => void refetch();
   // A pinned folder's name gets its account only when another pinned folder
   // has the same name; the full path and account show on hover.
   const sharedNames = createMemo(() => {
@@ -182,6 +213,12 @@ export function FolderTree(props: { views: { name: string; query: string }[] }) 
                 onContextMenu={openMenu(f)}
                 canDrop={() => dragged()?.account === f.account}
                 onDrop={() => dropOn(f)}
+                move={{
+                  id: f.id,
+                  group: "pinned",
+                  onReorder: (id, before) => void reorder(pinned(), id, f.id, before, true, saved),
+                  onStep: (dir) => step(pinned(), f, dir, true, saved),
+                }}
               />
             )}
           </For>
@@ -206,6 +243,7 @@ export function FolderTree(props: { views: { name: string; query: string }[] }) 
       <For each={[...accounts().keys()]}>
         {(account) => {
           const rows = () => accounts().get(account) ?? [];
+          const siblings = (f: FolderRow) => rows().filter((r) => r.parent === f.parent);
           return (
             <div role="group" aria-label={account}>
               <button
@@ -235,6 +273,12 @@ export function FolderTree(props: { views: { name: string; query: string }[] }) 
                       onContextMenu={openMenu(f)}
                       canDrop={() => dragged()?.account === f.account}
                       onDrop={() => dropOn(f)}
+                      move={{
+                        id: f.id,
+                        group: `${f.account}:${f.parent ?? ""}`,
+                        onReorder: (id, before) => void reorder(siblings(f), id, f.id, before, false, saved),
+                        onStep: (dir) => step(siblings(f), f, dir, false, saved),
+                      }}
                     />
                   )}
                 </For>
@@ -269,12 +313,33 @@ function FolderItem(props: {
   title?: string;
   /** What the count is, for screen readers (default "unread"). */
   countLabel?: string;
+  /** Set for a folder that can be dragged to a new place among `group`. */
+  move?: {
+    id: number;
+    group: string;
+    /** Folder `id` was dropped just before or after this one. */
+    onReorder: (id: number, before: boolean) => void;
+    /** Alt+Up or Alt+Down. */
+    onStep: (dir: -1 | 1) => void;
+  };
 }) {
   const [over, setOver] = createSignal(false);
+  // Where a folder being moved would land: just above or below this one.
+  const [edge, setEdge] = createSignal<"before" | "after" | null>(null);
+  const movable = () => {
+    const m = movingFolder();
+    return m !== null && props.move !== undefined && m.group === props.move.group && m.id !== props.move.id;
+  };
   return (
     <button
       class="folder-item"
-      classList={{ selected: props.selected, unread: props.unread > 0, "drop-target": over() }}
+      classList={{
+        selected: props.selected,
+        unread: props.unread > 0,
+        "drop-target": over(),
+        "drop-before": edge() === "before",
+        "drop-after": edge() === "after",
+      }}
       role="treeitem"
       aria-selected={props.selected}
       aria-expanded={props.expanded}
@@ -282,19 +347,50 @@ function FolderItem(props: {
       onClick={props.onSelect}
       onContextMenu={props.onContextMenu}
       title={props.title}
+      draggable={props.move !== undefined}
+      onDragStart={(e) => {
+        if (!props.move || !e.dataTransfer) return;
+        e.dataTransfer.effectAllowed = "move";
+        e.dataTransfer.setData("text/plain", props.name);
+        setMovingFolder({ id: props.move.id, group: props.move.group });
+      }}
+      onDragEnd={() => setMovingFolder(null)}
       onDragOver={(e) => {
+        if (movable()) {
+          e.preventDefault();
+          if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
+          const r = (e.currentTarget as HTMLElement).getBoundingClientRect();
+          setEdge(e.clientY < r.top + r.height / 2 ? "before" : "after");
+          return;
+        }
         if (!props.canDrop?.()) return;
         e.preventDefault();
         if (e.dataTransfer) e.dataTransfer.dropEffect = "move";
         setOver(true);
       }}
-      onDragLeave={() => setOver(false)}
+      onDragLeave={() => {
+        setOver(false);
+        setEdge(null);
+      }}
       onDrop={(e) => {
         e.preventDefault();
         setOver(false);
+        const where = edge();
+        setEdge(null);
+        const m = movingFolder();
+        if (where && m && movable()) {
+          setMovingFolder(null);
+          props.move?.onReorder(m.id, where === "before");
+          return;
+        }
         props.onDrop?.();
       }}
       onKeyDown={(e) => {
+        if (props.move && e.altKey && (e.key === "ArrowUp" || e.key === "ArrowDown")) {
+          e.preventDefault();
+          props.move.onStep(e.key === "ArrowUp" ? -1 : 1);
+          return;
+        }
         if (props.expanded === undefined) return;
         if (e.key === "ArrowRight" || e.key === "ArrowLeft") props.onToggle?.(e.key === "ArrowRight");
       }}

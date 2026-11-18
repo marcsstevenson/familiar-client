@@ -127,6 +127,18 @@ fn family_room_lists_in_auckland_time() {
     assert_eq!(evs[1]["end"], "2026-11-13");
     assert_eq!(evs[2]["start"], "2026-11-12T17:00:00+13:00");
 
+    // Details use the same local ID and preserve floating all-day dates.
+    let camp_id = evs[1]["id"].to_string();
+    let (code, out, err) = fam(data, &["cal", "show", &camp_id, "--json"]);
+    assert_eq!(code, 0, "{err}");
+    let detail: Value = serde_json::from_str(&out).unwrap();
+    assert_eq!(detail["event"], evs[1]);
+    assert_eq!(detail["can_edit"], true);
+    assert_eq!(detail["can_act_on_series"], false);
+    assert!(detail["attendees"].is_array());
+    let (code, _, err) = fam(data, &["cal", "show", "999999", "--json"]);
+    assert_eq!(code, 6, "{err}");
+
     // As text, the camp shows on each of its days, before timed events.
     let (_, out, _) = fam(
         data,

@@ -1,0 +1,30 @@
+<!doctype html>
+<!-- The Linux PDF frame: pdf.js in a sandboxed, opaque-origin frame. See src/pdfframe/main.ts. -->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <!--PDF_FRAME_CSP-->
+    <title>PDF</title>
+    <style>
+      :root { color-scheme: light dark; font: 12px "Segoe UI", system-ui, sans-serif; }
+      html, body { margin: 0; height: 100%; background: #6b6f76; }
+      body { display: flex; flex-direction: column; }
+      .bar { display: flex; gap: 8px; align-items: center; justify-content: center; padding: 4px; background: #3a3d42; color: #eee; }
+      .bar button { min-width: 28px; }
+      #pages { flex: 1; overflow: auto; padding: 16px; }
+      .page { display: block; margin: 0 auto 16px; background: #fff; box-shadow: 0 1px 4px rgba(0, 0, 0, 0.4); }
+      .msg { color: #fff; text-align: center; }
+    </style>
+  </head>
+  <body>
+    <div class="bar">
+      <span id="count"></span>
+      <button id="out" title="Zoom out" aria-label="Zoom out">−</button>
+      <span id="zoom">100%</span>
+      <button id="in" title="Zoom in" aria-label="Zoom in">+</button>
+      <button id="fit" title="Fit width">Fit width</button>
+    </div>
+    <div id="pages"><p class="msg">Loading…</p></div>
+    <script>/*PDF_FRAME_SCRIPT*/</script>
+  </body>
+</html>

@@ -1,0 +1,63 @@
+.calendar-expanded > :is(.folders, .list, .splitter),
+.calendar-expanded .reader-calendar > .reading { display: none; }
+.calendar-expanded > .reader-calendar { grid-column: 1 / -1; }
+.day-panel.full-calendar {
+  position: static; display: grid; width: 100%; min-width: 0; border-left: 0; box-shadow: none;
+  grid-template-columns: clamp(160px, 17vw, 232px) minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr); overflow: hidden;
+}
+.full-calendar > header { grid-column: 1 / -1; border-bottom: 1px solid var(--border); }
+.calendar-content, .time-view { display: flex; flex-direction: column; flex: 1; min-height: 0; min-width: 0; }
+.calendar-content { overflow: auto; }
+.calendar-content > p { margin: var(--space-2) var(--space-4); }
+.calendar-sidebar { padding: var(--space-4); overflow: auto; background: var(--bg-sidebar); border-right: 1px solid var(--border); }
+.calendar-sidebar fieldset { margin: var(--space-3) 0; border: 0; padding: 0; }
+.calendar-sidebar legend, .calendar-sidebar h3 { font-weight: 600; }
+.calendar-sidebar label { display: flex; align-items: baseline; gap: var(--space-2); margin-block: var(--space-3); overflow-wrap: anywhere; }
+.calendar-sidebar i { flex: none; width: 8px; height: 8px; border-radius: 50%; }
+.mini-month header { display: flex; align-items: center; justify-content: space-between; gap: 2px; }
+.mini-month > div, .month-weekdays, .month-week { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); }
+.mini-month > div { text-align: center; align-items: center; margin-top: var(--space-3); }
+.mini-month span { color: var(--text-muted); font-size: var(--text-xs); }
+.mini-month button, .month-day, .month-more, .week-date {
+  font: inherit; color: inherit; background: transparent; border: 0; border-radius: var(--radius-sm); cursor: pointer; padding: 3px;
+}
+.mini-month button:hover, .month-day:hover, .month-more:hover, .week-date:hover { background: var(--bg-hover); }
+.mini-month [aria-current=date], .month-day[aria-current=date] { background: var(--bg-selected); font-weight: 700; }
+.mini-month .outside, .month-day.outside { color: var(--text-muted); }
+.full-calendar .day-nav { flex-wrap: wrap; }
+.full-calendar .day-nav input { flex: 0 1 auto; }
+.calendar-range { flex: 1; text-align: center; }
+.full-calendar .day-nav select { font: inherit; color: inherit; background: var(--bg); padding: var(--space-2); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.time-view .time-head { flex: none; max-height: 24%; overflow: auto; }
+.time-columns, .time-head { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
+.time-head .day-all { max-height: none; }
+.time-columns .day-slot { position: absolute; left: 0; }
+.time-view .day-scroll { flex: 1 1 100px; }
+.week-view { overflow-x: auto; }
+.week-view :is(.time-head,.day-scroll) { min-width: 490px; }
+.week-view .day-grid, .week-view .time-head > div { border-right: 1px solid var(--border); }
+.week-view .day-blocks { left: 32px; }
+.week-view .day-slot { padding-inline: 1px; }
+.week-view .week-date { width: 100%; font-weight: 600; }
+.week-view .day-all { display: block; padding: 3px; }
+.month-view, .calendar-agenda { flex: 1; min-height: 0; overflow: auto; }
+.month-view { display: flex; flex-direction: column; }
+.month-weekdays { text-align: center; color: var(--text-muted); padding-block: var(--space-2); }
+.month-week { flex: 1 0 auto; grid-template-rows: auto repeat(3, 19px) 18px; align-content: start;
+  border-top: 1px solid var(--border);
+  background: repeating-linear-gradient(90deg, transparent 0 calc(100% / 7 - 1px), var(--border) calc(100% / 7 - 1px) calc(100% / 7));
+}
+.month-day { grid-row: 1; justify-self: start; min-width: 28px; margin: 2px; }
+.month-entry { min-width: 0; margin: 1px 2px; }
+.month-entry .day-event { padding-block: 0; }
+.month-entry small { display: none; }
+.month-more { text-align: left; font-size: var(--text-xs); color: var(--accent); padding-block: 0; }
+.calendar-agenda { padding: 0 var(--space-5); }
+.calendar-agenda section { display: grid; grid-template-columns: minmax(110px, 18%) 1fr; gap: var(--space-4);
+  padding: var(--space-4) 0; border-top: 1px solid var(--border); }
+.calendar-agenda h3 { margin: 0; font-size: var(--text-md); }
+.calendar-agenda section > div { display: grid; gap: var(--space-2); }
+.calendar-agenda .day-event { padding: var(--space-2) var(--space-3); }
+
+.week-view :is(.time-head, .day-scroll) { scrollbar-gutter: stable; }

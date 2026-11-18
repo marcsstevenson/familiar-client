@@ -20,6 +20,7 @@ export type ReadView = {
 
 export type Preview =
   | { kind: "image"; src: string }
+  | { kind: "pdf"; data: string }
   | { kind: "text"; text: string }
   | { kind: "none" };
 

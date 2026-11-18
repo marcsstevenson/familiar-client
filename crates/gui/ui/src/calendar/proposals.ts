@@ -98,11 +98,11 @@ export function problem(d: Draft): string | null {
 }
 
 /** `cal add`'s input for a draft, in `calendar` of `account`, from email `message`. */
-export function addInput(d: Draft, message: number, cal: { account: string; name: string }): AddInput {
+export function addInput(d: Draft, message: number | undefined, cal: Calendar): AddInput {
   const input: AddInput = {
     from_mail: message,
     account: cal.account,
-    calendar: cal.name,
+    calendar_id: cal.id,
     subject: d.subject.trim(),
     all_day: d.allDay,
     start: d.allDay ? d.startDate : `${d.startDate} ${d.startTime}`,
@@ -215,13 +215,14 @@ const LAST_KEY = "familiar.event-calendar";
 /** The calendar to start with: the one last used for this sender, else the
  * receiving account's main calendar, else the first. */
 export function defaultCalendar(cals: Calendar[], account: string, from: string): Calendar | undefined {
-  let last: { account: string; name: string } | undefined;
+  let last: { account: string; name: string; id?: number } | undefined;
   try {
     last = JSON.parse(localStorage.getItem(LAST_KEY) ?? "{}")[from.toLowerCase()];
   } catch {
     last = undefined;
   }
   return (
+    cals.find((c) => last && c.id === last.id && c.account === last.account) ??
     cals.find((c) => last && c.account === last.account && c.name === last.name) ??
     cals.find((c) => c.account === account && c.is_default) ??
     cals.find((c) => c.account === account) ??
@@ -234,11 +235,11 @@ export function rememberCalendar(from: string, cal: Calendar): void {
   if (!from) return;
   try {
     const all = JSON.parse(localStorage.getItem(LAST_KEY) ?? "{}");
-    all[from.toLowerCase()] = { account: cal.account, name: cal.name };
+    all[from.toLowerCase()] = { account: cal.account, name: cal.name, id: cal.id };
     localStorage.setItem(LAST_KEY, JSON.stringify(all));
   } catch {
     // Not remembering is fine.
   }
 }
 
-export const calendarKey = (c: { account: string; name: string }) => `${c.account}\u0000${c.name}`;
+export const calendarKey = (c: Calendar) => String(c.id);

@@ -6,11 +6,12 @@
   "license": "MIT OR Apache-2.0",
   "scripts": {
     "dev": "vite",
-    "build": "tsc --noEmit && vite build",
+    "build": "tsc --noEmit && vite build && vite build -c vite.pdf.config.ts",
     "check": "tsc --noEmit"
   },
   "dependencies": {
     "@tauri-apps/api": "2.12.4",
+    "pdfjs-dist": "6.4.299",
     "solid-js": "1.9.18"
   },
   "devDependencies": {

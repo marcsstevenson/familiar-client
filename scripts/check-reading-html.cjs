@@ -10,7 +10,7 @@ const path = require("path");
 const { chromium } = require("playwright");
 
 const APP_CSP =
-  "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: famimg: http://famimg.localhost; frame-src 'self'";
+  "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: famimg: http://famimg.localhost; frame-src 'self' blob:";
 
 (async () => {
   const dir = process.argv[2];

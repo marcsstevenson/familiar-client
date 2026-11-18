@@ -26,6 +26,14 @@ const SOURCE_GUI: &str = "gui";
 /// Commands the window can't run: they need a terminal of their own.
 const NOT_FROM_GUI: &[&str] = &["draft.edit", "mcp.serve"];
 
+/// What the main window remembers between runs: where it was, how big, and
+/// whether it was maximised. Saved when the window closes or the app exits.
+/// If the monitor it was on is gone, the window opens where the OS puts it.
+pub(crate) const WINDOW_STATE: tauri_plugin_window_state::StateFlags =
+    tauri_plugin_window_state::StateFlags::POSITION
+        .union(tauri_plugin_window_state::StateFlags::SIZE)
+        .union(tauri_plugin_window_state::StateFlags::MAXIMIZED);
+
 /// One saved search.
 #[derive(Debug, Serialize)]
 struct View {
@@ -138,6 +146,31 @@ const BENCH_HOLD_ENV: &str = "FAMILIAR_BENCH_HOLD";
 /// When `main` started, for cold start timing.
 static STARTED: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
 
+/// Shows a mail overlay on the main window's taskbar button while `unread`
+/// is above zero, and clears it at zero. Windows only; elsewhere it does
+/// nothing.
+#[tauri::command]
+fn set_unread_badge(app: tauri::AppHandle, unread: u32) {
+    #[cfg(target_os = "windows")]
+    {
+        let Some(window) = app.get_webview_window("main") else {
+            return;
+        };
+        // 32x32 raw RGBA rendered from icons/unread-overlay.svg (raw so the
+        // app needs no PNG decoder): `magick unread-overlay.png -depth 8
+        // rgba:unread-overlay.rgba` after rendering the SVG with a
+        // transparent background.
+        let icon = (unread > 0).then(|| {
+            tauri::image::Image::new(include_bytes!("../icons/unread-overlay.rgba"), 32, 32)
+        });
+        if let Err(e) = window.set_overlay_icon(icon) {
+            eprintln!("familiar: set taskbar overlay: {e}");
+        }
+    }
+    #[cfg(not(target_os = "windows"))]
+    let _ = (app, unread);
+}
+
 /// Milliseconds since the process started.
 #[tauri::command]
 fn bench_elapsed_ms() -> f64 {
@@ -243,12 +276,53 @@ fn list_index_of(id: i64, lists: tauri::State<'_, std::sync::Arc<list::Lists>>) 
     lists.index_of(id)
 }
 
+/// Whether every corner of the window is on some monitor. A saved size can be
+/// too big for where the window lands when its old monitor is gone, so it would
+/// hang off the edge; a window spread over two monitors side by side still counts.
+fn on_screen(window: &tauri::WebviewWindow) -> tauri::Result<bool> {
+    // Windows draws an invisible resize border of a few pixels outside the
+    // visible frame, so allow a little overhang.
+    const SLACK: i32 = 16;
+    let pos = window.outer_position()?;
+    let size = window.outer_size()?;
+    let (w, h) = (
+        i32::try_from(size.width).unwrap_or(i32::MAX),
+        i32::try_from(size.height).unwrap_or(i32::MAX),
+    );
+    let monitors = window.available_monitors()?;
+    let on_some_monitor = |x: i32, y: i32| {
+        monitors.iter().any(|m| {
+            let (mp, ms) = (m.position(), m.size());
+            x >= mp.x
+                && y >= mp.y
+                && i64::from(x) < i64::from(mp.x) + i64::from(ms.width)
+                && i64::from(y) < i64::from(mp.y) + i64::from(ms.height)
+        })
+    };
+    let (left, top) = (pos.x.saturating_add(SLACK), pos.y.saturating_add(SLACK));
+    let (right, bottom) = (
+        pos.x.saturating_add(w).saturating_sub(SLACK),
+        pos.y.saturating_add(h).saturating_sub(SLACK),
+    );
+    Ok([(left, top), (right, top), (left, bottom), (right, bottom)]
+        .into_iter()
+        .all(|(x, y)| on_some_monitor(x, y)))
+}
+
 fn main() {
     STARTED.get_or_init(std::time::Instant::now);
     tauri::Builder::default()
         .manage(std::sync::Arc::new(Registry::builtin()))
         .manage(daemon::Shared::default())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(
+            tauri_plugin_window_state::Builder::new()
+                .with_state_flags(WINDOW_STATE)
+                // Compose windows are numbered and short-lived; only the main
+                // window keeps its place.
+                .with_filter(|label| label == "main")
+                .build(),
+        )
         .manage(reading::Reading::load())
         .register_asynchronous_uri_scheme_protocol("famimg", |_ctx, request, responder| {
             tauri::async_runtime::spawn(async move {
@@ -276,13 +350,20 @@ fn main() {
             compose::open_compose,
             compose::file_info,
             compose::pick_files,
-            bench_elapsed_ms
+            bench_elapsed_ms,
+            set_unread_badge
         ])
         .setup(|app| {
             let builder = WebviewWindowBuilder::new(app, "main", WebviewUrl::default())
                 .title("Familiar")
                 .inner_size(1280.0, 800.0)
                 .min_inner_size(720.0, 420.0)
+                // Hidden until the window-state plugin has moved it back to
+                // where it was last time, so it doesn't jump on screen.
+                .visible(false)
+                // Where it opens when there is no saved place, or the saved
+                // monitor is gone.
+                .center()
                 // Off so messages can be dragged onto folders: on Windows the
                 // native file-drop handler swallows the page's own drag and drop.
                 // Only compose windows take dropped files.
@@ -295,7 +376,11 @@ fn main() {
                 .hidden_title(true);
             #[cfg(not(target_os = "macos"))]
             let builder = builder.decorations(false);
-            builder.build()?;
+            let window = builder.build()?;
+            if !window.is_maximized()? && !on_screen(&window)? {
+                window.center()?;
+            }
+            window.show()?;
             let handle = app.handle().clone();
             let shared = app.state::<daemon::Shared>().inner().clone();
             std::thread::spawn(move || daemon::keep_running(&handle, &shared));
