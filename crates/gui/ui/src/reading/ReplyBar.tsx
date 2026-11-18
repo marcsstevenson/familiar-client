@@ -7,6 +7,8 @@ import { type Row, listIndexOf, listRows } from "../list/api";
 import { MessageMenu } from "../list/MessageMenu";
 import { setEventDialog } from "../state";
 import type { MailFetchOutput } from "./api";
+import { replyIcon } from "./replyIcon";
+import "./readingActions.css";
 
 /** The list's row for the message, or one made from its header when the
  * message isn't in the open list (snooze and reminder state then unknown). */
@@ -54,10 +56,7 @@ export function ReplyBar(props: { message: MailFetchOutput }) {
         aria-label="Reply"
         onClick={() => void openCompose({ kind: "reply", message: props.message.id })}
       >
-        <svg viewBox="0 0 16 16" aria-hidden="true">
-          <path d="M6 3.5L2 7.5l4 4" />
-          <path d="M2.5 7.5H9a4.5 4.5 0 0 1 4.5 4.5v1" />
-        </svg>
+        {replyIcon("reply")}
       </button>
       <button
         type="button"
@@ -65,11 +64,7 @@ export function ReplyBar(props: { message: MailFetchOutput }) {
         aria-label="Reply all"
         onClick={() => void openCompose({ kind: "reply", message: props.message.id, all: true })}
       >
-        <svg viewBox="0 0 16 16" aria-hidden="true">
-          <path d="M5 3.5L1 7.5l4 4" />
-          <path d="M8.5 3.5l-4 4 4 4" />
-          <path d="M5 7.5h5a4 4 0 0 1 4 4v1.5" />
-        </svg>
+        {replyIcon("replyAll")}
       </button>
       <button
         type="button"
@@ -77,10 +72,7 @@ export function ReplyBar(props: { message: MailFetchOutput }) {
         aria-label="Forward"
         onClick={() => void openCompose({ kind: "forward", message: props.message.id })}
       >
-        <svg viewBox="0 0 16 16" aria-hidden="true">
-          <path d="M10 3.5l4 4-4 4" />
-          <path d="M13.5 7.5H7a4.5 4.5 0 0 0-4.5 4.5v1" />
-        </svg>
+        {replyIcon("forward")}
       </button>
       <button
         type="button"

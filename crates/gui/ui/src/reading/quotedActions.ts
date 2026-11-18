@@ -1,12 +1,14 @@
 import { looksValid } from "../compose/Recipients";
 import type { QuoteAction } from "../compose/spec";
 import { quotedHeaders } from "./quoted";
+import { replyIcon } from "./replyIcon";
 import css from "./quotedActions.css?inline";
 
 /** Decorate the reading frame only. The compose window reads a clean copy. */
-export function addQuotedActions(doc: Document, open: (index: number, action: QuoteAction) => void) {
+export function addQuotedActions(doc: Document, open: (index: number, action: QuoteAction) => void, dark: boolean) {
   const headers = quotedHeaders(doc);
   if (!headers.length) return;
+  doc.documentElement.dataset.theme = dark ? "dark" : "light";
   const style = doc.createElement("style");
   style.textContent = css;
   doc.head.append(style);
@@ -20,14 +22,15 @@ export function addQuotedActions(doc: Document, open: (index: number, action: Qu
     const wrapper = doc.createElement("span");
     wrapper.className = "fam-quoted-from";
     const bar = doc.createElement("span");
-    bar.className = "fam-quoted-actions";
+    bar.className = "reading-actions fam-quoted-actions";
     bar.setAttribute("role", "group");
     bar.setAttribute("aria-label", "Actions for this quoted message");
     const actions = [["reply", "Reply"], ["replyAll", "Reply all"], ["forward", "Forward"]] as const;
     for (const [action, label] of actions) {
       const b = doc.createElement("button");
       b.type = "button";
-      b.textContent = label;
+      b.setAttribute("aria-label", label);
+      b.append(replyIcon(action, doc));
       const targets = action === "reply" ? from : action === "replyAll" ? [...from, ...to, ...cc] : [];
       b.disabled = targets.some(m => !looksValid(m));
       b.title = b.disabled ? "The quoted header is missing an email address" : label;

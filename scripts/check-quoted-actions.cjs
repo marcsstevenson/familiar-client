@@ -9,7 +9,7 @@ const quoted = (sender, address, subject) =>
   `<b>To:</b> Secretary &lt;sec@example.org&gt;; Me &lt;me@example.org&gt;<br>` +
   `<b>Cc:</b> President, Club &lt;pres@example.org&gt;; Secretary &lt;SEC@example.org&gt;<br>` +
   `<b>Subject:</b> ${subject}</p>`;
-const html = "<html><body>Outer cover note" + quoted("Shop", "shop@example.org", "RE: Nets") +
+const html = "<html><head></head><body>Outer cover note" + quoted("Shop", "shop@example.org", "RE: Nets") +
   "<p>Newer delivery note</p>" + quoted("Shop, Orders", "shop@example.org", "RE: Nets") +
   "<p>Older order details</p></body></html>";
 
@@ -35,6 +35,7 @@ const html = "<html><body>Outer cover note" + quoted("Shop", "shop@example.org",
         }
       }, { shouldMockEvents: true });
       const { ReadingPane } = await import("/src/reading/ReadingPane.tsx");
+      await import("/src/styles/tokens.css");
       const { setSelectedMessage } = await import("/src/state.ts");
       document.body.append(ReadingPane());
       setSelectedMessage(7);
@@ -49,6 +50,32 @@ const html = "<html><body>Outer cover note" + quoted("Shop", "shop@example.org",
     assert.equal(await opacity(), "0");
     await row.hover();
     assert.equal(await opacity(), "1");
+    // Header and quoted buttons live in different documents. Check what
+    // Chromium actually draws in each, including the hover colours.
+    const appearance = button => button.evaluate(async el => {
+      await Promise.all(el.getAnimations().map(animation => animation.finished));
+      const svg = el.querySelector("svg");
+      const buttonStyle = getComputedStyle(el);
+      const iconStyle = getComputedStyle(svg);
+      return [el.textContent, svg.outerHTML, buttonStyle.width, buttonStyle.height,
+        buttonStyle.color, buttonStyle.backgroundColor, buttonStyle.border, buttonStyle.borderRadius,
+        iconStyle.width, iconStyle.height, iconStyle.fill, iconStyle.stroke, iconStyle.strokeWidth];
+    });
+    for (const theme of ["light", "dark"]) {
+      await page.evaluate(async theme => (await import("/src/theme.ts")).setTheme(theme), theme);
+      await page.frameLocator(".message-frame").locator(`html[data-theme="${theme}"]`).waitFor();
+      for (const name of ["Reply", "Reply all", "Forward"]) {
+        const header = page.getByRole("toolbar").getByRole("button", { name, exact: true });
+        const quote = row.getByRole("button", { name, exact: true });
+        await row.hover();
+        assert.deepEqual(await appearance(quote), await appearance(header));
+        await header.hover();
+        const hovered = await appearance(header);
+        await row.hover();
+        await quote.hover();
+        assert.deepEqual(await appearance(quote), hovered);
+      }
+    }
     for (const [label, action] of [["Reply", "reply"], ["Forward", "forward"], ["Reply all", "replyAll"]]) {
       await row.getByRole("button", { name: label, exact: true }).click();
       assert.deepEqual(await page.evaluate(() => window.opened), { kind: "quoted", index: 1, message: 7, action });
