@@ -90,6 +90,7 @@ async fn propose_with(env: &Env, cfg: Option<Config>, message: i64) -> CalPropos
                     from_mail: message,
                     tz: Some(NZ.into()),
                     no_ai: false,
+                    with_mail: true,
                 },
                 t,
             )
@@ -192,7 +193,7 @@ async fn proposals_from_invitations_attachments_and_text() {
     let cancel = env.mock.mailbox(KEY).add_message(cancel).unwrap();
 
     // Plain text only.
-    let plain = mail(
+    let mut plain = mail(
         &env,
         "FW: Quiz night",
         &format!(
@@ -200,6 +201,14 @@ async fn proposals_from_invitations_attachments_and_text() {
             d6.format("%A %-d %B")
         ),
     );
+    plain.to = vec![
+        EmailAddress::new("Me", "pat@example.com"),
+        EmailAddress::new("Jo", "JO@club.example"),
+    ];
+    plain.cc = vec![
+        EmailAddress::new("My alias", ME),
+        EmailAddress::new("Rae", "rae@club.example"),
+    ];
     let plain = env.mock.mailbox(KEY).add_message(plain).unwrap();
 
     env.start(policy());
@@ -273,8 +282,15 @@ async fn proposals_from_invitations_attachments_and_text() {
     assert_eq!(nets.already, None);
 
     // Text only: the guess.
-    let out = propose(&env, plain).await;
+    let cfg = serde_json::from_value(serde_json::json!({
+        "version": 1, "accounts": {"other": {"email": "other@example.com", "tenant": "consumers", "aliases": [ME]}}
+    })).unwrap();
+    let out = propose_with(&env, Some(cfg), plain).await;
     assert_eq!(out.source, "heuristic", "{out:?}");
+    let mail = out.mail.unwrap();
+    assert_eq!(mail.subject, "FW: Quiz night");
+    assert!(mail.text.contains("Where: Clubrooms"));
+    assert_eq!(mail.participants, ["jo@club.example", "rae@club.example"]);
     assert_eq!(out.events[0].subject, "Quiz night");
     assert_eq!(
         out.events[0].start,
@@ -288,6 +304,7 @@ async fn proposals_from_invitations_attachments_and_text() {
 
     // A cancellation: nothing to add, not even from its text.
     let out = propose(&env, cancel).await;
+    assert!(out.mail.is_none());
     assert!(out.events.is_empty(), "{out:?}");
     assert!(
         out.notes.iter().any(|n| n.contains("cancels")),
@@ -475,6 +492,7 @@ async fn the_ai_tool_is_asked_checked_and_fallen_back_from() {
                     from_mail: newsletter,
                     tz: Some(NZ.into()),
                     no_ai: false,
+                    with_mail: true,
                 },
                 t,
             )

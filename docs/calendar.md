@@ -121,8 +121,12 @@ The reading pane's **Add to calendar** button (Ctrl+Shift+A) runs
   calendar start unticked.
 - One calendar for all of them, picked from every writable calendar on
   every account. It starts on the calendar last used for that sender, else
-  the receiving account's main calendar. Under it are the calendar's other
-  events on each of those days.
+  the receiving account's main calendar. The email stays open beside the editor.
+  **Show day** selects a draft. Its schedule follows changes to the date, time
+  zone and destination and highlights appointments that overlap its proposed time.
+- For ordinary mail, edit the subject and optionally copy the email text into notes.
+  **Invite email participants** previews the guests for that draft. Own addresses
+  and repeated addresses are excluded. **Add and send invitations** confirms the list.
 - **Add** runs `fam cal add --from-mail` once per ticked event, and the
   dialog then offers **Undo**, which deletes them again.
 - A meeting request shows the meeting with **Accept**, **Tentative** and
