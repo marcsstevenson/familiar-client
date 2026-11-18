@@ -43,8 +43,8 @@ export function NewEvent(props: {
             editing={editing()} toggleRepeat={() => setEditing(!editing())} showNotes />
         </div>
         <label class="event-calendar">Calendar
-          <select value={id()} onChange={e => setId(Number(e.currentTarget.value))}>
-            <For each={props.calendars}>{c => <option value={c.id}>{c.account} · {c.name}</option>}</For>
+          <select aria-label="Calendar" onChange={e => setId(Number(e.currentTarget.value))}>
+            <For each={props.calendars}>{c => <option value={c.id} selected={id() === c.id}>{c.account} · {c.name}</option>}</For>
           </select>
         </label>
         <Show when={draft.subject && problem(draft)}>{p => <span class="warn">{p()}</span>}</Show>

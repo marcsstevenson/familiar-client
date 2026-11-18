@@ -9,7 +9,11 @@ import "./day-panel.css";
 
 const HALF_HOUR = 30 * 60_000;
 const time = (at: number) => new Date(at).toTimeString().slice(0, 5);
-const errorText = (e: unknown) => isCommandError(e) ? e.message : String(e);
+function errorText(error: unknown) {
+  // Solid resources wrap rejected command objects in an Error.
+  const cause = error instanceof Error ? error.cause : error;
+  return isCommandError(cause) ? cause.message : String(error);
+}
 
 export function DayPanel(props: { onClose: () => void }) {
   const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
@@ -34,7 +38,7 @@ export function DayPanel(props: { onClose: () => void }) {
   const color = (id: number) => {
     const value = calendars().find(c => c.id === id)?.color ?? "";
     const fallback = ["blue", "green", "purple", "orange", "teal", "pink"];
-    return /^#[0-9a-f]{6}$/i.test(value) ? value : "var(--folder-" + fallback[id % fallback.length] + ")";
+    return CSS.supports("color", value) ? value : "var(--folder-" + fallback[id % fallback.length] + ")";
   };
   let heading!: HTMLHeadingElement;
   let scroll!: HTMLDivElement;

@@ -241,4 +241,4 @@ export function rememberCalendar(from: string, cal: Calendar): void {
   }
 }
 
-export const calendarKey = (c: { account: string; name: string }) => `${c.account}\u0000${c.name}`;
+export const calendarKey = (c: Calendar) => String(c.id);
