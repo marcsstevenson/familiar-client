@@ -9,8 +9,12 @@ export type ComposeSpec =
   | { kind: "reply"; message: number; all?: boolean }
   /** A forward of a message. */
   | { kind: "forward"; message: number }
+  /** A From row inside the body of a forwarded or replied-to message. */
+  | { kind: "quoted"; message: number; index: number; action: QuoteAction }
   /** An existing draft, by local message ID (made here, by `fam`, or by Outlook). */
   | { kind: "draft"; draft: number };
+
+export type QuoteAction = "reply" | "replyAll" | "forward";
 
 /** Opens a compose window. */
 export function openCompose(spec: ComposeSpec): Promise<void> {

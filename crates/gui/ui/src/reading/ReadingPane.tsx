@@ -8,6 +8,7 @@
 // marks it read.
 import { For, Show, createEffect, createSignal, on } from "solid-js";
 import { run } from "../api";
+import { openCompose } from "../compose/spec";
 import { type SpamResult, multiPicked, rememberSpam, selectedMessage, setReadingFrom, setSpamDialog, spamResults, spamSettings } from "../state";
 import { gradeLevel, gradeWords } from "../spam/SpamDialog";
 import { resolvedTheme } from "../theme";
@@ -252,7 +253,9 @@ export function ReadingPane() {
                   <div class="reading-wait">{loading() ? "Downloading the message…" : "The body isn't on this device."}</div>
                 }
               >
-                {(html) => <MessageFrame html={html()} dark={dark()} onHover={setHover} onOpen={open} onLoad={loaded} />}
+                {(html) => <MessageFrame html={html()} dark={dark()} onHover={setHover} onOpen={open} onLoad={loaded}
+                  onQuote={(index, action) => openCompose({ kind: "quoted", message: m().id, index, action })
+                    .catch((e) => setStatus(`Couldn't open the draft: ${errorText(e)}`))} />}
               </Show>
               <Show when={hover() ?? status()}>
                 <div class="reading-status" role="status">

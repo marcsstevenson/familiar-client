@@ -537,8 +537,14 @@ fn quote(tx: &WriteTx<'_>, orig: &Message, new_part: &str) -> Result<String, Com
         None => text_to_html(&orig.preview),
     };
     let to: Vec<String> = orig.to.iter().map(|a| html_escape(&a.addr)).collect();
+    let cc = if orig.cc.is_empty() {
+        String::new()
+    } else {
+        let addrs: Vec<_> = orig.cc.iter().map(|a| html_escape(&a.addr)).collect();
+        format!("<br><b>Cc:</b> {}", addrs.join("; "))
+    };
     Ok(format!(
-        "<html><body><div>{new_part}</div><hr><div id=\"divRplyFwdMsg\"><b>From:</b> {} &lt;{}&gt;<br><b>Sent:</b> {}<br><b>To:</b> {}<br><b>Subject:</b> {}</div><br>{body}</body></html>",
+        "<html><body><div>{new_part}</div><hr><div id=\"divRplyFwdMsg\"><b>From:</b> {} &lt;{}&gt;<br><b>Sent:</b> {}<br><b>To:</b> {}{cc}<br><b>Subject:</b> {}</div><br>{body}</body></html>",
         html_escape(&orig.from.name),
         html_escape(&orig.from.addr),
         sent_text(
