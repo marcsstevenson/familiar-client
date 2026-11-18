@@ -7,11 +7,13 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { For, Show, createMemo, createSignal, onCleanup, onMount } from "solid-js";
 import { type CommandError, isCommandError, run, type UiInfo } from "../api";
 import { TitleBar } from "../TitleBar";
+import { openMessage } from "../reading/api";
+import { quotedHeaders, quotedHtml, quotedRecipients } from "../reading/quoted";
 import { type Attachment, createdDraft, loadDraft } from "./draft";
 import { PlainEditor, RichEditor, insertImage } from "./Editor";
 import { bodyOf, htmlToText, isBlank, ownSignature, plainToRich, serialize, setSignature, showCids } from "./html";
 import { type ComposeInfo, type FileInfo, type Identity, composeInfo, fileInfo, pickFiles } from "./ipc";
-import { Recipients, addressOf } from "./Recipients";
+import { Recipients, looksValid } from "./Recipients";
 import type { ComposeSpec } from "./spec";
 import "./compose.css";
 
@@ -41,7 +43,7 @@ export function ComposeWindow(props: { info: UiInfo; spec: ComposeSpec }) {
   const [account, setAccount] = createSignal<string | null>(null);
   // An alias of the account to send from; null sends from its own address.
   const [from, setFrom] = createSignal<string | null>(null);
-  const [isResponse, setIsResponse] = createSignal(props.spec.kind === "reply" || props.spec.kind === "forward");
+  const [isResponse, setIsResponse] = createSignal(["reply", "forward", "quoted"].includes(props.spec.kind));
   const [opened, setOpened] = createSignal(false); // an existing draft opened here
   const [to, setTo] = createSignal<string[]>([]);
   const [cc, setCc] = createSignal<string[]>([]);
@@ -218,6 +220,24 @@ export function ComposeWindow(props: { info: UiInfo; spec: ComposeSpec }) {
       } else if (spec.kind === "draft") {
         setOpened(true);
         await openDraft(spec.draft, false);
+      } else if (spec.kind === "quoted") {
+        // An embedded header has no server message ID. Start a draft on the
+        // containing account using only the selected header and its history.
+        const view = await openMessage(spec.message, true, false);
+        const doc = new DOMParser().parseFromString(view.html ?? "", "text/html");
+        const header = quotedHeaders(doc)[spec.index];
+        if (!header) throw new Error("The quoted message could not be found.");
+        setAccount(view.message.account);
+        const { to, cc, alias } = quotedRecipients(header, spec.action, identity());
+        setFrom(alias ?? null);
+        setTo(to);
+        setCc(cc);
+        setShowCc(cc.length > 0);
+        const prefix = spec.action === "forward" ? "FW:" : "RE:";
+        setSubject(header.subject.toUpperCase().startsWith(prefix) ? header.subject : `${prefix} ${header.subject}`);
+        editor!.innerHTML = `<div><br></div><hr><div id="divRplyFwdMsg">${bodyOf(quotedHtml(doc, header))}</div>`;
+        setSignature(editor!, sigHtml());
+        touch("body");
       } else {
         const out =
           spec.kind === "reply"
@@ -368,7 +388,7 @@ export function ComposeWindow(props: { info: UiInfo; spec: ComposeSpec }) {
       setProblem("Add someone to send it to");
       return;
     }
-    const bad = [...to(), ...cc(), ...bcc()].filter((r) => !/^[^\s@<>:]+@[^\s@<>:]+\.[^\s@<>:]+$/.test(addressOf(r)));
+    const bad = [...to(), ...cc(), ...bcc()].filter((r) => !looksValid(r));
     if (bad.length) {
       setProblem(`Check ${bad.join(", ")}`);
       return;

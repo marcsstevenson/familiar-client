@@ -6,6 +6,8 @@
 import { createEffect, onCleanup } from "solid-js";
 import { onGlobalKey } from "../actions/registry";
 import { DARK_FIRST_CSS, darken } from "./dark";
+import type { QuoteAction } from "../compose/spec";
+import { addQuotedActions } from "./quotedActions";
 
 export type HoverLink = { href: string; text: string } | null;
 
@@ -14,6 +16,7 @@ export function MessageFrame(props: {
   onHover: (l: HoverLink) => void;
   onOpen: (href: string) => void;
   onLoad: () => void;
+  onQuote: (index: number, action: QuoteAction) => void;
   /** Show it dark (the app is dark and the message isn't switched to light). */
   dark: boolean;
 }) {
@@ -34,6 +37,7 @@ export function MessageFrame(props: {
     const doc = frame.contentDocument;
     if (!doc) return;
     if (props.dark) darken(doc);
+    addQuotedActions(doc, props.onQuote);
     // Keys pressed while the body has focus don't reach the app's window.
     doc.addEventListener("keydown", onGlobalKey);
     doc.addEventListener("mouseover", (e) => {
