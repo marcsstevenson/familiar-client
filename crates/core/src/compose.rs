@@ -50,7 +50,10 @@ impl Recipient {
         let ok = address
             .split_once('@')
             .is_some_and(|(l, d)| !l.is_empty() && d.contains('.') && !d.ends_with('.'))
-            && !address.contains(char::is_whitespace);
+            && !address.contains(char::is_whitespace)
+            // Graph reads `:` as group syntax and drops the address
+            // (`:marc@example.com` from a pasted "To:" line).
+            && !address.contains([':', '<', '>']);
         if !ok {
             return Err(CommandError::usage(format!("{s:?} isn't an email address")));
         }
@@ -864,6 +867,22 @@ pub fn check_outside(
     Ok(())
 }
 
+/// The draft PATCH that holds a message on the server until `at` (Unix
+/// seconds) when it is sent: MAPI `PidTagDeferredSendTime`, which Graph
+/// exposes only as an extended property. Exchange keeps the message and sends
+/// it at that time itself; a time already past sends at once.
+pub fn deferred_send_json(at: i64) -> serde_json::Value {
+    let when = chrono::DateTime::<chrono::Utc>::from_timestamp(at, 0)
+        .unwrap_or_default()
+        .format("%Y-%m-%dT%H:%M:%SZ")
+        .to_string();
+    serde_json::json!({
+        "singleValueExtendedProperties": [
+            {"id": "SystemTime 0x3FEF", "value": when}
+        ]
+    })
+}
+
 #[cfg(test)]
 mod tests {
 
@@ -930,6 +949,7 @@ mod tests {
         assert_eq!(Recipient::parse("a@b.co").unwrap().name, "");
         assert!(Recipient::parse("not an address").is_err());
         assert!(Recipient::parse("a@b").is_err());
+        assert!(Recipient::parse(":marc@example.com").is_err());
         let all = Recipient::parse_all(&["\"Doe, Pat\" <pat@example.com>; b@c.nz".into()]).unwrap();
         assert_eq!(all.len(), 2);
         assert_eq!(all[0].name, "Doe, Pat");

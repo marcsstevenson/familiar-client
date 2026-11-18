@@ -6,6 +6,10 @@
 //! `config.toml` (`[accounts.<name>.signature]`, `new` or `reply`) is added
 //! unless `--no-signature`. A send waits `[app] send_delay_seconds` in the
 //! queue first (cancel it with `fam ops cancel <id>`), unless `--now`.
+//!
+//! `--at <when>` sends later: after the undo-send delay the draft goes to
+//! the server with a deferred send time, and the server sends it then, so it
+//! goes even with this PC off. See `docs/writes.md`.
 
 use crate::commands::mail::open_store;
 use crate::commands::write::{WriteFlags, flags, submit_at};
@@ -281,6 +285,59 @@ pub struct ComposeArgs {
     pub importance: Option<String>,
     /// Leave the signature off.
     pub no_signature: bool,
+    /// Send later: when (Unix seconds), from [`parse_send_at`].
+    pub send_at: Option<i64>,
+}
+
+/// Reads `--at`: `+30m`, `+2h`, `+1d`, an RFC 3339 time, or a local date
+/// and time as `fam cal add --start` takes it (`tomorrow 9am`, `fri 8:30`,
+/// `2026-11-21 18:00`; a date alone means 9am). It must be in the future.
+pub fn parse_send_at(s: &str, now: i64) -> Result<i64, CommandError> {
+    let t = s.trim();
+    let bad = || {
+        CommandError::usage(format!(
+            "--at {s:?}: give a time such as +2h, \"tomorrow 9am\" or \"2026-11-21 18:00\""
+        ))
+    };
+    let at = if let Some(rel) = t.strip_prefix('+') {
+        let rel = rel.trim();
+        let (n, unit) = rel.split_at(rel.find(|c: char| !c.is_ascii_digit()).unwrap_or(rel.len()));
+        let n: i64 = n.parse().map_err(|_| bad())?;
+        let secs = match unit.trim() {
+            "m" | "min" | "mins" => 60,
+            "h" | "hr" | "hrs" => 3600,
+            "d" | "day" | "days" => 86_400,
+            _ => return Err(bad()),
+        };
+        now + n * secs
+    } else if let Ok(d) = chrono::DateTime::parse_from_rfc3339(t) {
+        d.timestamp()
+    } else {
+        let zone = crate::tz::local_zone();
+        let today = crate::events::today_in(now, zone.name());
+        let w = crate::events::parse_when(t, today, None).ok_or_else(bad)?;
+        let time = w
+            .time
+            .unwrap_or_else(|| chrono::NaiveTime::from_hms_opt(9, 0, 0).expect("9am"));
+        crate::events::instant(w.date, time, zone.name())
+    };
+    if at <= now {
+        return Err(CommandError::usage(format!(
+            "--at {s:?} is in the past ({})",
+            crate::commands::auth::rfc3339(at.max(0) as u64)
+        )));
+    }
+    Ok(at)
+}
+
+fn unix_now() -> i64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0, |d| d.as_secs() as i64)
+}
+
+fn send_time(at: Option<&str>) -> Result<Option<i64>, CommandError> {
+    at.map(|s| parse_send_at(s, unix_now())).transpose()
 }
 
 /// Builds a compose request: recipients parsed, body and signature, files read.
@@ -357,17 +414,19 @@ pub fn compose_at(
             draft: req,
             send,
             send_delay_secs: delay,
+            send_at: args.send_at.filter(|_| send),
         },
         f,
     )
 }
 
-/// Sends a saved draft.
+/// Sends a saved draft, now or (with `later`) at that time.
 pub fn send_at(
     paths: &DaemonPaths,
     draft: i64,
     now: bool,
     yes: bool,
+    later: Option<i64>,
     settings: &ComposeSettings,
     f: &WriteFlags,
 ) -> Result<WriteOutput, CommandError> {
@@ -386,6 +445,7 @@ pub fn send_at(
         WriteRequest::Send {
             message: draft,
             delay_secs: if now { 0 } else { settings.send_delay_secs },
+            send_at: later,
         },
         f,
     )
@@ -406,7 +466,17 @@ pub(crate) fn render(o: &WriteOutput) -> String {
         .find(|q| q.kind == "send_draft" && q.state == "pending")
     {
         if let (Some(at), Some(id)) = (&q.not_before, q.id) {
-            s.push_str(&format!("\nSending at {at}; to undo: fam ops cancel {id}"));
+            let what = if q.send_at.is_some() {
+                "Handing to the server"
+            } else {
+                "Sending"
+            };
+            s.push_str(&format!("\n{what} at {at}; to undo: fam ops cancel {id}"));
+        }
+        if let Some(t) = &q.send_at {
+            s.push_str(&format!(
+                "\nThe server sends it at {t}, even with this PC off."
+            ));
         }
     }
     s
@@ -856,6 +926,10 @@ pub struct DraftSendInput {
     /// Skip the undo-send delay.
     #[serde(default)]
     pub now: bool,
+    /// Send later: +2h, "tomorrow 9am", "2026-11-21 18:00" (local time). The
+    /// server holds it and sends it then, even with this PC off.
+    #[serde(default)]
+    pub at: Option<String>,
     /// Send even to many outside recipients who would see each other.
     #[serde(default)]
     pub yes: bool,
@@ -879,7 +953,7 @@ impl Command for DraftSend {
     const SPEC: CommandSpec = CommandSpec {
         path: &["draft", "send"],
         summary: "Send a draft",
-        description: "Queues a draft to send after the undo-send delay ([app] send_delay_seconds; --now skips it). Undo with fam ops cancel <op> before then. Offline, it waits in the queue until it can go.",
+        description: "Queues a draft to send after the undo-send delay ([app] send_delay_seconds; --now skips it). Undo with fam ops cancel <op> before then. Offline, it waits in the queue until it can go. --at sends later: the server holds it and sends it at that time.",
         access: Access::Send,
         errors: ERRORS,
     };
@@ -892,6 +966,7 @@ impl Command for DraftSend {
             i.draft,
             i.now,
             i.yes,
+            send_time(i.at.as_deref())?,
             &ComposeSettings::load()?,
             &flags(i.dry_run, i.wait, i.wait_secs),
         )?;
@@ -958,6 +1033,10 @@ pub struct MailSendInput {
     /// Skip the undo-send delay.
     #[serde(default)]
     pub now: bool,
+    /// Send later: +2h, "tomorrow 9am", "2026-11-21 18:00" (local time). The
+    /// server holds it and sends it then, even with this PC off.
+    #[serde(default)]
+    pub at: Option<String>,
     /// Send even to many outside recipients who would see each other.
     #[serde(default)]
     pub yes: bool,
@@ -981,7 +1060,7 @@ impl Command for MailSend {
     const SPEC: CommandSpec = CommandSpec {
         path: &["mail", "send"],
         summary: "Write and send a message",
-        description: "Saves a new message as a draft with the account's signature and queues it to send after the undo-send delay (--now skips it). Undo with fam ops cancel <op> before then.",
+        description: "Saves a new message as a draft with the account's signature and queues it to send after the undo-send delay (--now skips it). Undo with fam ops cancel <op> before then. --at sends later: the server holds it and sends it at that time.",
         access: Access::Send,
         errors: ERRORS,
     };
@@ -1002,6 +1081,7 @@ impl Command for MailSend {
             inline: i.inline,
             importance: i.importance,
             no_signature: i.no_signature,
+            send_at: send_time(i.at.as_deref())?,
             ..ComposeArgs::default()
         };
         crate::commands::followup::check_days(i.remind_days)?;
@@ -1021,5 +1101,30 @@ impl Command for MailSend {
 
     fn render_text(&self, o: &WriteOutput) -> String {
         render(o)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::parse_send_at;
+
+    #[test]
+    fn send_at_times() {
+        let now = 1_790_000_000;
+        assert_eq!(parse_send_at("+30m", now).unwrap(), now + 1800);
+        assert_eq!(parse_send_at("+2h", now).unwrap(), now + 7200);
+        assert_eq!(parse_send_at("+ 1d", now).unwrap(), now + 86_400);
+        assert_eq!(
+            parse_send_at("2027-01-02T09:00:00+13:00", now).unwrap(),
+            1_798_833_600
+        );
+        // Local dates and times parse, and land in the future.
+        assert!(parse_send_at("tomorrow 9am", now).unwrap() > now);
+        assert!(parse_send_at("2030-01-01", now).unwrap() > now);
+        // The past, and nonsense, are refused.
+        assert!(parse_send_at("2020-01-01 09:00", now).is_err());
+        assert!(parse_send_at("+0m", now).is_err());
+        assert!(parse_send_at("+2w", now).is_err());
+        assert!(parse_send_at("whenever", now).is_err());
     }
 }

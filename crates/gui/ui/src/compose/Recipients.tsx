@@ -30,7 +30,7 @@ export function addressOf(mailbox: string): string {
   return (m?.[1] ?? mailbox).trim();
 }
 
-const looksValid = (mailbox: string) => /^[^\s@<>]+@[^\s@<>]+\.[^\s@<>]+$/.test(addressOf(mailbox));
+const looksValid = (mailbox: string) => /^[^\s@<>:]+@[^\s@<>:]+\.[^\s@<>:]+$/.test(addressOf(mailbox));
 
 /** What a chip shows: the name when there is one. */
 function chipText(mailbox: string): string {
