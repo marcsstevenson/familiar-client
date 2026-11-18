@@ -7,10 +7,10 @@ const origin = process.argv[2] || "http://localhost:5173";
 const quoted = (sender, address, subject) =>
   `<p><b><span>From:</span></b> ${sender} &lt;${address}&gt;<br><b>Sent:</b> Wednesday<br>` +
   `<b>To:</b> Secretary &lt;sec@example.org&gt;; Me &lt;me@example.org&gt;<br>` +
-  `<b>Cc:</b> President &lt;pres@example.org&gt;; Secretary &lt;SEC@example.org&gt;<br>` +
+  `<b>Cc:</b> President, Club &lt;pres@example.org&gt;; Secretary &lt;SEC@example.org&gt;<br>` +
   `<b>Subject:</b> ${subject}</p>`;
 const html = "<html><body>Outer cover note" + quoted("Shop", "shop@example.org", "RE: Nets") +
-  "<p>Newer delivery note</p>" + quoted("Shop", "shop@example.org", "RE: Nets") +
+  "<p>Newer delivery note</p>" + quoted("Shop, Orders", "shop@example.org", "RE: Nets") +
   "<p>Older order details</p></body></html>";
 
 (async () => {
@@ -43,6 +43,7 @@ const html = "<html><body>Outer cover note" + quoted("Shop", "shop@example.org",
     await rows.nth(1).waitFor();
     assert.equal(await rows.count(), 2);
     const row = rows.nth(1);
+    assert.ok(await row.getByRole("button", { name: "Reply all" }).isEnabled());
     const bar = row.locator(".fam-quoted-actions");
     const opacity = () => bar.evaluate(el => getComputedStyle(el).opacity);
     assert.equal(await opacity(), "0");
@@ -59,8 +60,8 @@ const html = "<html><body>Outer cover note" + quoted("Shop", "shop@example.org",
     await page.waitForFunction(() => window.saved);
     const draft = await page.evaluate(() => window.saved);
     assert.equal(draft.account, "me");
-    assert.deepEqual(draft.to, ["Shop <shop@example.org>", "Secretary <sec@example.org>"]);
-    assert.deepEqual(draft.cc, ["President <pres@example.org>"]);
+    assert.deepEqual(draft.to, ['"Shop, Orders" <shop@example.org>', "Secretary <sec@example.org>"]);
+    assert.deepEqual(draft.cc, ['"President, Club" <pres@example.org>']);
     assert.equal(draft.subject, "RE: Nets");
     assert.match(draft.body, /My signature[\s\S]*Older order details/);
     assert.doesNotMatch(draft.body, /Outer cover note|Newer delivery note|fam-quoted-actions/);

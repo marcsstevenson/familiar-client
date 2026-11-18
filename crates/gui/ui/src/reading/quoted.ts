@@ -1,6 +1,7 @@
 // Outlook embeds earlier messages in the body. A From/Sent/To/Cc/Subject
 // header identifies the start of each one, even when several subjects match.
 import { addressOf, splitAddresses } from "../compose/Recipients";
+import { mailbox } from "../compose/draft";
 import type { QuoteAction } from "../compose/spec";
 import type { Identity } from "../compose/ipc";
 
@@ -54,6 +55,14 @@ function linesOf(doc: Document): Line[] {
   return lines;
 }
 
+/** Outlook prints names such as Doe, Jane without the quotes required in a
+ * recipient list. Format those mailboxes before splitting on commas. */
+function quotedAddresses(value: string): string[] {
+  const formatted = value.replace(/(^|[;,])\s*([^"<>;@]+?)\s*<([^\s<>]+@[^\s<>]+)>/g,
+    (_, separator, name, addr) => separator + mailbox({ name: name.trim(), addr }));
+  return splitAddresses(formatted);
+}
+
 export function quotedHeaders(doc: Document): QuotedHeader[] {
   if (!/From:/i.test(doc.body.textContent ?? "")) return [];
   const lines = linesOf(doc);
@@ -68,11 +77,18 @@ export function quotedHeaders(doc: Document): QuotedHeader[] {
       j++;
       return text.slice(label.length).trim();
     };
+    // Gmail puts Subject above the recipients, Outlook below them.
+    const earlySubject = field("subject:");
     const to = field("to:") ?? "";
     const cc = field("cc:") ?? "";
-    const subject = field("subject:");
-    if (subject !== null) headers.push({
-      row: line.range, from: splitAddresses(sender[1]!), to: splitAddresses(to), cc: splitAddresses(cc), subject,
+    const subject = earlySubject ?? field("subject:");
+    if (subject === null) continue;
+    headers.push({
+      row: line.range,
+      from: quotedAddresses(sender[1]!),
+      to: quotedAddresses(to),
+      cc: quotedAddresses(cc),
+      subject,
     });
   }
   return headers;
