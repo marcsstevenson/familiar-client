@@ -142,7 +142,11 @@ out on its own.
 Choose **Open full calendar** from the day panel or an event's details. The date,
 calendar filters and open event carry over. Use the mini month to pick a date,
 or step through Day, Week, Month and the 30-day Agenda with the arrow buttons.
-In Month, a date or **more** opens its day. In Day and Week, select a half-hour
+In Month, double-click empty space in a day to create an event, or drag across
+days in either direction to include them in one event. The height of the first
+click sets the start time to the nearest hour from 6 am to 6 pm. Three quarters
+down gives 3 pm. The suggested end is an hour later on the last selected day.
+Click a date number or **more** to open its day. In Day and Week, select a half-hour
 to start an event. Calendar visibility and the last full view are saved on this device.
 
 **Back to Mail** returns to the open message and list. A `fam ui open` or

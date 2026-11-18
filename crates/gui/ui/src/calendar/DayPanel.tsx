@@ -48,7 +48,7 @@ export function DayPanel(props: { full: boolean; expand: () => void; onClose: ()
     catch { /* Keep the current choices in memory. */ }
   }
   function chooseView(v: CalendarView) { setFullView(v); remember(); }
-  const [slot, setSlot] = createSignal<{ date: string; time: string; zone: string }>();
+  const [slot, setSlot] = createSignal<{ date: string; endDate?: string; time: string; zone: string }>();
   const [selected, select] = createSignal<number>();
   const writable = createMemo(() => calendars().filter(c => c.can_edit));
   const visible = createMemo(() => (result()?.events ?? [])
@@ -146,7 +146,8 @@ export function DayPanel(props: { full: boolean; expand: () => void; onClose: ()
         <For each={result()?.warnings}>{w => <p class="day-warning">{w}</p>}</For>
         <Show when={range.loading && !result()}><p role="status">Loading schedule…</p></Show>
         <Switch>
-          <Match when={view() === "Month"}><MonthView {...viewProps} /></Match>
+          <Match when={view() === "Month"}><MonthView {...viewProps} writable={!!writable().length}
+            create={(date, endDate, time) => setSlot({ date, endDate, time, zone })} /></Match>
           <Match when={view() === "Agenda"}><Show when={result()}><AgendaView {...viewProps} /></Show></Match>
           <Match when={true}><TimeView {...viewProps} now={now()} writable={!!writable().length} create={newAt} /></Match>
         </Switch>
@@ -154,7 +155,7 @@ export function DayPanel(props: { full: boolean; expand: () => void; onClose: ()
       </div>
       <Show when={selected()}>{id => <EventDetails id={id()} revision={revision()} expand={props.full ? undefined : props.expand}
         onClose={() => { select(undefined); heading.focus(); }} onChanged={() => void refreshDay()} />}</Show>
-      <Show when={slot()}>{t => <NewEvent date={t().date} time={t().time} zone={t().zone} calendars={writable()} onClose={() => setSlot(undefined)}
+      <Show when={slot()}>{t => <NewEvent date={t().date} endDate={t().endDate} time={t().time} zone={t().zone} calendars={writable()} onClose={() => setSlot(undefined)}
         onSaved={(c, day, time, savedZone) => {
           navigate(savedZone === "UTC" && time ? localDate(new Date(day + "T" + time + "Z")) : day);
           setHidden(ids => ids.filter(id => id !== c.id));

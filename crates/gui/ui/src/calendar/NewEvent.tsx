@@ -5,12 +5,13 @@ import { EventFields } from "./EventFields";
 import { type Calendar, type Draft, addInput, draftOf, problem } from "./proposals";
 
 export function NewEvent(props: {
-  date: string; time: string; zone: string; calendars: Calendar[];
+  date: string; endDate?: string; time: string; zone: string; calendars: Calendar[];
   onClose: () => void; onSaved: (calendar: Calendar, date: string, time: string | undefined, zone: string) => void;
 }) {
-  const [draft, setDraft] = createStore(draftOf({
+  const initial = draftOf({
     subject: "", start: props.date + " " + props.time, all_day: false, time_zone: props.zone,
-  }));
+  });
+  const [draft, setDraft] = createStore({ ...initial, endDate: props.endDate ?? initial.endDate });
   const [id, setId] = createSignal((props.calendars.find(c => c.is_default) ?? props.calendars[0])?.id);
   const [editing, setEditing] = createSignal(false);
   const [busy, setBusy] = createSignal(false);
