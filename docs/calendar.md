@@ -143,3 +143,22 @@ Click a half-hour slot or New event to add an appointment to a writable
 calendar. Offline saves queue on this device and sync when famd can connect.
 The panel overlays the reader in narrow windows. Escape or Close calendar
 returns to Mail.
+
+### Open and change an event
+
+Click an appointment to see its calendar, dates, time zone, organiser,
+guest responses, reminder and cached notes preview. The same details are
+available offline with `fam cal show <event-id>`. Find the ID with
+`fam cal list --json`.
+
+On a writable calendar, an organiser can edit the title, times, location
+and reminder, delete a personal event, or cancel a meeting. Familiar shows
+the guests before you confirm a cancellation. Invitees can change their
+reminder or choose Accept, Tentative or Decline, with the option to tell
+the organiser. Read-only calendars show details for inspection.
+
+Recurring meetings default to **This occurrence**. Select **Entire series**
+before an edit, cancellation or RSVP to apply it to the series. To reschedule
+the series, enter the start and end of its first event. Edits and answers
+use the same offline queue as the CLI. A server refusal restores the
+previous calendar data.

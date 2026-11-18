@@ -232,6 +232,18 @@ Accepts, tentatively accepts or declines a meeting on this device at once and qu
 - `--wait`: Wait until the server has it (needs famd).
 - `--wait-secs <wait-secs>`: Seconds --wait waits at most (default 60).
 
+## cal.show
+
+Show an event, its guests, reminder and notes preview. Access: `read`.
+
+```
+fam cal show <EVENT>
+```
+
+Reads a local event by ID, offline. Times use the event's original zone when known.
+
+- `EVENT` (required): Local event ID from cal list.
+
 ## config.path
 
 Show which config file is used. Access: `read`.

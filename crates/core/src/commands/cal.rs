@@ -320,6 +320,135 @@ pub fn list_at(
         .map_err(store_err)?
 }
 
+fn event_summary(e: familiar_store::Event, a: &Account, c: &Calendar, zone: Tz) -> CalEvent {
+    let d = e.data;
+    let (start, end) = if d.is_all_day {
+        (date(d.start_at), date(d.end_at))
+    } else {
+        (in_zone(d.start_at, zone), in_zone(d.end_at, zone))
+    };
+    CalEvent {
+        calendar_id: c.id.0,
+        id: e.id.0,
+        account: a.key.clone(),
+        calendar: c.name.clone(),
+        subject: d.subject,
+        start,
+        end,
+        all_day: d.is_all_day,
+        location: d.location,
+        organizer: d.organizer.addr,
+        show_as: d.show_as,
+        cancelled: d.is_cancelled,
+        recurring: d.series_master_id.is_some() || d.kind != "singleInstance",
+        response: d.response,
+        time_zone: d.start_tz,
+    }
+}
+
+/// `fam cal show`.
+pub struct CalShow;
+
+/// Input for reading one local event.
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct CalShowInput {
+    /// Local event ID from cal list.
+    #[schemars(extend("x-positional" = 0))]
+    pub event: i64,
+}
+
+/// A guest, their role, and their answer as last synced.
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct CalGuest {
+    /// Display name.
+    pub name: String,
+    /// Email address.
+    pub addr: String,
+    /// Required, optional or resource.
+    pub kind: String,
+    /// Guest's response.
+    pub response: String,
+}
+
+/// Details for a single event. Timed values use the returned display zone.
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct CalShowOutput {
+    /// Event summary, including its calendar ID.
+    pub event: CalEvent,
+    /// Zone in which the start and end are returned.
+    pub display_zone: String,
+    /// The calendar permits changes.
+    pub can_edit: bool,
+    /// The account organised the event.
+    pub is_organizer: bool,
+    /// The stored occurrence has a series master that can be addressed.
+    pub can_act_on_series: bool,
+    /// The guests recorded on this event.
+    pub attendees: Vec<CalGuest>,
+    /// Minutes before the start, or null when off.
+    pub reminder_minutes: Option<i64>,
+    /// Locally cached plain-text excerpt of the notes.
+    pub notes_preview: String,
+}
+
+impl Command for CalShow {
+    type Input = CalShowInput;
+    type Output = CalShowOutput;
+    const SPEC: CommandSpec = CommandSpec {
+        path: &["cal", "show"],
+        summary: "Show an event, its guests, reminder and notes preview",
+        description: "Reads a local event by ID, offline. Times use the event's original zone when known.",
+        access: Access::Read,
+        errors: &[ErrorKind::NotFound],
+    };
+
+    fn run(&self, _ctx: &Context<'_>, input: CalShowInput) -> Result<CalShowOutput, CommandError> {
+        let mut reader = open(&DaemonPaths::resolve()?)?;
+        reader
+            .snapshot(|r| {
+                let Some(mut event) = r.event(familiar_store::EventId(input.event))? else {
+                    return Ok(None);
+                };
+                let Some(cal) = r.calendar(event.data.calendar)? else {
+                    return Ok(None);
+                };
+                let Some(account) = r.accounts()?.into_iter().find(|a| a.id == cal.account) else {
+                    return Ok(None);
+                };
+                let d = &mut event.data;
+                let zone = d
+                    .start_tz
+                    .as_deref()
+                    .and_then(tz::parse_zone)
+                    .unwrap_or_else(tz::local_zone);
+                Ok(Some(CalShowOutput {
+                    display_zone: zone.name().to_owned(),
+                    can_edit: cal.can_edit,
+                    is_organizer: d.is_organizer,
+                    can_act_on_series: d.series_master_id.is_some(),
+                    attendees: d
+                        .attendees
+                        .drain(..)
+                        .map(|a| CalGuest {
+                            name: a.name,
+                            addr: a.addr,
+                            kind: a.kind,
+                            response: a.response,
+                        })
+                        .collect(),
+                    reminder_minutes: d.reminder_minutes,
+                    notes_preview: std::mem::take(&mut d.preview),
+                    event: event_summary(event, &account, &cal, zone),
+                }))
+            })
+            .map_err(store_err)?
+            .ok_or_else(|| {
+                CommandError::new(ErrorKind::NotFound, format!("no event {}", input.event))
+            })
+    }
+}
+
 fn list_in(
     r: &Reader,
     cfg: Option<&Config>,
@@ -353,29 +482,7 @@ fn list_in(
         .into_iter()
         .filter_map(|e| {
             let (a, c) = lookup(e.data.calendar)?;
-            let d = e.data;
-            let (start, end) = if d.is_all_day {
-                (date(d.start_at), date(d.end_at))
-            } else {
-                (in_zone(d.start_at, zone), in_zone(d.end_at, zone))
-            };
-            Some(CalEvent {
-                calendar_id: c.id.0,
-                id: e.id.0,
-                account: a.key.clone(),
-                calendar: c.name.clone(),
-                subject: d.subject,
-                start,
-                end,
-                all_day: d.is_all_day,
-                location: d.location,
-                organizer: d.organizer.addr,
-                show_as: d.show_as,
-                cancelled: d.is_cancelled,
-                recurring: d.series_master_id.is_some() || d.kind != "singleInstance",
-                response: d.response,
-                time_zone: d.start_tz,
-            })
+            Some(event_summary(e, a, c, zone))
         })
         .collect();
     // By day in the output zone, all-day events first, then by start time.

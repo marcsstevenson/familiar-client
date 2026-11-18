@@ -6,8 +6,9 @@ type SetField = <K extends keyof Draft>(key: K, value: Draft[K]) => void;
 export function EventFields(props: {
   draft: Draft;
   set: SetField;
-  editing: boolean;
-  toggleRepeat: () => void;
+  editing?: boolean;
+  toggleRepeat?: () => void;
+  showWhen?: boolean;
   showNotes?: boolean;
 }) {
   return (
@@ -19,74 +20,78 @@ export function EventFields(props: {
         value={props.draft.subject}
         onInput={(e) => props.set("subject", e.currentTarget.value)}
       />
-      <div class="event-when">
-        <input
-          type="date"
-          aria-label="Start date"
-          value={props.draft.startDate}
-          onInput={(e) => {
-            const v = e.currentTarget.value;
-            // Moving the start moves a same-day end with it.
-            if (props.draft.endDate === props.draft.startDate) props.set("endDate", v);
-            props.set("startDate", v);
-          }}
-        />
-        <Show when={!props.draft.allDay}>
+      <Show when={props.showWhen !== false}>
+        <div class="event-when">
           <input
-            type="time"
-            aria-label="Start time"
-            value={props.draft.startTime}
-            onInput={(e) => props.set("startTime", e.currentTarget.value)}
+            type="date"
+            aria-label="Start date"
+            value={props.draft.startDate}
+            onInput={(e) => {
+              const v = e.currentTarget.value;
+              // Moving the start moves a same-day end with it.
+              if (props.draft.endDate === props.draft.startDate) props.set("endDate", v);
+              props.set("startDate", v);
+            }}
           />
-        </Show>
-        <span>to</span>
-        <input
-          type="date"
-          aria-label="End date"
-          value={props.draft.endDate}
-          onInput={(e) => props.set("endDate", e.currentTarget.value)}
-        />
-        <Show when={!props.draft.allDay}>
+          <Show when={!props.draft.allDay}>
+            <input
+              type="time"
+              aria-label="Start time"
+              value={props.draft.startTime}
+              onInput={(e) => props.set("startTime", e.currentTarget.value)}
+            />
+          </Show>
+          <span>to</span>
           <input
-            type="time"
-            aria-label="End time"
-            value={props.draft.endTime}
-            onInput={(e) => props.set("endTime", e.currentTarget.value)}
+            type="date"
+            aria-label="End date"
+            value={props.draft.endDate}
+            onInput={(e) => props.set("endDate", e.currentTarget.value)}
           />
-        </Show>
-        <label class="event-check">
+          <Show when={!props.draft.allDay}>
+            <input
+              type="time"
+              aria-label="End time"
+              value={props.draft.endTime}
+              onInput={(e) => props.set("endTime", e.currentTarget.value)}
+            />
+          </Show>
+          <label class="event-check">
+            <input
+              type="checkbox"
+              checked={props.draft.allDay}
+              onChange={(e) => props.set("allDay", e.currentTarget.checked)}
+            />
+            All day
+          </label>
           <input
-            type="checkbox"
-            checked={props.draft.allDay}
-            onChange={(e) => props.set("allDay", e.currentTarget.checked)}
+            class="event-zone"
+            aria-label="Time zone"
+            value={props.draft.zone}
+            onInput={(e) => props.set("zone", e.currentTarget.value)}
           />
-          All day
-        </label>
-        <input
-          class="event-zone"
-          aria-label="Time zone"
-          value={props.draft.zone}
-          onInput={(e) => props.set("zone", e.currentTarget.value)}
-        />
-      </div>
+        </div>
+      </Show>
       <input
         aria-label="Location"
         placeholder="Location"
         value={props.draft.location}
         onInput={(e) => props.set("location", e.currentTarget.value)}
       />
-      <div class="event-repeat">
-        <span>Repeats: {repeatWords(props.draft)}</span>
-        <button
-          class="event-link"
-          aria-expanded={props.editing}
-          onClick={() => props.toggleRepeat()}
-        >
-          {props.editing ? "done" : "change"}
-        </button>
-      </div>
-      <Show when={props.editing}>
-        <RepeatEditor draft={props.draft} set={props.set} />
+      <Show when={props.toggleRepeat}>
+        <div class="event-repeat">
+          <span>Repeats: {repeatWords(props.draft)}</span>
+          <button
+            class="event-link"
+            aria-expanded={props.editing}
+            onClick={() => props.toggleRepeat?.()}
+          >
+            {props.editing ? "done" : "change"}
+          </button>
+        </div>
+        <Show when={props.editing}>
+          <RepeatEditor draft={props.draft} set={props.set} />
+        </Show>
       </Show>
       <Show when={props.showNotes || props.draft.notes}>
         <textarea
