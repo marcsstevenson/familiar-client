@@ -267,6 +267,8 @@ export type CalAddInput = {
   body?: string | null;
   /** Calendar name ("Family Room") or a purpose from [calendar.purposes] ("family"). Default: the account's main calendar. */
   calendar?: string | null;
+  /** Exact local destination ID from cal calendars. */
+  calendar_id?: number | null;
   /** Outlook category; repeat for more. */
   category?: Array<string>;
   /** Or: repeat this many times. */
@@ -320,10 +322,14 @@ export type CalCalendar = {
   account: string;
   /** You can add and change events. */
   can_edit: boolean;
+  /** Provider colour, when supplied. */
+  color?: string | null;
   /** The last sync error, if the last sync failed. */
   error?: string | null;
   /** Events on this device. */
   events: number;
+  /** Local calendar ID. */
+  id: number;
   /** The account's default calendar. */
   is_default: boolean;
   /** When the events last synced (RFC 3339, UTC). */
@@ -413,6 +419,8 @@ export type CalEvent = {
   all_day: boolean;
   /** Calendar name. */
   calendar: string;
+  /** Local calendar ID. */
+  calendar_id: number;
   /** Cancelled meeting. */
   cancelled: boolean;
   /** End: RFC 3339 in the output zone, or the day after the last day for all-day events. */

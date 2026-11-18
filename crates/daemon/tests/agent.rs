@@ -175,6 +175,7 @@ async fn agents_get_only_what_is_granted() {
     );
     // An event is a write, but inviting people sends mail.
     let event = |attendees: Vec<Recipient>| WriteRequest::EventCreate {
+        calendar_id: None,
         account: Some(KEY.into()),
         calendar: None,
         event: familiar_core::events::EventFields {

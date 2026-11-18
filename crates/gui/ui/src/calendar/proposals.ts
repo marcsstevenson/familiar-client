@@ -98,11 +98,11 @@ export function problem(d: Draft): string | null {
 }
 
 /** `cal add`'s input for a draft, in `calendar` of `account`, from email `message`. */
-export function addInput(d: Draft, message: number, cal: { account: string; name: string }): AddInput {
+export function addInput(d: Draft, message: number | undefined, cal: Calendar): AddInput {
   const input: AddInput = {
     from_mail: message,
     account: cal.account,
-    calendar: cal.name,
+    calendar_id: cal.id,
     subject: d.subject.trim(),
     all_day: d.allDay,
     start: d.allDay ? d.startDate : `${d.startDate} ${d.startTime}`,

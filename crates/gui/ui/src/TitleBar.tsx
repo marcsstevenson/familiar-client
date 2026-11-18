@@ -1,7 +1,7 @@
 // The app's own title bar. On Windows and Linux the app draws the window
 // buttons; on macOS the system's traffic lights sit over the left end.
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { Show } from "solid-js";
+import { type JSX, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { isCommandError } from "./api";
 import keaUrl from "./assets/kea.svg";
@@ -17,7 +17,7 @@ function openConfig() {
 }
 
 /** `title` names a compose window; without it this is the main window's bar. */
-export function TitleBar(props: { platform: string; title?: string }) {
+export function TitleBar(props: { platform: string; title?: string; children?: JSX.Element }) {
   const win = getCurrentWindow();
   const mac = () => props.platform === "macos";
   return (
@@ -35,6 +35,7 @@ export function TitleBar(props: { platform: string; title?: string }) {
         </button>
       </Show>
       <div class="titlebar-spacer" data-tauri-drag-region />
+      {props.children}
       <button
         class="titlebar-tool"
         title={THEME_LABEL[theme()]}

@@ -52,6 +52,8 @@ pub struct CalListInput {
 /// One event in `fam cal list`.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct CalEvent {
+    /// Local calendar ID.
+    pub calendar_id: i64,
     /// Local event ID.
     pub id: i64,
     /// Account name.
@@ -120,6 +122,10 @@ pub struct CalCalendarsInput {
 /// One calendar in `fam cal calendars`.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct CalCalendar {
+    /// Local calendar ID.
+    pub id: i64,
+    /// Provider colour, when supplied.
+    pub color: Option<String>,
     /// Account name.
     pub account: String,
     /// Calendar name.
@@ -354,6 +360,7 @@ fn list_in(
                 (in_zone(d.start_at, zone), in_zone(d.end_at, zone))
             };
             Some(CalEvent {
+                calendar_id: c.id.0,
                 id: e.id.0,
                 account: a.key.clone(),
                 calendar: c.name.clone(),
@@ -437,6 +444,8 @@ fn calendars_in(
                 })
                 .unwrap_or_default();
             out.push(CalCalendar {
+                id: c.id.0,
+                color: c.color.clone(),
                 account: a.key.clone(),
                 name: c.name.clone(),
                 is_default: c.is_default,

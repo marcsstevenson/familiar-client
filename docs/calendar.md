@@ -133,3 +133,13 @@ When `[ai]` is on (see [ai.md](ai.md)), the dialog says which tool the email
 may go to while it waits. Closing it then leaves the tool to finish or time
 out on its own.
 
+### Day calendar in the app
+
+Open Calendar at the right of the title bar (Ctrl+Shift+L) to see the local day
+beside the message you're reading. Use Today, the arrows or the date picker to
+navigate. Calendars lists the visible calendars across accounts, including
+read-only ones. Expand an appointment to see its time, location and calendar.
+Click a half-hour slot or New event to add an appointment to a writable
+calendar. Offline saves queue on this device and sync when famd can connect.
+The panel overlays the reader in narrow windows. Escape or Close calendar
+returns to Mail.

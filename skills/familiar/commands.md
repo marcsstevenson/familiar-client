@@ -99,6 +99,7 @@ Adds an event to a calendar on this device at once and queues it for the server.
 - `--attendee <attendee>` (repeatable): Invite someone ("Name <addr>" or an address); repeat or separate with commas.
 - `--body <body>`: Notes (plain text).
 - `--calendar <calendar>`: Calendar name ("Family Room") or a purpose from [calendar.purposes] ("family"). Default: the account's main calendar.
+- `--calendar-id <calendar-id>`: Exact local destination ID from cal calendars.
 - `--category <category>` (repeatable): Outlook category; repeat for more.
 - `--count <count>`: Or: repeat this many times.
 - `--days <days>`: All-day: how many days when there's no --end (default 1).
