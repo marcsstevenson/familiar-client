@@ -1,4 +1,4 @@
-import { For, Show, createMemo, onMount, type JSX } from "solid-js";
+import { For, Show, createMemo, createSignal, onMount, type JSX } from "solid-js";
 import type { CalEvent } from "../../../../../bindings/commands";
 import { dateWords } from "./proposals";
 import { localDate, nextDate, onDay, timedBlocks } from "./timeline";
@@ -107,13 +107,56 @@ function monthWeek(dates: string[], events: CalEvent[]) {
   return { entries, more };
 }
 
-export function MonthView(props: ViewProps) {
+export function MonthView(props: ViewProps & {
+  writable: boolean; create: (first: string, last: string, time: string) => void;
+}) {
   const weeks = createMemo(() => props.dates.filter((_, i) => i % 7 === 0).map((_, i) => props.dates.slice(7 * i, 7 * i + 7)));
-  return <div class="month-view">
+  const [drag, setDrag] = createSignal<{ anchor: string; over: string; time: string; pointer: number }>();
+  let month!: HTMLDivElement;
+  function startTime(cell: HTMLElement, y: number) {
+    const rect = cell.getBoundingClientRect();
+    const fraction = Math.max(0, Math.min(1, (y - rect.top) / rect.height));
+    return String(6 + Math.round(12 * fraction)).padStart(2, "0") + ":00";
+  }
+  function track(e: PointerEvent, finish: boolean) {
+    const d = drag();
+    if (!d || e.pointerId !== d.pointer) return;
+    // Event cards can cover the destination cell, including across a week boundary.
+    const cell = document.elementsFromPoint(e.clientX, e.clientY)
+      .find(el => el instanceof HTMLElement && el.dataset.monthDate && month.contains(el)) as HTMLElement | undefined;
+    const over = cell?.dataset.monthDate;
+    if (finish) {
+      setDrag(undefined);
+      if (props.writable && over && over !== d.anchor) {
+        const [first, last] = d.anchor < over ? [d.anchor, over] : [over, d.anchor];
+        props.create(first, last, d.time);
+      }
+    } else if (over && over !== d.over) setDrag({ ...d, over });
+  }
+  function inRange(date: string) {
+    const d = drag();
+    return !!d && ((d.anchor <= date && date <= d.over) || (d.over <= date && date <= d.anchor));
+  }
+  return <div class="month-view" ref={month} tabindex="-1" onPointerMove={e => track(e, false)}
+    onPointerUp={e => track(e, true)} onLostPointerCapture={() => setDrag(undefined)}
+    onKeyDown={e => {
+      if (e.key === "Escape" && drag()) { e.stopPropagation(); setDrag(undefined); }
+    }}>
     <div class="month-weekdays"><For each={props.dates.slice(0, 7)}>{date => <span>{weekday(date)}</span>}</For></div>
     <For each={weeks()}>{week => {
       const layout = createMemo(() => monthWeek(week, props.events));
       return <div class="month-week">
+        <div class="month-cells" aria-hidden="true"><For each={week}>{date => <div data-month-date={date}
+          classList={{ "in-range": inRange(date) }}
+          onPointerDown={e => {
+            if (!props.writable || !e.isPrimary || e.button !== 0) return;
+            month.focus({ preventScroll: true });
+            e.currentTarget.setPointerCapture(e.pointerId);
+            setDrag({ anchor: date, over: date, time: startTime(e.currentTarget, e.clientY), pointer: e.pointerId });
+          }}
+          onDblClick={e => {
+            if (props.writable && e.button === 0) props.create(date, date, startTime(e.currentTarget, e.clientY));
+          }} />}</For></div>
         <For each={week}>{date => <button class="month-day" classList={{ outside: date.slice(0, 7) !== props.date.slice(0, 7) }}
           aria-label={dateWords(date)} aria-current={date === props.date ? "date" : undefined}
           onClick={() => props.openDay(date)}>{Number(date.slice(8))}</button>}</For>
