@@ -9,7 +9,7 @@ pub type Result<T, E = Error> = std::result::Result<T, E>;
 pub enum Error {
     /// The request never got an HTTP answer (DNS, TLS, connection reset, timeout).
     #[error("network error: {0}")]
-    Network(#[from] reqwest::Error),
+    Network(#[source] Box<dyn std::error::Error + Send + Sync>),
 
     /// No usable access token, even after a refresh. The account must sign in again.
     #[error("not signed in: {0}")]
@@ -58,5 +58,35 @@ pub enum Error {
 impl From<serde_json::Error> for Error {
     fn from(e: serde_json::Error) -> Self {
         Error::Decode(e.to_string())
+    }
+}
+
+impl From<reqwest::Error> for Error {
+    fn from(e: reqwest::Error) -> Self {
+        Self::Network(Box::new(e))
+    }
+}
+
+impl From<familiar_auth::AuthError> for Error {
+    fn from(e: familiar_auth::AuthError) -> Self {
+        match e.kind {
+            familiar_auth::AuthErrorKind::Offline => Self::Network(Box::new(e)),
+            _ => Self::Auth(e.message),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::Error;
+    use familiar_auth::{AuthError, AuthErrorKind};
+
+    #[test]
+    fn token_refresh_distinguishes_offline_from_rejected_credentials() {
+        let offline = AuthError::new(AuthErrorKind::Offline, "connection reset");
+        assert!(matches!(Error::from(offline), Error::Network(_)));
+
+        let rejected = AuthError::new(AuthErrorKind::AuthRequired, "invalid_grant");
+        assert!(matches!(Error::from(rejected), Error::Auth(_)));
     }
 }
