@@ -69,25 +69,23 @@ export function quotedHeaders(doc: Document): QuotedHeader[] {
   const headers: QuotedHeader[] = [];
   for (const [i, line] of lines.entries()) {
     const sender = /^From:\s*(.+)$/is.exec(line.text);
-    if (!sender || !/^(Sent|Date):/i.test(lines[i + 1]?.text ?? "")) continue;
-    let j = i + 2;
-    const field = (label: string) => {
-      const text = lines[j]?.text;
-      if (!text?.toLowerCase().startsWith(label)) return null;
-      j++;
-      return text.slice(label.length).trim();
-    };
-    // Gmail puts Subject above the recipients, Outlook below them.
-    const earlySubject = field("subject:");
-    const to = field("to:") ?? "";
-    const cc = field("cc:") ?? "";
-    const subject = earlySubject ?? field("subject:");
-    if (subject === null) continue;
+    if (!sender) continue;
+    // Outlook, Gmail and Yahoo print the same fields in different orders.
+    const fields = new Map<string, string>();
+    for (let j = i + 1; j < lines.length; j++) {
+      const match = /^(sent|date|to|cc|subject):\s*(.*)$/is.exec(lines[j]!.text);
+      if (!match) break;
+      const label = match[1]!.toLowerCase();
+      if (fields.has(label)) break;
+      fields.set(label, match[2]!.trim());
+    }
+    const subject = fields.get("subject");
+    if (subject === undefined || !(fields.has("sent") || fields.has("date"))) continue;
     headers.push({
       row: line.range,
       from: quotedAddresses(sender[1]!),
-      to: quotedAddresses(to),
-      cc: quotedAddresses(cc),
+      to: quotedAddresses(fields.get("to") ?? ""),
+      cc: quotedAddresses(fields.get("cc") ?? ""),
       subject,
     });
   }
