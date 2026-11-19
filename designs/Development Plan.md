@@ -214,6 +214,10 @@ Adding events from an email with an AI tool the user already has (`claude`, `cod
 
 Gmail support is planned separately in [Gmail Plan](Gmail%20Plan.md): the Gmail, Calendar and People APIs behind a small provider boundary in `famd`, labels shown as folders, and Marc's own unverified Google project for sign-in. Only its WP G.0 (the Google sign-in test) is proposed before the Phase 3 gate.
 
+## First-run onboarding (proposed)
+
+How a new person, or a reinstall, gets from first launch to their inbox without a terminal is planned in [First-Run Onboarding Plan](First-Run%20Onboarding%20Plan.md): sign-in that writes `config.toml`, `fam init` and `fam account add`, first-sync progress, empty states and a Get started checklist (WP OB.1–OB.8). It carries the signature part of WP 4.6 and is best done before WP 5.3.
+
 ## Ordering and parallel work
 
 ```
