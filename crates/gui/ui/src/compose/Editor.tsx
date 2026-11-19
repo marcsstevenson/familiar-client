@@ -3,6 +3,7 @@
 // WebView2 and WebKit both support.
 import { For, Show, createSignal, onCleanup } from "solid-js";
 import { ownSignature } from "./html";
+import { pasteLink } from "../pasteLink";
 
 type Tool = { cmd: string; label: string; text: string; key?: string };
 
@@ -183,6 +184,8 @@ export function RichEditor(props: {
           if (files.length) {
             e.preventDefault();
             files.forEach(props.onPasteImage);
+          } else {
+            pasteLink(e, el);
           }
         }}
       />

@@ -231,6 +231,8 @@ pub struct CalAddInput {
     /// Notes (plain text).
     #[serde(default)]
     pub body: Option<String>,
+    /// Notes as HTML, in place of the plain text body.
+    pub body_html: Option<String>,
     /// Invite someone ("Name <addr>" or an address); repeat or separate with commas.
     #[serde(default)]
     pub attendee: Vec<String>,
@@ -398,7 +400,11 @@ pub fn add_request(
             format!("this invites {invited} people; add --yes to go ahead"),
         ));
     }
-    let body = i.body.as_deref().map(text_to_html).unwrap_or_default();
+    let body = i
+        .body_html
+        .clone()
+        .or_else(|| i.body.as_deref().map(text_to_html))
+        .unwrap_or_default();
     if i.calendar_id.is_some() && (i.calendar.is_some() || i.purpose.is_some()) {
         return Err(CommandError::usage(
             "choose either --calendar-id or a calendar name or purpose",

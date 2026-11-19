@@ -6,6 +6,7 @@ import { For, Match, Show, Switch, createEffect, createResource, createSignal, o
 import { ProposalSchedule } from "./ProposalSchedule";
 import { localDate } from "./timeline";
 import { EventFields } from "./EventFields";
+import { textToHtml } from "../compose/html";
 import { createStore } from "solid-js/store";
 import { isCommandError, run } from "../api";
 import { aiSettings, notify } from "../state";
@@ -278,8 +279,8 @@ export function EventDialog(props: { message: number; from: string; onClose: () 
                         <EventFields draft={d} showNotes={!!proposal()?.mail} set={(k, v) => set(i(), k, v)} editing={editing() === i()}
                           toggleRepeat={() => setEditing(editing() === i() ? null : i())} />
                         <Show when={proposal()?.mail}>{mail => <>
-                          <Show when={mail().text}><button class="event-link" onClick={() => set(i(), "notes",
-                            [d.notes.trim(), mail().text].filter(Boolean).join("\n\n"))}>Use email text as notes</button></Show>
+                          <Show when={mail().text}><button class="event-link" onClick={() => set(i(), "notesHtml",
+                            [d.notesHtml, textToHtml(mail().text)].filter(Boolean).join("<br><br>"))}>Use email text as notes</button></Show>
                           <Show when={mail().participants.length}>
                             <label class="event-check"><input type="checkbox" checked={!!guests[i()]?.length}
                               onChange={e => setGuests(i(), e.currentTarget.checked ? mail().participants : [])} />

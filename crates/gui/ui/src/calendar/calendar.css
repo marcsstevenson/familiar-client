@@ -120,6 +120,13 @@
 .event-subject {
   font-weight: 600;
 }
+.event-notes {
+  min-height: 3em;
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
 .event-when,
 .event-repeat,
 .event-repeat-editor,

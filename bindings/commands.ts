@@ -265,6 +265,8 @@ export type CalAddInput = {
   attendee?: Array<string>;
   /** Notes (plain text). */
   body?: string | null;
+  /** Notes as HTML, in place of the plain text body. */
+  body_html?: string | null;
   /** Calendar name ("Family Room") or a purpose from [calendar.purposes] ("family"). Default: the account's main calendar. */
   calendar?: string | null;
   /** Exact local destination ID from cal calendars. */
