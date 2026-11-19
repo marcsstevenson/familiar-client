@@ -19,16 +19,7 @@ import { MovePicker } from "./list/MovePicker";
 import { Splitters, paneColumns } from "./Splitters";
 import { TitleBar } from "./TitleBar";
 
-function daemonText(s: DaemonState): string {
-  switch (s.state) {
-    case "starting":
-      return "Starting sync…";
-    case "running":
-      return "Sync running";
-    case "unavailable":
-      return `Sync not running: ${s.message}`;
-  }
-}
+import { SyncStatus } from "./SyncStatus";
 
 /** What `fam ui` asks the window to show (crates/gui/src/ui_socket.rs). */
 type UiCommand =
@@ -107,7 +98,7 @@ export function App(props: { info: UiInfo }) {
         </div>
       </main>
       <footer class="statusbar" role="status">
-        <span classList={{ warn: daemon().state === "unavailable" }}>{daemonText(daemon())}</span>
+        <SyncStatus daemon={daemon()} />
         <Show when={props.info.config_error}>
           {(e) => <span class="warn">Config: {e()}</span>}
         </Show>
