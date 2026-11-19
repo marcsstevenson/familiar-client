@@ -94,6 +94,10 @@ export function SyncStatus(props: { daemon: DaemonState }) {
   }
 
   let trigger!: HTMLButtonElement;
+  function close() {
+    setOpen(false);
+    trigger.focus();
+  }
   return <>
     <button ref={trigger} class="statusbar-button sync-trigger" classList={{ warn: !!readError() || !!status() && unavailable() || affected().length > 0 }}
       aria-haspopup="dialog" aria-expanded={open()} title="Show sync details"
@@ -101,9 +105,9 @@ export function SyncStatus(props: { daemon: DaemonState }) {
     <Show when={open()}><Portal>
       <dialog class="sync-details" role="dialog" aria-modal="true" aria-labelledby="sync-details-title"
         ref={el => queueMicrotask(() => { if (el.isConnected) el.showModal(); })}
-        onClose={() => { setOpen(false); trigger.focus(); }}>
+        onCancel={e => { e.preventDefault(); close(); }}>
         <header><h2 id="sync-details-title">Sync status</h2>
-          <button autofocus onClick={e => e.currentTarget.closest("dialog")?.close()}>Close</button></header>
+          <button autofocus onClick={close}>Close</button></header>
         <Show when={readError()}>{message => <p class="warn">Status unavailable: {message()}</p>}</Show>
         <Show when={status() && !status()!.daemon.running || props.daemon.state === "unavailable"}>
           <p class="warn">{props.daemon.state === "unavailable" ? props.daemon.message : "The sync service is unavailable."}</p>
