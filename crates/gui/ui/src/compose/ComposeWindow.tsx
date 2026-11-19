@@ -13,7 +13,7 @@ import { type Attachment, createdDraft, loadDraft } from "./draft";
 import { PlainEditor, RichEditor, insertImage } from "./Editor";
 import { bodyOf, htmlToText, isBlank, ownSignature, plainToRich, serialize, setSignature, showCids } from "./html";
 import { type ComposeInfo, type FileInfo, type Identity, composeInfo, fileInfo, pickFiles } from "./ipc";
-import { Recipients, looksValid } from "./Recipients";
+import { type RecipientField, Recipients, addressOf, looksValid } from "./Recipients";
 import type { ComposeSpec } from "./spec";
 import "./compose.css";
 
@@ -128,7 +128,7 @@ export function ComposeWindow(props: { info: UiInfo; spec: ComposeSpec }) {
     const attach = fresh.map((a) => a.path!);
     const removing = removals;
     removals = [];
-    setStatus("Saving…");
+    setStatus("Saving.");
     setInFlight(true);
     try {
       if (id === null) {
@@ -413,6 +413,21 @@ export function ComposeWindow(props: { info: UiInfo; spec: ComposeSpec }) {
     }
   }
 
+  function moveRecipient(source: RecipientField, destination: RecipientField, mailbox: string) {
+    const rows = { to, cc, bcc };
+    const setters = { to: setTo, cc: setCc, bcc: setBcc };
+    const index = rows[source]().indexOf(mailbox);
+    if (source === destination || index < 0) return;
+    const address = addressOf(mailbox).toLowerCase();
+    if (!rows[destination]().some((item) => addressOf(item).toLowerCase() === address)) {
+      setters[destination]((items) => [...items, mailbox]);
+    }
+    setters[source]((items) => items.filter((_, i) => i !== index));
+    if (destination === "cc") setShowCc(true);
+    if (destination === "bcc") setShowBcc(true);
+    touch(source, destination);
+  }
+
   /** Many outside people would see each other: put them in Bcc and yourself in To. */
   async function moveToBcc() {
     setOutside(null);
@@ -544,7 +559,7 @@ export function ComposeWindow(props: { info: UiInfo; spec: ComposeSpec }) {
             Send
           </button>
           <button type="button" disabled={busy() || !!fatal()} onClick={() => setLaterOpen(!laterOpen())} title="Send later: the server sends it at the time you pick, even with this PC off" aria-expanded={laterOpen()}>
-            Later…
+            Later.
           </button>
           <button type="button" disabled={busy() || !!fatal()} onClick={() => void pickFiles().then((f) => addFiles(f))} title="Attach files">
             Attach
@@ -607,18 +622,18 @@ export function ComposeWindow(props: { info: UiInfo; spec: ComposeSpec }) {
             </Show>
             <span class="compose-spacer" />
             <Show when={!showCc()}>
-              <button type="button" class="link" onClick={() => setShowCc(true)}>Cc</button>
+              <button type="button" class="link" data-recipient-field="cc" onClick={() => setShowCc(true)}>Cc</button>
             </Show>
             <Show when={!showBcc()}>
-              <button type="button" class="link" onClick={() => setShowBcc(true)}>Bcc</button>
+              <button type="button" class="link" data-recipient-field="bcc" onClick={() => setShowBcc(true)}>Bcc</button>
             </Show>
           </div>
-          <Recipients label="To" value={to()} account={account() ?? undefined} autofocus={props.spec.kind === "new" && !props.spec.to?.length} onChange={(v) => { setTo(v); touch("to"); }} />
+          <Recipients label="To" onMove={(r, dest) => moveRecipient("to", dest, r)} value={to()} account={account() ?? undefined} autofocus={props.spec.kind === "new" && !props.spec.to?.length} onChange={(v) => { setTo(v); touch("to"); }} />
           <Show when={showCc()}>
-            <Recipients label="Cc" value={cc()} account={account() ?? undefined} onChange={(v) => { setCc(v); touch("cc"); }} />
+            <Recipients label="Cc" onMove={(r, dest) => moveRecipient("cc", dest, r)} value={cc()} account={account() ?? undefined} onChange={(v) => { setCc(v); touch("cc"); }} />
           </Show>
           <Show when={showBcc()}>
-            <Recipients label="Bcc" value={bcc()} account={account() ?? undefined} onChange={(v) => { setBcc(v); touch("bcc"); }} />
+            <Recipients label="Bcc" onMove={(r, dest) => moveRecipient("bcc", dest, r)} value={bcc()} account={account() ?? undefined} onChange={(v) => { setBcc(v); touch("bcc"); }} />
           </Show>
           <div class="compose-field">
             <label class="compose-label" for="compose-subject">Subject</label>
@@ -643,7 +658,7 @@ export function ComposeWindow(props: { info: UiInfo; spec: ComposeSpec }) {
                   <span class="attachment-name">{a.name}</span>
                   <span class="attachment-size">{sizeText(a.size)}</span>
                   <button type="button" class="chip-remove" aria-label={`Remove ${a.name}`} disabled={busy()} onClick={() => removeAttachment(a)}>
-                    ×
+                    x
                   </button>
                 </li>
               )}
