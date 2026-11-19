@@ -37,7 +37,7 @@ async function rowFor(m: MailFetchOutput): Promise<Row> {
   };
 }
 
-export function ReplyBar(props: { message: MailFetchOutput }) {
+export function ReplyBar(props: { message: MailFetchOutput; standalone?: boolean }) {
   const [menu, setMenu] = createSignal<{ row: Row; x: number; y: number } | null>(null);
   let more!: HTMLButtonElement;
 
@@ -74,34 +74,36 @@ export function ReplyBar(props: { message: MailFetchOutput }) {
       >
         {replyIcon("forward")}
       </button>
-      <button
-        type="button"
-        ref={more}
-        title="More actions"
-        aria-label="More actions"
-        aria-haspopup="menu"
-        aria-expanded={menu() !== null}
-        onClick={() => void openMenu()}
-      >
-        <svg viewBox="0 0 16 16" aria-hidden="true" class="filled">
-          <circle cx="3.5" cy="8" r="1.25" />
-          <circle cx="8" cy="8" r="1.25" />
-          <circle cx="12.5" cy="8" r="1.25" />
-        </svg>
-      </button>
-      <Show when={menu()}>
-        {(m) => (
-          <MessageMenu
-            row={m().row}
-            x={m().x}
-            y={m().y}
-            onAddToCalendar={() => setEventDialog({ message: props.message.id, from: props.message.from.addr })}
-            onClose={() => {
-              setMenu(null);
-              more?.focus();
-            }}
-          />
-        )}
+      <Show when={!props.standalone}>
+        <button
+          type="button"
+          ref={more}
+          title="More actions"
+          aria-label="More actions"
+          aria-haspopup="menu"
+          aria-expanded={menu() !== null}
+          onClick={() => void openMenu()}
+        >
+          <svg viewBox="0 0 16 16" aria-hidden="true" class="filled">
+            <circle cx="3.5" cy="8" r="1.25" />
+            <circle cx="8" cy="8" r="1.25" />
+            <circle cx="12.5" cy="8" r="1.25" />
+          </svg>
+        </button>
+        <Show when={menu()}>
+          {(m) => (
+            <MessageMenu
+              row={m().row}
+              x={m().x}
+              y={m().y}
+              onAddToCalendar={() => setEventDialog({ message: props.message.id, from: props.message.from.addr })}
+              onClose={() => {
+                setMenu(null);
+                more?.focus();
+              }}
+            />
+          )}
+        </Show>
       </Show>
     </div>
   );

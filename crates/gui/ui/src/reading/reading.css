@@ -1,4 +1,8 @@
 /* The reading pane. Colours and sizes come from styles/tokens.css. */
+.reader-window, .reader-window > .reading {
+  height: 100%;
+}
+
 .reading-message {
   position: absolute;
   inset: 0;

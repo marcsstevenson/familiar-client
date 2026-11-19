@@ -7,6 +7,7 @@ import { OnlineHits, SearchBar } from "./SearchBar";
 import { type Row, type Sort, listIndexOf, listOpen, listRows, onStoreChanged } from "./api";
 import { shortDate, snoozeLabel } from "./format";
 import { MessageMenu } from "./MessageMenu";
+import { openReader } from "../reading/api";
 
 export const ROW_H = 64;
 const PAGE = 100;
@@ -529,6 +530,10 @@ export function MessageList() {
                 shifting={(shiftFrom() ?? Infinity) <= i}
                 onPress={press}
                 onClick={(i, e) => {
+                  const row = rowAt(i);
+                  if (row && e.detail === 2 && !e.shiftKey && !e.ctrlKey && !e.metaKey && !e.altKey) {
+                    openReader(row);
+                  }
                   // A plain click inside the multiple selection (not a drag) opens that row.
                   if (e.button === 0 && !e.shiftKey && !e.ctrlKey && !e.metaKey && multiPicked() && isPicked(i)) select(i);
                 }}
@@ -539,7 +544,7 @@ export function MessageList() {
           </For>
         </div>
       </div>
-      <Show when={menu()}>{(m) => <MessageMenu row={m().row} multi={m().multi} x={m().x} y={m().y} onClose={() => {
+      <Show when={menu()}>{(m) => <MessageMenu row={m().row} multi={m().multi} onOpenReader={openReader} x={m().x} y={m().y} onClose={() => {
         setMenu(null);
         scroller.focus();
       }} />}</Show>

@@ -32,7 +32,7 @@ function when(rfc3339: string): string {
     : d.toLocaleString(undefined, { dateStyle: "full", timeStyle: "short" });
 }
 
-export function ReadingPane() {
+export function ReadingPane(props: { standalone?: boolean }) {
   const [view, setView] = createSignal<ReadView | null>(null);
   const [error, setError] = createSignal<string | null>(null);
   const [loading, setLoading] = createSignal(false);
@@ -164,7 +164,7 @@ export function ReadingPane() {
                       <CopyButton text={() => m().subject} label="Copy subject" />
                     </Show>
                   </h1>
-                  <ReplyBar message={m()} />
+                  <ReplyBar message={m()} standalone={props.standalone} />
                   <Show when={resolvedTheme() === "dark" && v().html}>
                     <button
                       class="reading-mode"

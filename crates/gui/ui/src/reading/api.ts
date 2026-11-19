@@ -1,9 +1,15 @@
 // The reading pane's own IPC commands (crates/gui/src/reading). Everything
 // else goes through `run` in ../api.ts.
 import { invoke } from "@tauri-apps/api/core";
+import { notify } from "../state";
 import type { AttachmentInfo, MailFetchOutput } from "../../../../../bindings/commands";
 
 export type { AttachmentInfo, MailFetchOutput };
+
+export function openReader(row: { id: number; subject: string }): void {
+  void invoke("open_reader", { message: row.id, subject: row.subject || "(no subject)" })
+    .catch((e) => notify(`Couldn't open the message window: ${errorText(e)}`, true));
+}
 
 export type ReadView = {
   /** The header, as `fam mail fetch` returns it (without the body). */

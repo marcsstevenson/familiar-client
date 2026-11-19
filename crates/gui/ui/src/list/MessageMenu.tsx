@@ -14,6 +14,7 @@ export function MessageMenu(props: {
   x: number;
   y: number;
   onClose: () => void;
+  onOpenReader?: (row: Row) => void;
   /** Shows "Add to calendar…" first (the reading pane's More actions). */
   onAddToCalendar?: () => void;
 }) {
@@ -88,6 +89,13 @@ export function MessageMenu(props: {
       <div class="folder-menu" role="menu" ref={(el) => (box = el)} style={{ left: `${props.x}px`, top: `${props.y}px` }}>
         <Show when={multi}>
           <div class="menu-heading">{countLabel(ids.length)}</div>
+        </Show>
+        <Show when={!multi && props.onOpenReader}>
+          {(open) => <button role="menuitem" onClick={() => {
+            const launch = open();
+            props.onClose();
+            launch(row);
+          }}>Open in new window</button>}
         </Show>
         <Show when={!multi && props.onAddToCalendar}>
           {(add) => (
