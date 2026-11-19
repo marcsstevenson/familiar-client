@@ -8,7 +8,7 @@ import "./styles/sync-status.css";
 
 const phases: Record<SyncPhase, string> = {
   starting: "Starting", folder_tree: "Updating folders", headers: "Downloading messages",
-  bodies: "Downloading message bodies", calendar: "Updating calendar", idle: "Up to date",
+  bodies: "Downloading message bodies", calendar: "Updating calendar", idle: "Polling",
   backoff: "Waiting to retry", auth_required: "Sign-in problem", stopped: "Sync stopped",
 };
 
@@ -76,7 +76,7 @@ export function SyncStatus(props: { daemon: DaemonState }) {
       return `${first.account}: ${problem(first)}${others.length ? ` (+${others.length} more)` : retryAt}`;
     }
     if (!s.accounts.length) return "Waiting for accounts";
-    return s.accounts.every(a => a.phase === "idle" && a.first_sync_done) ? "Mail up to date" : "Syncing.";
+    return s.accounts.every(a => a.phase === "idle" && a.first_sync_done) ? "No sync errors" : "Syncing.";
   }
   async function retry(account?: string) {
     if (sending()) return;
