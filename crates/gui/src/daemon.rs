@@ -176,3 +176,16 @@ fn last_line(log: &std::path::Path) -> Option<String> {
         .find(|l| !l.trim().is_empty())
         .map(str::to_string)
 }
+
+/// Wakes the existing sync worker(s), including accounts waiting for a retry.
+#[tauri::command]
+pub async fn retry_sync(account: Option<String>) -> Result<(), familiar_core::CommandError> {
+    use familiar_core::daemon::{METHOD_SYNC_NOW, SyncNowParams};
+    tauri::async_runtime::spawn_blocking(move || {
+        Client::connect_default()?
+            .call::<_, serde_json::Value>(METHOD_SYNC_NOW, &SyncNowParams { account })?;
+        Ok(())
+    })
+    .await
+    .map_err(|e| familiar_core::CommandError::internal(format!("sync retry task failed: {e}")))?
+}
