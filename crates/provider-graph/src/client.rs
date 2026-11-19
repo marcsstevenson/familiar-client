@@ -23,9 +23,9 @@ const PREFER_IMMUTABLE: &str = "IdType=\"ImmutableId\"";
 /// client runs them on Tokio's blocking pool.
 pub trait TokenSource: Send + Sync + 'static {
     /// A token that is valid now, refreshed first if it is about to expire.
-    fn access_token(&self) -> std::result::Result<String, String>;
+    fn access_token(&self) -> Result<String>;
     /// A new token, even if the current one looks valid. Called once after a 401.
-    fn refresh(&self) -> std::result::Result<String, String>;
+    fn refresh(&self) -> Result<String>;
 }
 
 /// A fixed token, for tests and the mock.
@@ -33,10 +33,10 @@ pub trait TokenSource: Send + Sync + 'static {
 pub struct StaticToken(pub String);
 
 impl TokenSource for StaticToken {
-    fn access_token(&self) -> std::result::Result<String, String> {
+    fn access_token(&self) -> Result<String> {
         Ok(self.0.clone())
     }
-    fn refresh(&self) -> std::result::Result<String, String> {
+    fn refresh(&self) -> Result<String> {
         Ok(self.0.clone())
     }
 }
@@ -58,19 +58,14 @@ impl AuthTokens {
 }
 
 impl TokenSource for AuthTokens {
-    fn access_token(&self) -> std::result::Result<String, String> {
-        self.auth
-            .access_token(&self.account)
-            .map_err(|e| e.to_string())
+    fn access_token(&self) -> Result<String> {
+        self.auth.access_token(&self.account).map_err(Error::from)
     }
-    fn refresh(&self) -> std::result::Result<String, String> {
-        let record = self
-            .auth
-            .refresh(&self.account)
-            .map_err(|e| e.to_string())?;
+    fn refresh(&self) -> Result<String> {
+        let record = self.auth.refresh(&self.account)?;
         record
             .access_token
-            .ok_or_else(|| "refresh gave no access token".to_string())
+            .ok_or_else(|| Error::Auth("refresh gave no access token".into()))
     }
 }
 
@@ -213,8 +208,7 @@ impl GraphClient {
             }
         })
         .await
-        .map_err(|e| Error::Auth(format!("token task failed: {e}")))?
-        .map_err(Error::Auth)?;
+        .map_err(|e| Error::Auth(format!("token task failed: {e}")))??;
         *self.inner.token.lock().unwrap_or_else(|e| e.into_inner()) = Some(t.clone());
         Ok(t)
     }
