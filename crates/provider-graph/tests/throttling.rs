@@ -195,10 +195,10 @@ struct Stale {
 }
 
 impl TokenSource for Stale {
-    fn access_token(&self) -> Result<String, String> {
+    fn access_token(&self) -> familiar_provider_graph::Result<String> {
         Ok("stale-token".into())
     }
-    fn refresh(&self) -> Result<String, String> {
+    fn refresh(&self) -> familiar_provider_graph::Result<String> {
         self.refreshed.fetch_add(1, Ordering::SeqCst);
         Ok("test-token".into())
     }
