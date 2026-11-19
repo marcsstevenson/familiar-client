@@ -11,7 +11,11 @@ const quoted = (sender, address, subject) =>
   `<b>Subject:</b> ${subject}</p>`;
 const html = "<html><head></head><body>Outer cover note" + quoted("Shop", "shop@example.org", "RE: Nets") +
   "<p>Newer delivery note</p>" + quoted("Shop, Orders", "shop@example.org", "RE: Nets") +
-  "<p>Older order details</p></body></html>";
+  "<p>Older order details</p><div>----- Forwarded message -----</div>" +
+  "<div><b>From:</b> &quot;Teacher&quot; &lt;teacher@example.org&gt;</div>" +
+  "<div><b>To:</b> &quot;Parent&quot; &lt;parent@example.org&gt;</div>" +
+  "<div><b>Cc:</b> </div><div><b>Sent:</b> Thursday</div>" +
+  "<div><b>Subject:</b> Option form</div><p>Form details</p></body></html>";
 
 (async () => {
   const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH });
@@ -41,8 +45,15 @@ const html = "<html><head></head><body>Outer cover note" + quoted("Shop", "shop@
       setSelectedMessage(7);
     }, html);
     const rows = page.frameLocator(".message-frame").locator(".fam-quoted-from");
-    await rows.nth(1).waitFor();
-    assert.equal(await rows.count(), 2);
+    const yahoo = rows.nth(2);
+    await yahoo.waitFor();
+    assert.equal(await rows.count(), 3);
+    assert.match(await yahoo.innerText(), /Teacher/);
+    for (const [label, action] of [["Reply", "reply"], ["Reply all", "replyAll"], ["Forward", "forward"]]) {
+      await yahoo.hover();
+      await yahoo.getByRole("button", { name: label, exact: true }).click();
+      assert.deepEqual(await page.evaluate(() => window.opened), { kind: "quoted", index: 2, message: 7, action });
+    }
     const row = rows.nth(1);
     assert.ok(await row.getByRole("button", { name: "Reply all" }).isEnabled());
     const bar = row.locator(".fam-quoted-actions");
