@@ -266,6 +266,7 @@ async fn events_added_changed_answered_and_deleted() {
         &env,
         CalAddInput {
             from_mail: Some(msg.id.0),
+            body_html: Some(r#"<a href="https://club.example/programme">Programme</a>"#.into()),
             ..CalAddInput::default()
         },
         waiting(),
@@ -278,6 +279,7 @@ async fn events_added_changed_answered_and_deleted() {
     assert_eq!(prize.data.location, "Parklands hall");
     let server = env.mock.mailbox(KEY).event(&prize.data.remote_id).unwrap();
     let html = server.body_html.unwrap();
+    assert!(html.contains(r#"<a href="https://club.example/programme">Programme</a>"#));
     assert!(
         html.contains("From the email") && html.contains("outlook.invalid/owa"),
         "{html}"

@@ -1,6 +1,7 @@
 // Turning `cal propose`'s proposals into editable drafts, describing repeats
 // in words, and building the `cal add` input for a confirmed draft. No UI here.
 import type { Commands } from "../api";
+import { textToHtml } from "../compose/html";
 
 type ProposeOutput = Commands["cal.propose"]["output"];
 export type Proposal = ProposeOutput["events"][number];
@@ -21,7 +22,7 @@ export type Draft = {
   endTime: string;
   zone: string;
   location: string;
-  notes: string;
+  notesHtml: string;
   every: Every;
   interval: number;
   on: string[];
@@ -72,7 +73,7 @@ export function draftOf(p: Proposal): Draft {
     endTime: p.all_day ? "10:00" : endTime,
     zone: p.time_zone,
     location: p.location ?? "",
-    notes: p.notes ?? "",
+    notesHtml: textToHtml(p.notes ?? ""),
     every: (r?.every as Every | undefined) ?? "none",
     interval: r?.interval ?? 1,
     on: r?.on ?? [],
@@ -109,7 +110,7 @@ export function addInput(d: Draft, message: number | undefined, cal: Calendar): 
     end: d.allDay ? d.endDate : `${d.endDate} ${d.endTime}`,
     tz: d.zone,
     location: d.location.trim(),
-    body: d.notes.trim() || null,
+    body_html: d.notesHtml.trim() || null,
   };
   if (d.every !== "none") {
     input.repeat = d.every;

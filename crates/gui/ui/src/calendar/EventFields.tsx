@@ -1,4 +1,5 @@
-import { For, Show } from "solid-js";
+import { For, Show, createEffect } from "solid-js";
+import { pasteLink } from "../pasteLink";
 import { DAYS, type Draft, type Every, repeatWords } from "./proposals";
 
 type SetField = <K extends keyof Draft>(key: K, value: Draft[K]) => void;
@@ -93,16 +94,27 @@ export function EventFields(props: {
           <RepeatEditor draft={props.draft} set={props.set} />
         </Show>
       </Show>
-      <Show when={props.showNotes || props.draft.notes}>
-        <textarea
-          aria-label="Notes"
-          rows={2}
-          value={props.draft.notes}
-          onInput={(e) => props.set("notes", e.currentTarget.value)}
-        />
+      <Show when={props.showNotes || props.draft.notesHtml}>
+        <EventNotes html={props.draft.notesHtml} onInput={html => props.set("notesHtml", html)} />
       </Show>
     </>
   );
+}
+
+function EventNotes(props: { html: string; onInput: (html: string) => void }) {
+  let editor!: HTMLDivElement;
+  createEffect(() => {
+    if (editor.innerHTML !== props.html) editor.innerHTML = props.html;
+  });
+  return <div ref={editor} class="event-notes" contentEditable role="textbox" aria-label="Notes"
+    aria-multiline="true" onInput={() => props.onInput(editor.innerHTML)}
+    onDrop={e => e.preventDefault()}
+    onPaste={e => {
+      if (pasteLink(e, editor)) return;
+      e.preventDefault();
+      const text = e.clipboardData?.getData("text/plain");
+      if (text) document.execCommand("insertText", false, text);
+    }} />;
 }
 
 const EVERY: { value: Every; label: string }[] = [
