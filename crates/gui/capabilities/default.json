@@ -1,8 +1,8 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "The main window and compose windows: Familiar commands plus the window controls the custom title bar needs.",
-  "windows": ["main", "compose-*"],
+  "description": "Mail, reader and compose windows with Familiar commands and window controls.",
+  "windows": ["main", "compose-*", "reader-*"],
   "permissions": [
     "core:default",
     "core:window:allow-minimize",

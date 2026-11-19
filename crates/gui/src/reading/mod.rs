@@ -28,8 +28,26 @@ use familiar_core::commands::mail::{
 use familiar_core::daemon::DaemonPaths;
 use familiar_store::{Cursor, MessageId, Reader};
 use serde::Serialize;
+use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 
 use remote::TrustedSenders;
+
+#[tauri::command]
+pub async fn open_reader(app: AppHandle, message: i64, subject: String) -> Result<(), String> {
+    let label = format!("reader-{message}");
+    if let Some(window) = app.get_webview_window(&label) {
+        window.unminimize().map_err(|e| e.to_string())?;
+        return window.set_focus().map_err(|e| e.to_string());
+    }
+    let url = format!("index.html#reader={message}");
+    WebviewWindowBuilder::new(&app, label, WebviewUrl::App(url.into()))
+        .title(subject)
+        .inner_size(820.0, 720.0)
+        .min_inner_size(520.0, 400.0)
+        .build()
+        .map(|_| ())
+        .map_err(|e| e.to_string())
+}
 
 /// How many of the following messages are prefetched when one is opened.
 const PREFETCH: usize = 2;

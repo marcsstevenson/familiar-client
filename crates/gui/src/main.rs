@@ -337,6 +337,7 @@ fn main() {
             run,
             daemon_state,
             reading::reading_open,
+            reading::open_reader,
             reading::reading_trust_sender,
             reading::reading_attachments,
             reading::reading_preview,
