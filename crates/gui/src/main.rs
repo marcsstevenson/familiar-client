@@ -336,6 +336,7 @@ fn main() {
             config_watch::restart_app,
             run,
             daemon_state,
+            daemon::retry_sync,
             reading::reading_open,
             reading::open_reader,
             reading::reading_trust_sender,
