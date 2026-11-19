@@ -38,8 +38,11 @@ function chipText(mailbox: string): string {
   return m && m[1] ? m[1] : mailbox;
 }
 
+export type RecipientField = "to" | "cc" | "bcc";
+
 export function Recipients(props: {
-  label: string;
+  label: "To" | "Cc" | "Bcc";
+  onMove: (mailbox: string, destination: RecipientField) => void;
   value: string[];
   onChange: (v: string[]) => void;
   /** Search only this account's people. */
@@ -92,6 +95,19 @@ export function Recipients(props: {
     }, 120);
   };
 
+  // Pointer capture keeps chip moves separate from native attachment drops.
+  let highlighted: HTMLElement | null = null;
+  const highlight = (target: HTMLElement | null) => {
+    highlighted?.classList.remove("recipient-drop-target");
+    highlighted = target;
+    highlighted?.classList.add("recipient-drop-target");
+  };
+  onCleanup(() => highlight(null));
+  const dropTarget = (e: PointerEvent) => {
+    const target = document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>("[data-recipient-field]");
+    return target?.dataset.recipientField !== props.label.toLowerCase() ? target ?? null : null;
+  };
+
   const onKeyDown = (e: KeyboardEvent) => {
     const list = people();
     if (list.length && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
@@ -115,14 +131,33 @@ export function Recipients(props: {
   };
 
   return (
-    <div class="compose-field recipients" onClick={() => input.focus()}>
+    <div class="compose-field recipients" data-recipient-field={props.label.toLowerCase()} onClick={() => input.focus()}>
       <label class="compose-label" for={`rcpt-${props.label}`}>
         {props.label}
       </label>
       <div class="chips">
         <For each={props.value}>
           {(r, i) => (
-            <span class="chip" classList={{ invalid: !looksValid(r) }} title={r}>
+            <span
+              class="chip"
+              classList={{ invalid: !looksValid(r) }}
+              title={r}
+              onPointerDown={(e) => {
+                if (e.isPrimary && e.button === 0 && !(e.target as Element).closest("button")) {
+                  e.currentTarget.setPointerCapture(e.pointerId);
+                }
+              }}
+              onPointerMove={(e) => {
+                if (e.currentTarget.hasPointerCapture(e.pointerId)) highlight(dropTarget(e));
+              }}
+              onPointerUp={(e) => {
+                if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
+                const field = dropTarget(e)?.dataset.recipientField;
+                highlight(null);
+                if (field === "to" || field === "cc" || field === "bcc") props.onMove(r, field);
+              }}
+              onLostPointerCapture={() => highlight(null)}
+            >
               {chipText(r)}
               <button
                 type="button"
@@ -133,7 +168,7 @@ export function Recipients(props: {
                   props.onChange(props.value.filter((_, j) => j !== i()));
                 }}
               >
-                ×
+                x
               </button>
             </span>
           )}

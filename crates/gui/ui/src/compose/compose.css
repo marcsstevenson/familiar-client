@@ -109,7 +109,14 @@
   padding: var(--space-2) var(--space-3);
   min-width: 0;
 }
+.recipient-drop-target {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
 .chip {
+  cursor: grab;
+  user-select: none;
+  touch-action: none;
   display: inline-flex;
   align-items: center;
   gap: var(--space-1);
