@@ -296,6 +296,138 @@ impl GmailApi {
             Err(e) => Err(e),
         }
     }
+
+    /// Saves `raw` as a new draft, in `thread` if given. Returns the draft
+    /// and its message.
+    pub async fn create_draft(
+        &self,
+        raw: &[u8],
+        thread: Option<&str>,
+        priority: Priority,
+    ) -> Result<DraftRef> {
+        let v = self
+            .client
+            .post("/drafts", &draft_body(None, raw, thread), priority)
+            .await?;
+        draft_ref(&v)
+    }
+
+    /// Replaces a draft's message with `raw`. Gmail gives it a new message
+    /// ID.
+    pub async fn update_draft(
+        &self,
+        draft: &str,
+        raw: &[u8],
+        thread: Option<&str>,
+        priority: Priority,
+    ) -> Result<DraftRef> {
+        let v = self
+            .client
+            .request(
+                Method::PUT,
+                &format!("/drafts/{}", enc(draft)),
+                Some(&draft_body(Some(draft), raw, thread)),
+                priority,
+            )
+            .await?;
+        draft_ref(&v)
+    }
+
+    /// The draft whose message is `message`, if there is one.
+    pub async fn find_draft(&self, message: &str, priority: Priority) -> Result<Option<String>> {
+        let mut token: Option<String> = None;
+        loop {
+            let mut path = "/drafts?maxResults=500".to_string();
+            if let Some(t) = &token {
+                path.push_str(&format!("&pageToken={}", enc(t)));
+            }
+            let v = self.client.get(&path, priority).await?;
+            for d in v["drafts"].as_array().into_iter().flatten() {
+                if d["message"]["id"].as_str() == Some(message) {
+                    return Ok(d["id"].as_str().map(str::to_string));
+                }
+            }
+            match v["nextPageToken"].as_str() {
+                Some(t) => token = Some(t.to_string()),
+                None => return Ok(None),
+            }
+        }
+    }
+
+    /// Sends a draft as it is; returns the sent message's ID.
+    pub async fn send_draft(&self, draft: &str, priority: Priority) -> Result<String> {
+        let v = self
+            .client
+            .post("/drafts/send", &json!({"id": draft}), priority)
+            .await?;
+        v["id"]
+            .as_str()
+            .map(str::to_string)
+            .ok_or_else(|| Error::Decode("sent message without an id".into()))
+    }
+
+    /// The account's send-as addresses.
+    pub async fn send_as(&self, priority: Priority) -> Result<Vec<SendAs>> {
+        let v = self.client.get("/settings/sendAs", priority).await?;
+        Ok(serde_json::from_value(v["sendAs"].clone()).unwrap_or_default())
+    }
+}
+
+/// A draft and its current message.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DraftRef {
+    /// Draft ID (stays the same).
+    pub id: String,
+    /// Message ID (changes on every update).
+    pub message: String,
+}
+
+/// A send-as address (`users.settings.sendAs`).
+#[derive(Clone, Debug, Default, PartialEq, Eq, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SendAs {
+    /// The address.
+    pub send_as_email: String,
+    /// Display name.
+    #[serde(default)]
+    pub display_name: String,
+    /// The account's own address.
+    #[serde(default)]
+    pub is_primary: bool,
+    /// `accepted` once verified; absent for the primary address.
+    #[serde(default)]
+    pub verification_status: Option<String>,
+}
+
+impl SendAs {
+    /// Whether Gmail sends from it as it is (otherwise it rewrites From).
+    pub fn usable(&self) -> bool {
+        self.is_primary || self.verification_status.as_deref() == Some("accepted")
+    }
+}
+
+fn draft_body(id: Option<&str>, raw: &[u8], thread: Option<&str>) -> serde_json::Value {
+    let mut message = json!({
+        "raw": base64::engine::general_purpose::URL_SAFE_NO_PAD.encode(raw),
+    });
+    if let Some(t) = thread {
+        message["threadId"] = json!(t);
+    }
+    let mut v = json!({"message": message});
+    if let Some(id) = id {
+        v["id"] = json!(id);
+    }
+    v
+}
+
+fn draft_ref(v: &serde_json::Value) -> Result<DraftRef> {
+    match (v["id"].as_str(), v["message"]["id"].as_str()) {
+        (Some(id), Some(m)) => Ok(DraftRef {
+            id: id.to_string(),
+            message: m.to_string(),
+        }),
+        _ => Err(Error::Decode("draft without an id".into())),
+    }
 }
 
 /// Gmail's base64url, padded or not.

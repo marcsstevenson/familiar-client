@@ -15,15 +15,22 @@
 //!   and deleting one deletes the labels, after which the label sync moves
 //!   their mail to the folders it is still in.
 //!
-//! Gmail drafts and sending are WP G.7; until then those ops fail with their
-//! local change undone. Gmail can't delete mail for good with Familiar's
-//! scope, so that is refused when planned.
+//! Drafts and sending (WP G.7) are whole MIME messages built by Familiar
+//! (`familiar_provider_gmail::Outgoing`): a draft update starts from the
+//! draft Gmail has; a reply carries `In-Reply-To` and the thread ID; a
+//! forward carries the original's files. A From that isn't a verified
+//! send-as address is refused before sending, rather than letting Gmail
+//! rewrite it. Gmail has no send later in its API, so that is refused.
+//! Gmail can't delete mail for good with Familiar's scope, so that is
+//! refused when planned.
 
 use std::sync::Arc;
 use std::time::Duration;
 
+use base64::Engine as _;
+use familiar_core::compose::{AttachmentData, DraftOp, DraftUpdateOp, Recipient, ResponseKind};
 use familiar_core::ops::{OpPayload, OpResult, finish_local};
-use familiar_provider_gmail::{GmailApi, GmailSync};
+use familiar_provider_gmail::{GmailApi, GmailSync, Mailbox, Outgoing, Part, parts_of};
 use familiar_provider_graph::{Error, Priority};
 use familiar_store::{
     ALL_MAIL_REMOTE_ID, AccountId, Folder, FolderId, LOCAL_REMOTE_PREFIX, MessageId, NewAudit, Op,
@@ -34,9 +41,9 @@ use tokio::sync::{Notify, watch};
 use crate::ops::{Failure, OpSignals, classify, fail_op};
 use crate::policy::{Clock, SyncPolicy};
 
-/// Why a draft or send op fails for now.
-pub const GMAIL_NO_COMPOSE: &str =
-    "Gmail drafts and sending come in a later update of Familiar; nothing was sent";
+/// Why a send later fails on Gmail.
+pub const GMAIL_NO_SEND_LATER: &str = "Gmail can't hold a message to send later through its API; \
+     send it now or keep the draft";
 
 /// One Gmail account's op runner.
 pub struct GmailOps {
@@ -249,6 +256,191 @@ impl GmailOps {
         Ok(())
     }
 
+    fn local_message(&self, id: i64) -> Result<familiar_store::Message, Error> {
+        self.w
+            .write(|tx| tx.message(MessageId(id)))?
+            .ok_or_else(|| Error::NotFound(format!("message {id} is no longer in the store")))
+    }
+
+    /// The Gmail thread a message is in, if Gmail has it.
+    fn thread_of(&self, id: i64) -> Result<Option<String>, Error> {
+        Ok(self
+            .w
+            .write(|tx| tx.conversation_of(MessageId(id)))?
+            .filter(|t| !t.starts_with(LOCAL_REMOTE_PREFIX)))
+    }
+
+    fn own_address(&self) -> Result<Mailbox, Error> {
+        let acc = self.account;
+        let a = self
+            .w
+            .write(|tx| tx.accounts())?
+            .into_iter()
+            .find(|a| a.id == acc)
+            .ok_or_else(|| Error::NotFound(format!("account {}", acc.0)))?;
+        Ok((a.display_name, a.email))
+    }
+
+    /// Points the local draft at its new Gmail message.
+    fn set_remote(&self, local: i64, remote: &str) {
+        let r = self
+            .w
+            .write(|tx| tx.set_message_remote_id(MessageId(local), remote));
+        if let Err(e) = r {
+            crate::log(&format!(
+                "{}: draft {local} is now {remote}, but: {e}",
+                self.key
+            ));
+        }
+    }
+
+    async fn create_draft(&self, d: &DraftOp) -> Result<OpResult, Error> {
+        let pr = Priority::User;
+        let mut o = Outgoing {
+            from: d.from.as_ref().map_or_else(
+                || self.own_address(),
+                |r| Ok((r.name.clone(), r.address.clone())),
+            )?,
+            to: mailboxes(&d.to),
+            cc: mailboxes(&d.cc),
+            bcc: mailboxes(&d.bcc),
+            subject: d.subject.clone(),
+            html: d.html.clone(),
+            importance: d.importance.clone(),
+            ..Outgoing::default()
+        };
+        let mut thread = None;
+        if let Some((orig, kind)) = d.respond_to {
+            let orig = self.local_message(orig)?;
+            if kind == ResponseKind::Forward {
+                o.parts = parts_of(&self.api.raw(&orig.remote_id, pr).await?);
+            } else {
+                if let Some(mid) = &orig.internet_message_id {
+                    let mid = mid
+                        .trim_start_matches('<')
+                        .trim_end_matches('>')
+                        .to_string();
+                    o.in_reply_to = Some(mid.clone());
+                    o.references = vec![mid];
+                }
+                thread = self.thread_of(orig.id.0)?;
+            }
+        }
+        o.parts.extend(d.attachments.iter().map(part_of));
+        let r = self
+            .api
+            .create_draft(&o.build(), thread.as_deref(), pr)
+            .await?;
+        self.set_remote(d.message, &r.message);
+        Ok(OpResult {
+            message_remote_id: Some(r.message),
+            ..OpResult::default()
+        })
+    }
+
+    /// Gmail replaces a draft whole, so the update starts from the draft
+    /// Gmail has and changes what the op changes.
+    async fn update_draft(&self, u: &DraftUpdateOp) -> Result<OpResult, Error> {
+        let pr = Priority::User;
+        let m = self.local_message(u.message)?;
+        if m.remote_id.starts_with(LOCAL_REMOTE_PREFIX) {
+            return Err(Error::NotFound("the draft was never saved to Gmail".into()));
+        }
+        let mut o = Outgoing::from_raw(&self.api.raw(&m.remote_id, pr).await?);
+        if let Some(f) = &u.from {
+            o.from = (f.name.clone(), f.address.clone());
+        }
+        if let Some(s) = &u.subject {
+            o.subject = s.clone();
+        }
+        if let Some(h) = &u.html {
+            o.html = h.clone();
+        }
+        if let Some(v) = &u.to {
+            o.to = mailboxes(v);
+        }
+        if let Some(v) = &u.cc {
+            o.cc = mailboxes(v);
+        }
+        if let Some(v) = &u.bcc {
+            o.bcc = mailboxes(v);
+        }
+        o.parts.retain(|p| !u.remove_attachments.contains(&p.name));
+        // Inline images the body no longer shows go; ones it has stay once.
+        let html = o.html.clone();
+        o.parts.retain(|p| match (&p.content_id, p.inline) {
+            (Some(cid), true) => html.contains(&format!("cid:{cid}")),
+            _ => true,
+        });
+        for a in &u.attachments {
+            let dup = a.inline
+                && o.parts
+                    .iter()
+                    .any(|p| p.inline && p.content_id == a.content_id);
+            if !dup {
+                o.parts.push(part_of(a));
+            }
+        }
+        let draft = self
+            .api
+            .find_draft(&m.remote_id, pr)
+            .await?
+            .ok_or_else(|| Error::NotFound("the draft is no longer in Gmail".into()))?;
+        let r = self
+            .api
+            .update_draft(
+                &draft,
+                &o.build(),
+                self.thread_of(u.message)?.as_deref(),
+                pr,
+            )
+            .await?;
+        self.set_remote(u.message, &r.message);
+        Ok(OpResult {
+            message_remote_id: Some(r.message),
+            ..OpResult::default()
+        })
+    }
+
+    async fn send_draft(&self, message: i64, internet_id: Option<&str>) -> Result<(), Error> {
+        let pr = Priority::User;
+        let m = self.local_message(message)?;
+        let (_, own) = self.own_address()?;
+        if !m.from.addr.eq_ignore_ascii_case(&own) {
+            let ok = self
+                .api
+                .send_as(pr)
+                .await?
+                .iter()
+                .any(|s| s.usable() && s.send_as_email.eq_ignore_ascii_case(&m.from.addr));
+            if !ok {
+                return Err(final_error(&format!(
+                    "{} isn't a verified send-as address in Gmail, so Gmail would send \
+                     from {own} instead; nothing was sent",
+                    m.from.addr
+                )));
+            }
+        }
+        match self.api.find_draft(&m.remote_id, pr).await? {
+            Some(d) => {
+                self.api.send_draft(&d, pr).await?;
+                Ok(())
+            }
+            None => {
+                // A retry after a send whose answer was lost: it went if
+                // Gmail has it in Sent.
+                if let Some(id) = internet_id {
+                    let id = id.trim_start_matches('<').trim_end_matches('>');
+                    let q = format!("in:sent rfc822msgid:{id}");
+                    if !self.api.search(&q, 1, pr).await?.is_empty() {
+                        return Ok(());
+                    }
+                }
+                Err(Error::NotFound("the draft is no longer in Gmail".into()))
+            }
+        }
+    }
+
     async fn send(&self, p: &OpPayload) -> Result<OpResult, Error> {
         let pr = Priority::User;
         match p {
@@ -309,8 +501,18 @@ impl GmailOps {
                     "Familiar can't delete Gmail mail for good; Gmail empties Trash itself",
                 ));
             }
-            OpPayload::CreateDraft(_) | OpPayload::UpdateDraft(_) | OpPayload::SendDraft { .. } => {
-                return Err(final_error(GMAIL_NO_COMPOSE));
+            OpPayload::CreateDraft(d) => return self.create_draft(d).await,
+            OpPayload::UpdateDraft(u) => return self.update_draft(u).await,
+            OpPayload::SendDraft {
+                message,
+                internet_message_id,
+                send_at,
+            } => {
+                if send_at.is_some() {
+                    return Err(final_error(GMAIL_NO_SEND_LATER));
+                }
+                self.send_draft(*message, internet_message_id.as_deref())
+                    .await?
             }
             OpPayload::CreateEvent(_)
             | OpPayload::UpdateEvent(_)
@@ -322,6 +524,24 @@ impl GmailOps {
             }
         }
         Ok(OpResult::default())
+    }
+}
+
+fn mailboxes(v: &[Recipient]) -> Vec<Mailbox> {
+    v.iter()
+        .map(|r| (r.name.clone(), r.address.clone()))
+        .collect()
+}
+
+fn part_of(a: &AttachmentData) -> Part {
+    Part {
+        name: a.name.clone(),
+        content_type: a.content_type.clone(),
+        inline: a.inline,
+        content_id: a.content_id.clone(),
+        data: base64::engine::general_purpose::STANDARD
+            .decode(&a.content_b64)
+            .unwrap_or_default(),
     }
 }
 
