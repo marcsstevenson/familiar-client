@@ -214,8 +214,10 @@ pub fn status_at(
                     detail: l.and_then(|l| l.detail.clone()),
                     first_sync_done,
                     folders: folders.len() as i64,
-                    messages: folders.iter().map(|f| f.total).sum(),
-                    unread: folders.iter().map(|f| f.unread).sum(),
+                    // Counted per message: a Gmail message is in several
+                    // folders (its labels and All Mail).
+                    messages: stats.messages,
+                    unread: stats.unread,
                     bodies: stats.with_body,
                     bodies_missing: stats.window_missing,
                     pinned: stats.pinned,

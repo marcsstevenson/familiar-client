@@ -420,6 +420,8 @@ pub struct BodyStats {
     pub cached: i64,
     /// Stored (compressed) bytes of the cached bodies.
     pub cached_bytes: i64,
+    /// Unread messages, each counted once however many folders it is in.
+    pub unread: i64,
 }
 
 /// What [`crate::WriteTx::evict_cached_bodies`] dropped.

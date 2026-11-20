@@ -398,7 +398,8 @@ pub(crate) fn body_stats(c: &Connection, account: AccountId, since: i64) -> Resu
                 coalesce(sum(m.body_hash IS NULL AND m.received_at >= ?2), 0),
                 coalesce(sum(m.body_pinned), 0),
                 coalesce(sum(m.body_cached_at IS NOT NULL AND m.body_hash IS NOT NULL), 0),
-                coalesce(sum(CASE WHEN m.body_cached_at IS NOT NULL THEN b.stored_size END), 0)
+                coalesce(sum(CASE WHEN m.body_cached_at IS NOT NULL THEN b.stored_size END), 0),
+                coalesce(sum(m.is_read = 0), 0)
            FROM messages m LEFT JOIN bodies b ON b.hash = m.body_hash
           WHERE m.account_id = ?1",
     )?;
@@ -410,6 +411,7 @@ pub(crate) fn body_stats(c: &Connection, account: AccountId, since: i64) -> Resu
             pinned: r.get(3)?,
             cached: r.get(4)?,
             cached_bytes: r.get(5)?,
+            unread: r.get(6)?,
         })
     })?)
 }

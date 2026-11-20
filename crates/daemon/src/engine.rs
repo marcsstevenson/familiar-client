@@ -253,8 +253,13 @@ impl Engine {
         Reader::open(&self.w.paths().root)
     }
 
+    /// Enters `phase`. The detail belongs to the failure that ended the last
+    /// round, so it goes too.
     fn phase(&self, phase: SyncPhase) {
-        self.shared.update(|l| l.phase = phase);
+        self.shared.update(|l| {
+            l.phase = phase;
+            l.detail = None;
+        });
     }
 
     /// Runs until the daemon shuts down.
