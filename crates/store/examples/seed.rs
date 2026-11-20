@@ -5,6 +5,10 @@
 //! ```sh
 //! cargo run --release -p familiar-store --example seed -- <data dir>/store 500000
 //! ```
+//!
+//! With `gmail` after the count, the "home" account is set up like a Gmail
+//! one: it has All Mail, and about a third of its messages carry a second
+//! label (WP G.2).
 
 use familiar_store::*;
 
@@ -44,6 +48,7 @@ fn main() {
         std::process::exit(2);
     };
     let count: usize = count.parse().expect("message count");
+    let gmail = args.next().as_deref() == Some("gmail");
     let mut w = Writer::open(std::path::Path::new(&root)).expect("open store");
     let mut rng = Rng(7);
     let now = 1_793_000_000_i64;
@@ -72,6 +77,9 @@ fn main() {
                 f("Drafts", Some("drafts"), None)?;
                 f("Sent Items", Some("sentitems"), None)?;
                 f("Deleted Items", Some("deleteditems"), None)?;
+                if gmail && key == "home" {
+                    tx.ensure_all_mail(a)?;
+                }
                 Ok((a, vec![inbox, inbox, inbox, archive, club]))
             })
             .expect("folders");
@@ -88,7 +96,7 @@ fn main() {
                 let first = FIRST[rng.below(FIRST.len())];
                 let last = LAST[rng.below(LAST.len())];
                 let topic = TOPICS[rng.below(TOPICS.len())];
-                tx.upsert_message(&NewMessage {
+                let id = tx.upsert_message(&NewMessage {
                     account: *account,
                     folder,
                     remote_id: format!("m{i}"),
@@ -112,6 +120,13 @@ fn main() {
                     ),
                     ..Default::default()
                 })?;
+                if gmail && *account == targets[0].0 {
+                    let mut labels = vec![folder];
+                    if rng.below(3) == 0 {
+                        labels.push(folders[rng.below(folders.len())]);
+                    }
+                    tx.set_message_folders(id, &labels)?;
+                }
             }
             Ok(())
         })

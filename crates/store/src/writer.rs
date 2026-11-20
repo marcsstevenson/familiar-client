@@ -2,6 +2,7 @@
 //! The single writer.
 
 use crate::bodies::{self, BodyHash};
+use crate::conversation::{ALL_MAIL, ALL_MAIL_REMOTE_ID, DRAFTS, SENT_ITEMS, TRASH_FOLDERS};
 use crate::migrate::{self, MIGRATIONS};
 use crate::model::*;
 use crate::query;
@@ -187,6 +188,10 @@ impl Writer {
     /// Recomputes every derived row and counter from `messages` and returns
     /// the number that were wrong (and are now fixed). Zero is expected;
     /// the store-versus-server check (WP 1.12) runs this first.
+    ///
+    /// `message_folders` is checked against `messages` first (each message
+    /// in its primary folder, copied columns equal), then counters and
+    /// `folder_threads` are recounted from it.
     pub fn repair_derived(&mut self) -> Result<usize> {
         let tx = self
             .conn
@@ -194,13 +199,21 @@ impl Writer {
         let wrong = derived_drift(&tx)?;
         if wrong > 0 {
             tx.execute_batch(
-                "UPDATE folders SET
-                   total  = (SELECT count(*) FROM messages m WHERE m.folder_id = folders.id),
-                   unread = (SELECT count(*) FROM messages m WHERE m.folder_id = folders.id AND m.is_read = 0);
+                "DELETE FROM message_folders
+                  WHERE message_id NOT IN (SELECT id FROM messages);
+                 INSERT OR IGNORE INTO message_folders (message_id, folder_id, thread_id, received_at, is_read)
+                 SELECT id, folder_id, thread_id, received_at, is_read FROM messages;
+                 UPDATE message_folders SET (thread_id, received_at, is_read) =
+                   (SELECT thread_id, received_at, is_read FROM messages m
+                     WHERE m.id = message_folders.message_id);
+                 UPDATE folders SET
+                   total  = (SELECT count(*) FROM message_folders mf WHERE mf.folder_id = folders.id),
+                   unread = (SELECT count(*) FROM message_folders mf
+                              WHERE mf.folder_id = folders.id AND mf.is_read = 0);
                  DELETE FROM folder_threads;
                  INSERT INTO folder_threads
-                 SELECT folder_id, thread_id, max(received_at), id, count(*), sum(is_read = 0)
-                   FROM messages GROUP BY folder_id, thread_id;
+                 SELECT folder_id, thread_id, max(received_at), message_id, count(*), sum(is_read = 0)
+                   FROM message_folders GROUP BY folder_id, thread_id;
                  UPDATE threads SET (message_count, unread_count, last_received_at, last_message_id) =
                    (SELECT count(*), coalesce(sum(is_read = 0), 0), max(received_at), id
                       FROM messages WHERE thread_id = threads.id);
@@ -216,12 +229,20 @@ impl Writer {
 pub(crate) fn derived_drift(c: &Connection) -> Result<usize> {
     let n: i64 = c.query_row(
         "SELECT
-           (SELECT count(*) FROM folders f WHERE
-               f.total  != (SELECT count(*) FROM messages m WHERE m.folder_id = f.id) OR
-               f.unread != (SELECT count(*) FROM messages m WHERE m.folder_id = f.id AND m.is_read = 0))
+           (SELECT count(*) FROM messages m WHERE NOT EXISTS
+               (SELECT 1 FROM message_folders mf
+                 WHERE mf.message_id = m.id AND mf.folder_id = m.folder_id))
+         + (SELECT count(*) FROM message_folders mf WHERE NOT EXISTS
+               (SELECT 1 FROM messages m
+                 WHERE m.id = mf.message_id AND m.thread_id = mf.thread_id
+                   AND m.received_at = mf.received_at AND m.is_read = mf.is_read))
+         + (SELECT count(*) FROM folders f WHERE
+               f.total  != (SELECT count(*) FROM message_folders mf WHERE mf.folder_id = f.id) OR
+               f.unread != (SELECT count(*) FROM message_folders mf
+                             WHERE mf.folder_id = f.id AND mf.is_read = 0))
          + (SELECT count(*) FROM (
                SELECT folder_id, thread_id, max(received_at) t, count(*) n, sum(is_read = 0) u
-                 FROM messages GROUP BY folder_id, thread_id
+                 FROM message_folders GROUP BY folder_id, thread_id
                EXCEPT
                SELECT folder_id, thread_id, last_received_at, message_count, unread_count
                  FROM folder_threads))
@@ -230,7 +251,7 @@ pub(crate) fn derived_drift(c: &Connection) -> Result<usize> {
                  FROM folder_threads
                EXCEPT
                SELECT folder_id, thread_id, max(received_at), count(*), sum(is_read = 0)
-                 FROM messages GROUP BY folder_id, thread_id))
+                 FROM message_folders GROUP BY folder_id, thread_id))
          + (SELECT count(*) FROM threads t WHERE
                t.message_count != (SELECT count(*) FROM messages m WHERE m.thread_id = t.id) OR
                t.unread_count  != (SELECT count(*) FROM messages m WHERE m.thread_id = t.id AND m.is_read = 0) OR
@@ -621,6 +642,95 @@ impl WriteTx<'_> {
             })?;
         }
         Ok(())
+    }
+
+    /// Puts a message in exactly these folders of its account (Gmail
+    /// labels), keeping folder counters, threads and search in step.
+    ///
+    /// When the account has an All Mail folder (see
+    /// [`WriteTx::ensure_all_mail`]) the message is in it as well, unless it
+    /// is in Deleted Items or Junk Email, as on Gmail. The message's primary
+    /// location (`Message::folder`) becomes, in order: Deleted Items, Junk
+    /// Email, Drafts, Inbox, Sent Items, the first other folder given, All
+    /// Mail. Drafts comes before Inbox because core checks such as "is this
+    /// a draft" read the primary folder.
+    ///
+    /// A Graph message is only ever in one folder; use
+    /// [`WriteTx::move_message`] for it.
+    pub fn set_message_folders(&self, id: MessageId, folders: &[FolderId]) -> Result<()> {
+        let m = query::require(query::message_by_id(self.c(), id)?, || {
+            format!("message {}", id.0)
+        })?;
+        let all = query::folders(self.c(), m.account)?;
+        let mut chosen: Vec<&Folder> = Vec::new();
+        for f in folders {
+            let folder = all.iter().find(|x| x.id == *f).ok_or_else(|| {
+                Error::NotFound(format!("folder {} in account {}", f.0, m.account.0))
+            })?;
+            if !chosen.iter().any(|c| c.id == folder.id) {
+                chosen.push(folder);
+            }
+        }
+        let wk = |f: &Folder, name: &str| f.well_known.as_deref() == Some(name);
+        let trashed = chosen
+            .iter()
+            .any(|f| TRASH_FOLDERS.iter().any(|t| wk(f, t)));
+        if let Some(a) = all.iter().find(|f| wk(f, ALL_MAIL)) {
+            if !trashed && !chosen.iter().any(|c| c.id == a.id) {
+                chosen.push(a);
+            }
+        }
+        const FIRST: [&str; 5] = ["deleteditems", "junkemail", DRAFTS, "inbox", SENT_ITEMS];
+        let primary = FIRST
+            .iter()
+            .find_map(|name| chosen.iter().find(|f| wk(f, name)))
+            .or_else(|| chosen.iter().find(|f| !wk(f, ALL_MAIL)))
+            .or_else(|| chosen.first())
+            .ok_or_else(|| Error::NotFound(format!("a folder for message {}", id.0)))?
+            .id;
+
+        // Moving the primary location first moves its row; then the other
+        // rows are made to match.
+        self.tx.execute(
+            "UPDATE messages SET folder_id = ?2 WHERE id = ?1 AND folder_id != ?2",
+            params![id, primary],
+        )?;
+        let list = serde_json::to_string(&chosen.iter().map(|f| f.id.0).collect::<Vec<_>>())?;
+        self.tx.execute(
+            "DELETE FROM message_folders
+              WHERE message_id = ?1 AND folder_id NOT IN (SELECT value FROM json_each(?2))",
+            params![id, list],
+        )?;
+        self.tx.execute(
+            "INSERT OR IGNORE INTO message_folders (message_id, folder_id, thread_id, received_at, is_read)
+             SELECT m.id, j.value, m.thread_id, m.received_at, m.is_read
+               FROM messages m, json_each(?2) j WHERE m.id = ?1",
+            params![id, list],
+        )?;
+        Ok(())
+    }
+
+    /// Every folder message `id` is in, primary location first.
+    pub fn message_folders(&self, id: MessageId) -> Result<Vec<FolderId>> {
+        query::message_folders(self.c(), id)
+    }
+
+    /// The account's All Mail folder, made if it doesn't exist yet. It is a
+    /// local folder with no server label: once it exists,
+    /// [`WriteTx::set_message_folders`] keeps every message that isn't in
+    /// the trash or junk in it, so archived Gmail mail with no label of its
+    /// own can still be browsed. Graph accounts don't have one.
+    pub fn ensure_all_mail(&self, account: AccountId) -> Result<FolderId> {
+        if let Some(f) = query::folder_by_remote(self.c(), account, ALL_MAIL_REMOTE_ID)? {
+            return Ok(f.id);
+        }
+        self.upsert_folder(&NewFolder {
+            account,
+            remote_id: ALL_MAIL_REMOTE_ID.into(),
+            parent: None,
+            name: "All Mail".into(),
+            well_known: Some(ALL_MAIL.into()),
+        })
     }
 
     /// The conversation ID of a message's thread.

@@ -151,9 +151,9 @@ pub(crate) fn folder_messages(
 ) -> Result<Vec<Message>> {
     let (t, id) = after.map_or((i64::MAX, i64::MAX), |k| (k.received_at, k.id));
     let mut s = c.prepare_cached(&format!(
-        "SELECT {MESSAGE_COLS} FROM messages m
-          WHERE m.folder_id = ?1 AND (m.received_at, m.id) < (?2, ?3)
-          ORDER BY m.received_at DESC, m.id DESC LIMIT ?4"
+        "SELECT {MESSAGE_COLS} FROM message_folders mf JOIN messages m ON m.id = mf.message_id
+          WHERE mf.folder_id = ?1 AND (mf.received_at, mf.message_id) < (?2, ?3)
+          ORDER BY mf.received_at DESC, mf.message_id DESC LIMIT ?4"
     ))?;
     Ok(s.query_map(params![folder, t, id, limit as i64], message)?
         .collect::<Result<_, _>>()?)
@@ -169,10 +169,10 @@ pub(crate) fn folder_messages_filtered(
 ) -> Result<Vec<Message>> {
     let (t, id) = after.map_or((i64::MAX, i64::MAX), |k| (k.received_at, k.id));
     let mut s = c.prepare_cached(&format!(
-        "SELECT {MESSAGE_COLS} FROM messages m
-          WHERE m.folder_id = ?1 AND (m.received_at, m.id) < (?2, ?3)
-            AND (?5 = 0 OR m.is_read = 0) AND (?6 = 0 OR m.is_flagged = 1)
-          ORDER BY m.received_at DESC, m.id DESC LIMIT ?4"
+        "SELECT {MESSAGE_COLS} FROM message_folders mf JOIN messages m ON m.id = mf.message_id
+          WHERE mf.folder_id = ?1 AND (mf.received_at, mf.message_id) < (?2, ?3)
+            AND (?5 = 0 OR mf.is_read = 0) AND (?6 = 0 OR m.is_flagged = 1)
+          ORDER BY mf.received_at DESC, mf.message_id DESC LIMIT ?4"
     ))?;
     Ok(s.query_map(
         params![
@@ -524,12 +524,12 @@ pub(crate) fn message_order(
 ) -> Result<Vec<(MessageId, i64)>> {
     let mut out = Vec::new();
     // One indexed scan per folder, merged by time, keeps each query on
-    // messages_folder_time and avoids a sort over the whole table.
+    // message_folders_time and avoids a sort over the whole table.
     for f in folders {
         let mut s = c.prepare_cached(
-            "SELECT m.id, m.received_at FROM messages m
-              WHERE m.folder_id = ?1 AND (?2 = 0 OR m.is_read = 0)
-              ORDER BY m.received_at DESC, m.id DESC",
+            "SELECT message_id, received_at FROM message_folders
+              WHERE folder_id = ?1 AND (?2 = 0 OR is_read = 0)
+              ORDER BY received_at DESC, message_id DESC",
         )?;
         let rows = s.query_map(params![f, unread_only], |r| {
             Ok((MessageId(r.get(0)?), r.get::<_, i64>(1)?))
@@ -540,6 +540,8 @@ pub(crate) fn message_order(
     }
     if folders.len() > 1 {
         out.sort_unstable_by_key(|&(id, at)| std::cmp::Reverse((at, id)));
+        // A message in two of the folders (two Gmail labels) is listed once.
+        out.dedup_by_key(|&mut (id, _)| id);
     }
     Ok(out)
 }
@@ -558,8 +560,8 @@ pub(crate) fn message_sort_text(
     let mut out = Vec::new();
     for f in folders {
         let mut s = c.prepare_cached(&format!(
-            "SELECT m.id, {col} FROM messages m
-              WHERE m.folder_id = ?1 AND (?2 = 0 OR m.is_read = 0)"
+            "SELECT m.id, {col} FROM message_folders mf JOIN messages m ON m.id = mf.message_id
+              WHERE mf.folder_id = ?1 AND (?2 = 0 OR mf.is_read = 0)"
         ))?;
         let rows = s.query_map(params![f, unread_only], |r| {
             Ok((MessageId(r.get(0)?), r.get::<_, String>(1)?))
@@ -568,5 +570,21 @@ pub(crate) fn message_sort_text(
             out.push(r?);
         }
     }
+    if folders.len() > 1 {
+        // A message in two of the folders (two Gmail labels) is listed once.
+        let mut seen = std::collections::HashSet::new();
+        out.retain(|(id, _)| seen.insert(*id));
+    }
     Ok(out)
+}
+
+/// Every folder message `id` is in: its primary location first, then the
+/// others by folder ID. Empty if there is no such message.
+pub(crate) fn message_folders(c: &Connection, id: MessageId) -> Result<Vec<FolderId>> {
+    let mut s = c.prepare_cached(
+        "SELECT mf.folder_id FROM message_folders mf JOIN messages m ON m.id = mf.message_id
+          WHERE mf.message_id = ?1
+          ORDER BY mf.folder_id != m.folder_id, mf.folder_id",
+    )?;
+    Ok(s.query_map([id], |r| r.get(0))?.collect::<Result<_, _>>()?)
 }

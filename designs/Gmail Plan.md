@@ -277,6 +277,26 @@ What it settles:
 - **Signatures stay in config.** Gmail holds none for either send-as address, so WP 4.6 has nothing to import, and the account's `new` and `reply` signatures are written in `config.toml` as for the Microsoft accounts.
 - **Aliases come from Gmail.** The second send-as address is read at sign-in, so the account needs no `aliases` in config.
 
+## G.2 results (20 Nov 2026)
+
+Schema version 8 adds `message_folders (message_id, folder_id, thread_id, received_at, is_read)`. Folder counters and `folder_threads` are now derived from it; `threads` still comes from `messages`. Graph messages have exactly one row, kept in step with `messages.folder_id` by triggers. Gmail code calls `WriteTx::set_message_folders(message, &labels)` after `upsert_message`; the store adds All Mail (a local folder made by `WriteTx::ensure_all_mail`, well-known name `allmail`) unless the message is in Trash or Spam, and picks the primary folder: Deleted Items, Junk, Drafts, Inbox, Sent Items, the first other label, All Mail. `folder:` search indexes every folder a message is in.
+
+Measured in the cloud on the synthetic 500k-message store (`seed` and the new `folder_bench` example; two Graph-style accounts, biggest folder 150,080 messages):
+
+| | main before | G.2 |
+| --- | --- | --- |
+| Load 500k messages | 17.9 s | 19.9 s |
+| Upgrade an existing 500k store to v8 | | 1.0 s, once |
+| First page, flat / threaded (p95) | 0.11 / 0.25 ms | 0.12 / 0.24 ms |
+| Order the biggest folder, all / unread (p50) | 17 / 54 ms | 12 / 6 ms |
+| Order the unified Inbox (p50) | 43 ms | 35 ms |
+| Mark read, one message (p50) | 0.08 ms | 0.17 ms |
+| Store size | 181 MB | 214 MB |
+
+The GUI perf job (`scripts/bench-gui.sh`) passed every limit on both builds, with the same numbers within run-to-run noise (list open p95 43 ms on main, 44 to 68 ms over three runs of G.2; `is:unread` 69 ms on both after a rerun). A Gmail-style store (one account with All Mail and a second label on a third of its messages, 797k folder rows) reads as fast; `set_message_folders` costs about 0.3 ms a message, so a first sync of a very large Gmail mailbox spends a little over a minute per 250k messages on it.
+
+Left for later: `move_message` on a multi-label message moves only the primary location (Gmail moves are G.6); the full conversation view (`Reader::conversation`) still marks a message sent only from its primary folder and copies, so a message in Inbox and Sent shows as not sent there although the folder list's `has_sent` is right (G.10); the correspondents triggers read only the primary folder.
+
 ## Phasing
 
 Gmail is on the design doc's "Later" list, and Phase 3's gate (a week of daily mail in the app) is in progress. Starting the provider boundary and the store change while that week runs would mean refactoring the code Marc is testing, so the proposed order is:

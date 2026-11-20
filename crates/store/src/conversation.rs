@@ -27,6 +27,11 @@ use std::collections::HashMap;
 pub const SENT_ITEMS: &str = "sentitems";
 /// Well-known folder name for drafts.
 pub const DRAFTS: &str = "drafts";
+/// Well-known name of the local All Mail folder that holds every Gmail
+/// message outside the trash. See [`crate::WriteTx::ensure_all_mail`].
+pub const ALL_MAIL: &str = "allmail";
+/// Server ID of the All Mail folder. Gmail has no label for it.
+pub const ALL_MAIL_REMOTE_ID: &str = "familiar:all-mail";
 /// Well-known folder names whose messages count as thrown away.
 pub const TRASH_FOLDERS: [&str; 2] = ["deleteditems", "junkemail"];
 
@@ -259,23 +264,25 @@ pub(crate) fn conversation(c: &Connection, thread: ThreadId) -> Result<Option<Co
     let rows = query::thread_messages(c, thread)?;
     let last_received_at = rows.iter().map(|m| m.received_at).max().unwrap_or(0);
 
-    // Per-folder counts, before merging copies.
+    // Per-folder counts, before merging copies. A message in several
+    // folders (Gmail labels) counts in each.
     let mut per_folder: Vec<ConversationFolder> = Vec::new();
-    for m in &rows {
-        match per_folder.iter_mut().find(|f| f.folder == m.folder) {
-            Some(f) => f.count += 1,
-            None => {
-                let fi = info(m.folder);
-                per_folder.push(ConversationFolder {
-                    folder: m.folder,
-                    name: fi.map(|f| f.name.clone()).unwrap_or_default(),
-                    well_known: fi.and_then(|f| f.well_known.clone()),
-                    count: 1,
-                });
-            }
-        }
+    let mut s = c.prepare_cached(
+        "SELECT folder_id, count(*) FROM message_folders WHERE thread_id = ?1
+          GROUP BY folder_id ORDER BY folder_id",
+    )?;
+    for row in s.query_map([thread], |r| {
+        Ok((r.get::<_, FolderId>(0)?, r.get::<_, i64>(1)? as usize))
+    })? {
+        let (folder, count) = row?;
+        let fi = info(folder);
+        per_folder.push(ConversationFolder {
+            folder,
+            name: fi.map(|f| f.name.clone()).unwrap_or_default(),
+            well_known: fi.and_then(|f| f.well_known.clone()),
+            count,
+        });
     }
-    per_folder.sort_by_key(|f| f.folder);
 
     // Group copies by Internet Message-ID; a message without one stands alone.
     let mut groups: Vec<Vec<Message>> = Vec::new();
@@ -396,8 +403,8 @@ pub(crate) fn folder_conversations(
                 ft.message_count, ft.unread_count, th.message_count, th.unread_count,
                 fm.subject,
                 lm.id, lm.folder_id, lm.from_name, lm.from_addr, lm.received_at, lm.preview,
-                EXISTS (SELECT 1 FROM folders sf JOIN messages sm
-                          ON sm.thread_id = ft.thread_id AND sm.folder_id = sf.id
+                EXISTS (SELECT 1 FROM folders sf JOIN message_folders smf
+                          ON smf.thread_id = ft.thread_id AND smf.folder_id = sf.id
                          WHERE sf.account_id = th.account_id AND sf.well_known = 'sentitems'),
                 EXISTS (SELECT 1 FROM messages am
                          WHERE am.thread_id = ft.thread_id AND am.has_attachments = 1)

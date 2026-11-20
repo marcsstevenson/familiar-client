@@ -51,7 +51,7 @@ pub struct Fields {
     pub id: Field,
     /// Local account ID.
     pub account: Field,
-    /// Local folder ID.
+    /// Local folder IDs: every folder the message is in.
     pub folder: Field,
     /// Received time, Unix seconds.
     pub received: Field,
@@ -207,7 +207,15 @@ impl Indexer {
         let mut d = TantivyDocument::default();
         d.add_u64(f.id, m.id.0 as u64);
         d.add_u64(f.account, m.account.0 as u64);
-        d.add_u64(f.folder, m.folder.0 as u64);
+        // Every folder the message is in (one per Gmail label), so
+        // `folder:` matches any of them.
+        let folders = r.message_folders(m.id)?;
+        if folders.is_empty() {
+            d.add_u64(f.folder, m.folder.0 as u64);
+        }
+        for id in folders {
+            d.add_u64(f.folder, id.0 as u64);
+        }
         d.add_i64(f.received, m.received_at);
         d.add_u64(f.attachment, u64::from(m.has_attachments));
         d.add_text(f.subject, &m.subject);
