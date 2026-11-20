@@ -1,4 +1,5 @@
-import { For, Match, Show, Switch, batch, createMemo, createResource, createSignal, onCleanup, onMount } from "solid-js";
+import { For, Match, Show, Switch, batch, createEffect, createMemo, createResource, createSignal, onCleanup, onMount } from "solid-js";
+import { readSession, writeSession } from "../session";
 import type { CalEvent } from "../../../../../bindings/commands";
 import { isCommandError, run } from "../api";
 import { onStoreChanged } from "../list/api";
@@ -28,7 +29,8 @@ function errorText(error: unknown) {
 export function DayPanel(props: { full: boolean; expand: () => void; onClose: () => void }) {
   const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const [now, setNow] = createSignal(Date.now());
-  const [date, setDate] = createSignal(localDate(new Date()));
+  const location = readSession<{ date: string; event?: number }>("calendar");
+  const [date, setDate] = createSignal(location?.date ?? localDate(new Date()));
   const [catalogue, { refetch: refreshCalendars }] = createResource(() => run("cal.calendars", {}));
   const saved = preferences();
   const [fullView, setFullView] = createSignal<CalendarView>(saved.view);
@@ -49,7 +51,8 @@ export function DayPanel(props: { full: boolean; expand: () => void; onClose: ()
   }
   function chooseView(v: CalendarView) { setFullView(v); remember(); }
   const [slot, setSlot] = createSignal<{ date: string; endDate?: string; time: string; zone: string }>();
-  const [selected, select] = createSignal<number>();
+  const [selected, select] = createSignal<number | undefined>(location?.event);
+  createEffect(() => writeSession("calendar", { date: date(), event: selected() }));
   const writable = createMemo(() => calendars().filter(c => c.can_edit));
   const visible = createMemo(() => (result()?.events ?? [])
     .filter(e => !e.cancelled && !hidden().includes(e.calendar_id)));

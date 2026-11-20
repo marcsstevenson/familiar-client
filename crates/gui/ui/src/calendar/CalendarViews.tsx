@@ -2,6 +2,14 @@ import { For, Show, createMemo, createSignal, onMount, type JSX } from "solid-js
 import type { CalEvent } from "../../../../../bindings/commands";
 import { dateWords } from "./proposals";
 import { localDate, nextDate, onDay, timedBlocks } from "./timeline";
+import { readSession, writeSession } from "../session";
+
+function calendarScroller(el: HTMLElement, defaultTop = 0) {
+  const view = el.className;
+  const saved = readSession<{ view: string; top: number }>("calendarScroll");
+  el.scrollTop = saved?.view === view ? saved.top : defaultTop;
+  el.addEventListener("scroll", () => writeSession("calendarScroll", { view, top: el.scrollTop }));
+}
 
 type ViewProps = {
   dates: string[]; events: CalEvent[]; date: string;
@@ -23,7 +31,7 @@ export function TimeView(props: ViewProps & {
 }) {
   let scroll!: HTMLDivElement;
   onMount(() => {
-    scroll.scrollTop = (props.dates.includes(localDate(new Date())) ? Math.max(0, new Date().getHours() - 1) : 8) * 64;
+    calendarScroller(scroll, (props.dates.includes(localDate(new Date())) ? Math.max(0, new Date().getHours() - 1) : 8) * 64);
   });
   const week = () => props.dates.length > 1;
   // Use the longest day's labels across columns. This leaves a gap for skipped
@@ -74,9 +82,11 @@ function timeLabel(e: CalEvent, date: string) {
 }
 
 export function AgendaView(props: ViewProps) {
+  let scroll!: HTMLDivElement;
+  onMount(() => calendarScroller(scroll));
   const groups = createMemo(() => props.dates.map(date => ({ date, events: props.events.filter(e => onDay(e, date)) }))
     .filter(g => g.events.length));
-  return <div class="calendar-agenda"><For each={groups()} fallback={<p>No events in this range.</p>}>{g =>
+  return <div class="calendar-agenda" ref={scroll}><For each={groups()} fallback={<p>No events in this range.</p>}>{g =>
     <section><h3>{dateWords(g.date)}</h3><div><For each={g.events}>{e => props.card(e, timeLabel(e, g.date))}</For></div></section>
   }</For></div>;
 }
@@ -113,6 +123,7 @@ export function MonthView(props: ViewProps & {
   const weeks = createMemo(() => props.dates.filter((_, i) => i % 7 === 0).map((_, i) => props.dates.slice(7 * i, 7 * i + 7)));
   const [drag, setDrag] = createSignal<{ anchor: string; over: string; time: string; pointer: number }>();
   let month!: HTMLDivElement;
+  onMount(() => calendarScroller(month));
   function startTime(cell: HTMLElement, y: number) {
     const rect = cell.getBoundingClientRect();
     const fraction = Math.max(0, Math.min(1, (y - rect.top) / rect.height));

@@ -24,6 +24,7 @@ export type Theme = "system" | "light" | "dark";
 export type Platform = "windows" | "macos" | "linux";
 
 export type UiInfo = {
+  session_store: string | null;
   version: string;
   platform: Platform | string;
   theme: Theme;

@@ -33,7 +33,12 @@ use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 use remote::TrustedSenders;
 
 #[tauri::command]
-pub async fn open_reader(app: AppHandle, message: i64, subject: String) -> Result<(), String> {
+pub async fn open_reader(
+    app: AppHandle,
+    message: i64,
+    subject: String,
+    focus: Option<bool>,
+) -> Result<(), String> {
     let label = format!("reader-{message}");
     if let Some(window) = app.get_webview_window(&label) {
         window.unminimize().map_err(|e| e.to_string())?;
@@ -42,6 +47,7 @@ pub async fn open_reader(app: AppHandle, message: i64, subject: String) -> Resul
     let url = format!("index.html#reader={message}");
     WebviewWindowBuilder::new(&app, label, WebviewUrl::App(url.into()))
         .title(subject)
+        .focused(focus.unwrap_or(true))
         .inner_size(820.0, 720.0)
         .min_inner_size(520.0, 400.0)
         .build()
