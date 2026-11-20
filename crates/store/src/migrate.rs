@@ -57,6 +57,11 @@ pub const MIGRATIONS: &[Migration] = &[
         name: "snoozes",
         sql: include_str!("../migrations/0007_snoozes.sql"),
     },
+    Migration {
+        version: 8,
+        name: "messages in many folders",
+        sql: include_str!("../migrations/0008_message_folders.sql"),
+    },
 ];
 
 /// The schema version this build reads and writes.
@@ -122,7 +127,7 @@ mod tests {
         let mut c = mem();
         assert_eq!(
             migrate(&mut c, MIGRATIONS).unwrap(),
-            vec![1, 2, 3, 4, 5, 6, 7]
+            vec![1, 2, 3, 4, 5, 6, 7, 8]
         );
         assert_eq!(version(&c).unwrap(), SCHEMA_VERSION);
         assert_eq!(
@@ -138,6 +143,7 @@ mod tests {
                 "events",
                 "folder_threads",
                 "folders",
+                "message_folders",
                 "messages",
                 "ops",
                 "search_queue",
@@ -154,7 +160,7 @@ mod tests {
                 |r| r.get(0),
             )
             .unwrap();
-        assert_eq!(triggers, 8);
+        assert_eq!(triggers, 13);
     }
 
     #[test]
@@ -189,6 +195,46 @@ mod tests {
             )
             .unwrap();
         assert_eq!(colour, "blue");
+    }
+
+    #[test]
+    fn version_8_puts_existing_messages_in_their_folders() {
+        let mut c = mem();
+        migrate(&mut c, &MIGRATIONS[..7]).unwrap();
+        c.execute_batch(
+            "INSERT INTO accounts (id, key, email, created_at) VALUES (1, 'hotmail', 'a@b', 0);
+             INSERT INTO folders (id, account_id, remote_id, name) VALUES (1, 1, 'in', 'Inbox'),
+                                                                          (2, 1, 'old', 'Old');
+             INSERT INTO threads (id, account_id, conversation_id) VALUES (1, 1, 'c1');
+             INSERT INTO messages (account_id, folder_id, thread_id, remote_id, received_at, is_read)
+             VALUES (1, 1, 1, 'm1', 10, 0), (1, 1, 1, 'm2', 20, 1), (1, 2, 1, 'm3', 30, 0);",
+        )
+        .unwrap();
+        assert_eq!(migrate(&mut c, MIGRATIONS).unwrap(), vec![8]);
+        let rows: i64 = c
+            .query_row(
+                "SELECT count(*) FROM message_folders mf JOIN messages m
+                    ON m.id = mf.message_id AND m.folder_id = mf.folder_id",
+                [],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(rows, 3);
+        assert_eq!(crate::writer::derived_drift(&c).unwrap(), 0);
+        // The new triggers keep it that way.
+        c.execute_batch(
+            "UPDATE messages SET folder_id = 2 WHERE remote_id = 'm1';
+             UPDATE messages SET is_read = 1 WHERE remote_id = 'm3';
+             DELETE FROM messages WHERE remote_id = 'm2';",
+        )
+        .unwrap();
+        assert_eq!(crate::writer::derived_drift(&c).unwrap(), 0);
+        let (total, unread): (i64, i64) = c
+            .query_row("SELECT total, unread FROM folders WHERE id = 2", [], |r| {
+                Ok((r.get(0)?, r.get(1)?))
+            })
+            .unwrap();
+        assert_eq!((total, unread), (2, 1));
     }
 
     #[test]

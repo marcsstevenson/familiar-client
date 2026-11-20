@@ -181,6 +181,12 @@ impl Reader {
         conversation::folder_conversations(&self.conn, folder, after, limit)
     }
 
+    /// Every folder message `id` is in, primary location first. A Graph
+    /// message is in one; a Gmail message is in one per label, plus All Mail.
+    pub fn message_folders(&self, id: MessageId) -> Result<Vec<FolderId>> {
+        query::message_folders(&self.conn, id)
+    }
+
     /// A message by ID.
     pub fn message(&self, id: MessageId) -> Result<Option<Message>> {
         query::message_by_id(&self.conn, id)
