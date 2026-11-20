@@ -8,6 +8,7 @@ import { type Row, type Sort, listIndexOf, listOpen, listRows, onStoreChanged } 
 import { shortDate, snoozeLabel } from "./format";
 import { MessageMenu } from "./MessageMenu";
 import { openReader } from "../reading/api";
+import { readSession, writeSession } from "../session";
 
 export const ROW_H = 64;
 const PAGE = 100;
@@ -27,8 +28,21 @@ export function MessageList() {
   const [total, setTotal] = createSignal(0);
   const [scrollTop, setScrollTop] = createSignal(0);
   const [viewH, setViewH] = createSignal(600);
-  const [sort, setSort] = createSignal<Sort>("newest");
-  const [unreadOnly, setUnreadOnly] = createSignal(false);
+  const saved = readSession<{ sort: Sort; unread: boolean }>("list");
+  const [sort, setSort] = createSignal<Sort>(saved?.sort ?? "newest");
+  const [unreadOnly, setUnreadOnly] = createSignal(saved?.unread ?? false);
+  let initialTop = readSession<number>("listTop");
+  function restoreTop(top: number) {
+    if (!scroller.clientHeight) {
+      initialTop = top;
+      return;
+    }
+    scroller.scrollTop = top;
+    initialTop = undefined;
+    setScrollTop(scroller.scrollTop);
+    writeSession("listTop", scroller.scrollTop);
+  }
+  createEffect(() => writeSession("list", { sort: sort(), unread: unreadOnly() }));
   const [selIndex, setSelIndex] = createSignal<number | null>(null);
   const [error, setError] = createSignal<string | null>(null);
   const [rev, setRev] = createSignal(0);
@@ -150,9 +164,9 @@ export function MessageList() {
         shiftTimer = setTimeout(() => setShiftFrom(null), 200);
       }
       setTotal(n);
-      if (!keepScroll) {
-        scroller.scrollTop = 0;
-        setScrollTop(0);
+      const restored = initialTop !== undefined;
+      if (!keepScroll || restored) {
+        restoreTop(initialTop ?? 0);
       }
       const sel = focusId();
       const ix = sel === null ? null : await listIndexOf(sel);
@@ -176,7 +190,12 @@ export function MessageList() {
       // then the selection already has its new place.
       if (focusId() === sel) {
         setSelIndex(ix);
-        if (ix !== null && !keepScroll) scrollIntoView(ix);
+        if (ix !== null) {
+          if (!keepScroll && !restored) scrollIntoView(ix);
+          // The reader's actions need its row even when the list was left
+          // several pages away from the open message.
+          void loadPage(Math.floor(ix / PAGE));
+        }
       }
       setRev((x) => x + 1);
       prefetch();
@@ -271,6 +290,7 @@ export function MessageList() {
 
   onMount(async () => {
     const ro = new ResizeObserver(() => {
+      if (initialTop !== undefined && total() > 0 && scroller.clientHeight) restoreTop(initialTop);
       setViewH(scroller.clientHeight);
       prefetch();
     });
@@ -508,7 +528,9 @@ export function MessageList() {
         aria-label="Messages"
         aria-activedescendant={selIndex() === null ? undefined : `msg-${selIndex()}`}
         onScroll={(e) => {
+          if (!e.currentTarget.clientHeight) return;
           setScrollTop(e.currentTarget.scrollTop);
+          writeSession("listTop", e.currentTarget.scrollTop);
           prefetch();
         }}
         onKeyDown={onKeyDown}

@@ -22,7 +22,7 @@ export function openCompose(spec: ComposeSpec): Promise<void> {
 }
 
 /** The spec this window was opened with, if it is a compose window. */
-export function composeSpec(): ComposeSpec | null {
+export function composeSpec(): ComposeSpec | { kind: "resume"; editor: string } | null {
   const m = /^#compose=(.*)$/.exec(window.location.hash);
   if (!m?.[1]) return null;
   try {

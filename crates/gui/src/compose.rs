@@ -102,13 +102,14 @@ static NEXT_WINDOW: AtomicU32 = AtomicU32::new(1);
 /// commands on the main thread, which WebView2 needs to build the window: a
 /// sync command there never returns and hangs every later IPC call.
 #[tauri::command]
-pub async fn open_compose(app: AppHandle, spec: Value) -> Result<(), String> {
+pub async fn open_compose(app: AppHandle, spec: Value, focus: Option<bool>) -> Result<(), String> {
     let n = NEXT_WINDOW.fetch_add(1, Ordering::Relaxed);
     let json = spec.to_string();
     let url = format!("index.html#compose={}", percent_encode(&json));
     let builder =
         WebviewWindowBuilder::new(&app, format!("compose-{n}"), WebviewUrl::App(url.into()))
             .title("New message")
+            .focused(focus.unwrap_or(true))
             .inner_size(820.0, 720.0)
             .min_inner_size(520.0, 400.0);
     #[cfg(target_os = "macos")]

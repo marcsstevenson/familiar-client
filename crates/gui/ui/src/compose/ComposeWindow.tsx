@@ -4,7 +4,7 @@
 // `draft.send`, which waits out the undo-send delay in famd's queue.
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { For, Show, createMemo, createSignal, onCleanup, onMount } from "solid-js";
+import { For, Show, createEffect, createMemo, createSignal, onCleanup, onMount } from "solid-js";
 import { type CommandError, isCommandError, run, type UiInfo } from "../api";
 import { TitleBar } from "../TitleBar";
 import { openMessage } from "../reading/api";
@@ -15,10 +15,8 @@ import { bodyOf, htmlToText, isBlank, ownSignature, plainToRich, serialize, setS
 import { type ComposeInfo, type FileInfo, type Identity, composeInfo, fileInfo, pickFiles } from "./ipc";
 import { type RecipientField, Recipients, addressOf, looksValid } from "./Recipients";
 import type { ComposeSpec } from "./spec";
+import { type Field, type SigChoice, type WorkingCopy, rememberEditor } from "./recovery";
 import "./compose.css";
-
-type SigChoice = "new" | "reply" | "none";
-type Field = "from" | "to" | "cc" | "bcc" | "subject" | "body";
 
 const MAX_IMAGE = 3 * 1024 * 1024;
 const AUTOSAVE_MS = 4000;
@@ -31,8 +29,9 @@ function sizeText(n: number): string {
   return n < 1024 ? `${n} B` : n < 1024 * 1024 ? `${Math.round(n / 1024)} KB` : `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
 
-export function ComposeWindow(props: { info: UiInfo; spec: ComposeSpec }) {
+export function ComposeWindow(props: { info: UiInfo; spec: ComposeSpec; editorId?: string; recovered?: WorkingCopy }) {
   const win = getCurrentWindow();
+  const editorId = props.editorId ?? crypto.randomUUID();
   let editor: HTMLDivElement | undefined;
 
   const [settings, setSettings] = createSignal<ComposeInfo>({ identities: [], send_delay_seconds: 10, config_error: null });
@@ -48,6 +47,11 @@ export function ComposeWindow(props: { info: UiInfo; spec: ComposeSpec }) {
   const [to, setTo] = createSignal<string[]>([]);
   const [cc, setCc] = createSignal<string[]>([]);
   const [bcc, setBcc] = createSignal<string[]>([]);
+  const [pending, setPending] = createSignal({ to: "", cc: "", bcc: "" });
+  const recipientInput = (field: RecipientField) => ({
+    get pending() { return pending()[field]; },
+    onPending: (text: string) => setPending(p => ({ ...p, [field]: text })),
+  });
   const [showCc, setShowCc] = createSignal(false);
   const [showBcc, setShowBcc] = createSignal(false);
   const [subject, setSubject] = createSignal("");
@@ -77,6 +81,18 @@ export function ComposeWindow(props: { info: UiInfo; spec: ComposeSpec }) {
   let saving: Promise<void> = Promise.resolve();
   let timer: number | undefined;
   let closing = false;
+  const [revision, setRevision] = createSignal(0);
+  createEffect(() => {
+    revision();
+    if (loading() || fatal() || closing) return;
+    void rememberEditor(editorId, {
+      spec: props.spec, draftId: draftId(), account: account(), from: from(),
+      to: to(), cc: cc(), bcc: bcc(), pending: pending(), showCc: showCc(), showBcc: showBcc(),
+      subject: subject(), mode: mode(), body: mode() === "rich" ? editor!.innerHTML : plain(),
+      signature: sig(), attachments: attachments(), remindDays: remindDays(),
+      edited: [...edited], removals: [...removals], dirty: generation !== savedGeneration, sending: sending(),
+    }).catch(e => setProblem("Couldn't save the editor for restart: " + errorText(e)));
+  });
 
   const identity = (key = account()): Identity | undefined =>
     settings().identities.find((i) => i.key.toLowerCase() === key?.toLowerCase());
@@ -99,6 +115,7 @@ export function ComposeWindow(props: { info: UiInfo; spec: ComposeSpec }) {
   const touch = (...fields: Field[]) => {
     fields.forEach((f) => edited.add(f));
     generation++;
+    setRevision(n => n + 1);
     setStatus("");
     clearTimeout(timer);
     timer = window.setTimeout(() => void save(), AUTOSAVE_MS);
@@ -126,8 +143,7 @@ export function ComposeWindow(props: { info: UiInfo; spec: ComposeSpec }) {
     if (id === null && blank()) return;
     const fresh = attachments().filter((a) => a.path !== undefined);
     const attach = fresh.map((a) => a.path!);
-    const removing = removals;
-    removals = [];
+    const removing = [...removals];
     setStatus("Saving.");
     setInFlight(true);
     try {
@@ -159,13 +175,14 @@ export function ComposeWindow(props: { info: UiInfo; spec: ComposeSpec }) {
         });
       }
       // Files are on the draft now; they need no path from here on.
+      removals = removals.slice(removing.length);
       setAttachments((list) => list.map((a) => (fresh.includes(a) ? { name: a.name, size: a.size } : a)));
       if (generation === gen) edited.clear();
       savedGeneration = gen;
+      setRevision(n => n + 1);
       setProblem(null);
       setStatus("Saved");
     } catch (e) {
-      removals = [...removing, ...removals];
       setStatus("");
       setProblem(`Not saved: ${errorText(e)}`);
       throw e;
@@ -210,7 +227,29 @@ export function ComposeWindow(props: { info: UiInfo; spec: ComposeSpec }) {
       const info = await composeInfo();
       setSettings(info);
       const spec = props.spec;
-      if (spec.kind === "new") {
+      const copy = props.recovered;
+      if (copy) {
+        setDraftId(copy.draftId);
+        setOpened(spec.kind === "draft");
+        setAccount(copy.account);
+        setFrom(copy.from);
+        setTo(copy.to);
+        setCc(copy.cc);
+        setBcc(copy.bcc);
+        setPending(copy.pending);
+        setShowCc(copy.showCc);
+        setShowBcc(copy.showBcc);
+        setSubject(copy.subject);
+        setMode(copy.mode);
+        if (copy.mode === "rich") editor!.innerHTML = bodyOf(copy.body);
+        else setPlain(copy.body);
+        setSig(copy.signature);
+        setAttachments(copy.attachments);
+        setRemindDays(copy.remindDays);
+        removals = copy.removals;
+        setSending(copy.sending);
+        if (copy.dirty && !copy.sending) touch(...copy.edited);
+      } else if (spec.kind === "new") {
         const ids = info.identities;
         const pick = spec.account ? ids.find((i) => i.key === spec.account || i.email === spec.account) : ids[0];
         setAccount(pick?.key ?? spec.account ?? null);
@@ -472,7 +511,7 @@ export function ComposeWindow(props: { info: UiInfo; spec: ComposeSpec }) {
   const tick = window.setInterval(() => {
     setNow(Date.now());
     const s = sending();
-    if (s && Date.now() >= s.at) void finish();
+    if (s && Date.now() >= s.at && !closing) void finish();
   }, 250);
   onCleanup(() => {
     clearInterval(tick);
@@ -481,6 +520,7 @@ export function ComposeWindow(props: { info: UiInfo; spec: ComposeSpec }) {
 
   async function finish() {
     closing = true;
+    await rememberEditor(editorId);
     await win.destroy();
   }
 
@@ -496,23 +536,20 @@ export function ComposeWindow(props: { info: UiInfo; spec: ComposeSpec }) {
       setProblem(`Not discarded: ${errorText(e)}`);
       return;
     }
-    await win.destroy();
+    await finish();
   }
 
   // --- window events --------------------------------------------------------
 
   onMount(async () => {
     const stopClose = await win.onCloseRequested(async (e) => {
-      if (closing || fatal() || sending()) return;
-      if (dirty() || (draftId() === null && !blank())) {
-        e.preventDefault();
-        try {
-          await save();
-          closing = true;
-          await win.destroy();
-        } catch {
-          // The problem shows in the window; it stays open.
-        }
+      e.preventDefault();
+      try {
+        if (!loading() && !fatal() && !sending() && (dirty() || (draftId() === null && !blank()))) await save();
+        await finish();
+      } catch (err) {
+        closing = false;
+        setProblem(errorText(err));
       }
     });
     const stopDrop = await getCurrentWebview().onDragDropEvent(async (e) => {
@@ -628,12 +665,12 @@ export function ComposeWindow(props: { info: UiInfo; spec: ComposeSpec }) {
               <button type="button" class="link" data-recipient-field="bcc" onClick={() => setShowBcc(true)}>Bcc</button>
             </Show>
           </div>
-          <Recipients label="To" onMove={(r, dest) => moveRecipient("to", dest, r)} value={to()} account={account() ?? undefined} autofocus={props.spec.kind === "new" && !props.spec.to?.length} onChange={(v) => { setTo(v); touch("to"); }} />
+          <Recipients {...recipientInput("to")} label="To" onMove={(r, dest) => moveRecipient("to", dest, r)} value={to()} account={account() ?? undefined} autofocus={props.spec.kind === "new" && !props.spec.to?.length} onChange={(v) => { setTo(v); touch("to"); }} />
           <Show when={showCc()}>
-            <Recipients label="Cc" onMove={(r, dest) => moveRecipient("cc", dest, r)} value={cc()} account={account() ?? undefined} onChange={(v) => { setCc(v); touch("cc"); }} />
+            <Recipients {...recipientInput("cc")} label="Cc" onMove={(r, dest) => moveRecipient("cc", dest, r)} value={cc()} account={account() ?? undefined} onChange={(v) => { setCc(v); touch("cc"); }} />
           </Show>
           <Show when={showBcc()}>
-            <Recipients label="Bcc" onMove={(r, dest) => moveRecipient("bcc", dest, r)} value={bcc()} account={account() ?? undefined} onChange={(v) => { setBcc(v); touch("bcc"); }} />
+            <Recipients {...recipientInput("bcc")} label="Bcc" onMove={(r, dest) => moveRecipient("bcc", dest, r)} value={bcc()} account={account() ?? undefined} onChange={(v) => { setBcc(v); touch("bcc"); }} />
           </Show>
           <div class="compose-field">
             <label class="compose-label" for="compose-subject">Subject</label>

@@ -253,7 +253,7 @@ export function ReadingPane(props: { standalone?: boolean }) {
                   <div class="reading-wait">{loading() ? "Downloading the message…" : "The body isn't on this device."}</div>
                 }
               >
-                {(html) => <MessageFrame html={html()} dark={dark()} onHover={setHover} onOpen={open} onLoad={loaded}
+                {(html) => <MessageFrame message={m().id} standalone={props.standalone} html={html()} dark={dark()} onHover={setHover} onOpen={open} onLoad={loaded}
                   onQuote={(index, action) => openCompose({ kind: "quoted", message: m().id, index, action })
                     .catch((e) => setStatus(`Couldn't open the draft: ${errorText(e)}`))} />}
               </Show>

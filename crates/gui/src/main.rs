@@ -44,6 +44,8 @@ struct View {
 /// Facts the front end needs before it draws anything.
 #[derive(Debug, Serialize)]
 struct UiInfo {
+    /// Store whose local IDs the desktop session refers to.
+    session_store: Option<std::path::PathBuf>,
     version: &'static str,
     /// `windows`, `macos` or `linux`: picks the title bar style.
     platform: &'static str,
@@ -122,6 +124,9 @@ fn ui_info() -> UiInfo {
         None => ("system", Default::default(), Vec::new(), Default::default()),
     };
     UiInfo {
+        session_store: familiar_core::daemon::DaemonPaths::resolve()
+            .ok()
+            .map(|p| p.store),
         version: env!("CARGO_PKG_VERSION"),
         platform: std::env::consts::OS,
         theme,
@@ -314,6 +319,13 @@ fn main() {
     tauri::Builder::default()
         .manage(std::sync::Arc::new(Registry::builtin()))
         .manage(daemon::Shared::default())
+        .on_window_event(|window, event| {
+            // Closing the main window ends the session with its readers and
+            // editors still open. Their working state is saved as it changes.
+            if window.label() == "main" && matches!(event, tauri::WindowEvent::Destroyed) {
+                window.app_handle().exit(0);
+            }
+        })
         .plugin(tauri_plugin_dialog::init())
         .plugin(
             tauri_plugin_window_state::Builder::new()

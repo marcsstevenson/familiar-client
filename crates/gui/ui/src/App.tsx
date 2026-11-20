@@ -2,7 +2,7 @@
 // Each pane is its own component folder; they share selection through state.ts.
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { Show, createSignal, onCleanup, onMount } from "solid-js";
+import { Show, createEffect, createSignal, onCleanup, onMount } from "solid-js";
 import { registerBuiltinActions } from "./actions/builtin";
 import { onGlobalKey, setKeyOverrides } from "./actions/registry";
 import { type DaemonState, type UiInfo, watchDaemon } from "./api";
@@ -20,6 +20,8 @@ import { Splitters, paneColumns } from "./Splitters";
 import { TitleBar } from "./TitleBar";
 
 import { SyncStatus } from "./SyncStatus";
+import { followUpView, notify, searchQuery, selectedFolder, selectedMessage } from "./state";
+import { flushEditorWrites, readSession, writeSession } from "./session";
 
 /** What `fam ui` asks the window to show (crates/gui/src/ui_socket.rs). */
 type UiCommand =
@@ -27,13 +29,27 @@ type UiCommand =
   | { kind: "folder"; folder: number | null };
 
 export function App(props: { info: UiInfo }) {
-  const [calendarOpen, setCalendarOpen] = createSignal(false);
-  const [fullCalendar, setFullCalendar] = createSignal(false);
+  const saved = readSession<{ folder: number | null; message: number | null; query: string | null;
+    followUp: boolean; calendar: "mail" | "panel" | "full" }>("navigation");
+  setSelectedFolder(saved?.folder ?? null);
+  setSelectedMessage(saved?.message ?? null);
+  setSearchQuery(saved?.query ?? null);
+  setFollowUpView(saved?.followUp ?? false);
+  const [calendarOpen, setCalendarOpen] = createSignal(saved?.calendar === "panel" || saved?.calendar === "full");
+  const [fullCalendar, setFullCalendar] = createSignal(saved?.calendar === "full");
+  createEffect(() => writeSession("navigation", {
+    folder: selectedFolder(), message: selectedMessage(), query: searchQuery(), followUp: followUpView(),
+    calendar: fullCalendar() ? "full" : calendarOpen() ? "panel" : "mail",
+  }));
   let calendarToggle!: HTMLButtonElement;
   function toggleCalendar() {
     setFullCalendar(false);
     setCalendarOpen(!calendarOpen());
-    if (!calendarOpen()) calendarToggle.focus();
+    if (!calendarOpen()) {
+      writeSession("calendar", undefined);
+      writeSession("calendarScroll", undefined);
+      calendarToggle.focus();
+    }
   }
   const [daemon, setDaemon] = createSignal<DaemonState>({ state: "starting" });
   // The palette: closed, open on the list, or open on one command's form.
@@ -105,7 +121,8 @@ export function App(props: { info: UiInfo }) {
         <Show when={configChanged()}>
           <span>
             config.toml changed.{" "}
-            <button class="statusbar-button" onClick={() => void invoke("restart_app")}>
+            <button class="statusbar-button" onClick={() => void flushEditorWrites().then(() => invoke("restart_app"))
+              .catch(e => notify("Couldn't restart: " + e, true))}>
               Restart
             </button>
           </span>

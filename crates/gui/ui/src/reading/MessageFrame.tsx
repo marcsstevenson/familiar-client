@@ -8,10 +8,13 @@ import { onGlobalKey } from "../actions/registry";
 import { DARK_FIRST_CSS, darken } from "./dark";
 import type { QuoteAction } from "../compose/spec";
 import { addQuotedActions } from "./quotedActions";
+import { readSession, writeSession } from "../session";
 
 export type HoverLink = { href: string; text: string } | null;
 
 export function MessageFrame(props: {
+  message: number;
+  standalone?: boolean;
   html: string;
   onHover: (l: HoverLink) => void;
   onOpen: (href: string) => void;
@@ -21,6 +24,7 @@ export function MessageFrame(props: {
   dark: boolean;
 }) {
   let frame!: HTMLIFrameElement;
+  let visibility: ResizeObserver | undefined;
 
   const linkOf = (t: EventTarget | null): HTMLAnchorElement | null => {
     let el = t as Element | null;
@@ -34,10 +38,39 @@ export function MessageFrame(props: {
   };
 
   const attach = () => {
+    visibility?.disconnect();
     const doc = frame.contentDocument;
     if (!doc) return;
     if (props.dark) darken(doc);
     addQuotedActions(doc, props.onQuote, props.dark);
+    const id = props.message;
+    const key = props.standalone ? "readerScroll/" + id : "readingScroll";
+    const page = doc.scrollingElement;
+    if (page) {
+      // A cached body awaiting inline images can be shorter than the final
+      // document. Its clamped restore must not replace the original offset.
+      let restoredTop: number | undefined;
+      let visible = false;
+      const restore = () => {
+        const showing = frame.clientHeight > 0;
+        if (showing && !visible) {
+          const saved = readSession<{ id: number; top: number }>(key);
+          if (saved?.id === id) {
+            page.scrollTop = saved.top;
+            restoredTop = page.scrollTop;
+          }
+        }
+        visible = showing;
+      };
+      restore();
+      visibility = new ResizeObserver(restore);
+      visibility.observe(frame);
+      doc.addEventListener("scroll", () => {
+        if (!visible || !frame.clientHeight || page.scrollTop === restoredTop) return;
+        restoredTop = undefined;
+        writeSession(key, { id, top: page.scrollTop });
+      });
+    }
     // Keys pressed while the body has focus don't reach the app's window.
     doc.addEventListener("keydown", onGlobalKey);
     doc.addEventListener("mouseover", (e) => {
@@ -68,7 +101,7 @@ export function MessageFrame(props: {
   createEffect(() => {
     frame.srcdoc = props.dark ? props.html.replace("</head>", `<style>${DARK_FIRST_CSS}</style></head>`) : props.html;
   });
-  onCleanup(() => props.onHover(null));
+  onCleanup(() => { visibility?.disconnect(); props.onHover(null); });
 
   return (
     <iframe

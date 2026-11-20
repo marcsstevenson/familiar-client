@@ -45,12 +45,15 @@ export function Recipients(props: {
   onMove: (mailbox: string, destination: RecipientField) => void;
   value: string[];
   onChange: (v: string[]) => void;
+  pending: string;
+  onPending: (text: string) => void;
   /** Search only this account's people. */
   account?: string;
   autofocus?: boolean;
 }) {
   let input!: HTMLInputElement;
-  const [text, setText] = createSignal("");
+  const text = () => props.pending;
+  const setText = props.onPending;
   const [people, setPeople] = createSignal<Person[]>([]);
   const [active, setActive] = createSignal(0);
   let timer: number | undefined;
