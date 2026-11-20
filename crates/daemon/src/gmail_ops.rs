@@ -212,6 +212,10 @@ impl GmailOps {
         let mut remove: Vec<&str> = Vec::new();
         if from.as_deref() == Some("TRASH") {
             self.api.untrash(&id, pr).await?;
+            // Trash shows a message there only, so it may still carry SPAM.
+            if to.as_deref() != Some("SPAM") {
+                remove.push("SPAM");
+            }
         } else if let Some(f) = from.as_deref() {
             remove.push(f);
         }
@@ -228,6 +232,13 @@ impl GmailOps {
         let all = self.folders()?;
         let mut todo = vec![FolderId(folder)];
         while let Some(f) = todo.pop() {
+            // A sub-folder still waiting to be created gets its path then.
+            let pending = all
+                .iter()
+                .any(|x| x.id == f && x.remote_id.starts_with(LOCAL_REMOTE_PREFIX));
+            if pending {
+                continue;
+            }
             if let Some(label) = self.label(&all, f.0)? {
                 self.api
                     .rename_label(&label, &path(&all, f), Priority::User)

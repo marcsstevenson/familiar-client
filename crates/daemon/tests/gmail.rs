@@ -351,6 +351,14 @@ async fn gmail_folders_are_labels() {
     })
     .await;
     assert!(env.gmail_label("Projects") && env.gmail_label("Projects/Kea"));
+    let refused = env
+        .write(WriteRequest::FolderCreate {
+            account: None,
+            name: "Projects".into(),
+            parent: Some("inbox".into()),
+        })
+        .await;
+    assert!(refused.is_err(), "{refused:?}");
 
     // Renaming renames the sub-labels too.
     env.write_ok(WriteRequest::FolderRename {

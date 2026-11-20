@@ -1078,6 +1078,7 @@ pub fn plan(tx: &WriteTx<'_>, req: &WriteRequest) -> Result<Vec<Planned>, Comman
                 .as_deref()
                 .map(|p| need_folder(&folders, p, &a.key))
                 .transpose()?;
+            refuse_gmail_parent(&a, parent)?;
             let clash = folders
                 .iter()
                 .any(|f| f.parent == parent.map(|p| p.id) && f.name.eq_ignore_ascii_case(name));
@@ -1143,6 +1144,7 @@ pub fn plan(tx: &WriteTx<'_>, req: &WriteRequest) -> Result<Vec<Planned>, Comman
                 .as_deref()
                 .map(|p| need_folder(&folders, p, &a.key))
                 .transpose()?;
+            refuse_gmail_parent(&a, dest)?;
             if let Some(d) = dest {
                 if is_under(&folders, d.id, f.id) {
                     return Err(CommandError::usage("a folder can't move into itself"));
@@ -1709,6 +1711,22 @@ fn refuse_well_known(f: &Folder, what: &str) -> Result<(), CommandError> {
         )));
     }
     Ok(())
+}
+
+/// Gmail labels nest only under other user labels, not Inbox or the like.
+fn refuse_gmail_parent(
+    a: &familiar_store::Account,
+    parent: Option<&Folder>,
+) -> Result<(), CommandError> {
+    match parent {
+        Some(p) if a.provider == "gmail" && p.well_known.is_some() => {
+            Err(CommandError::usage(format!(
+                "Gmail labels can't go inside {:?}; put it at the top level or in another label",
+                p.name
+            )))
+        }
+        _ => Ok(()),
+    }
 }
 
 /// Messages grouped by account, in first-seen order, so a folder created
