@@ -255,11 +255,33 @@ G.6 + WP 4.3 ──► G.11
 
 **Phase G gate:** Marc's Gmail account syncs completely, search is fast, the mail gate tasks (find a thread, save a draft) work on it through `fam`, and Marc uses it in the desktop app for a week. Calendar and contacts (G.8, G.9) follow the gate; G.0 and G.3 still ask for their scopes, so adding them needs no second sign-in.
 
+## G.0 results (20 Nov 2026)
+
+Marc ran `spikes/google-auth` against his personal Gmail account on his PC. Every check passed.
+
+| Check | Result |
+| --- | --- |
+| Sign-in (PKCE, loopback), unverified app in production | ok; every requested scope granted: `gmail.modify`, `gmail.send`, `gmail.settings.basic`, `calendar`, `contacts.readonly`, `contacts.other.readonly`, `openid`, `email`, `profile` |
+| `users.getProfile` | ok; 2,014 messages in 931 threads |
+| `labels.list` | ok; 15 system labels, 7 user labels |
+| `history.list`, `messages.list` | ok |
+| `settings/sendAs` | ok; 2 addresses, neither with a signature in Gmail |
+| `calendarList.list` | ok; 3 calendars |
+| `people.connections.list`, `otherContacts.list` | ok; 112 saved contacts |
+| Refresh, then `profile` again | ok, same scopes |
+
+What it settles:
+
+- **Route B works.** Google lets the unverified production app use the restricted Gmail scopes for its own owner, so no verification or CASA is needed for Marc. The rest of the plan holds.
+- **First sync is short.** At 2,014 messages, headers take about 7 minutes at the 6,000-unit budget, and bodies for the year follow. The large-mailbox estimates above don't apply to Marc's account.
+- **Signatures stay in config.** Gmail holds none for either send-as address, so WP 4.6 has nothing to import, and the account's `new` and `reply` signatures are written in `config.toml` as for the Microsoft accounts.
+- **Aliases come from Gmail.** The second send-as address is read at sign-in, so the account needs no `aliases` in config.
+
 ## Phasing
 
 Gmail is on the design doc's "Later" list, and Phase 3's gate (a week of daily mail in the app) is in progress. Starting the provider boundary and the store change while that week runs would mean refactoring the code Marc is testing, so the proposed order is:
 
-1. **Now:** WP G.0 only. It needs about 15 minutes of Marc's time and no Familiar code, and its answer (does the unverified production app work for restricted scopes, and do tokens last) decides whether the rest of the plan holds.
+1. **Done (20 Nov 2026):** WP G.0. The unverified production app works for restricted scopes (see G.0 results).
 2. **After the Phase 3 gate:** G.1 and G.2, the two refactors, while Familiar is otherwise stable.
 3. **Then:** G.3 to G.7 and G.10 (mail), before or alongside Phase 4, as Marc prefers. G.8 and G.9 (calendar and contacts) after the Phase G gate. G.11 waits for WP 4.3.
 
@@ -283,13 +305,13 @@ If Gmail matters more to Marc than Phase 4's calendar views and rules, Phase G c
 
 - **Account:** one personal `@gmail.com` account. Route B (Marc's own unverified production project) applies; the Workspace "Internal" route doesn't.
 - **Scope:** mail first; calendar and contacts later (G.8 and G.9 move after the Phase G gate).
+- **Mailbox size (from G.0, 20 Nov):** 2,014 messages in 931 threads.
 
 **Still open:**
 
 - **Public Gmail support?** Is "bring your own Google project" acceptable for the open source release, or should verification with CASA be budgeted for later?
 - **Inbox categories:** show all Inbox mail (the plan's default), or only Primary, as Gmail does on the web?
 - **When:** G.0 now and the rest after the Phase 3 gate, or a different order?
-- **Mailbox size:** G.0 reports the message count, which sets the first-sync estimate.
 
 ## Sources
 
