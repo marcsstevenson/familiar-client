@@ -103,6 +103,35 @@ export function Recipients(props: {
     highlighted?.classList.add("recipient-drop-target");
   };
   onCleanup(() => highlight(null));
+
+  // While a chip is dragged, a faded copy of it follows the pointer and the
+  // original dims. The copy appears only once the pointer has moved a few
+  // pixels, so a plain click on a chip shows nothing.
+  let drag: { chip: HTMLElement; x: number; y: number; dx: number; dy: number; ghost?: HTMLElement } | null = null;
+  const endDrag = () => {
+    if (!drag) return;
+    drag.ghost?.remove();
+    drag.chip.classList.remove("chip-dragging");
+    document.body.classList.remove("chip-drag-active");
+    drag = null;
+  };
+  onCleanup(endDrag);
+  const moveGhost = (e: PointerEvent) => {
+    if (!drag) return;
+    if (!drag.ghost) {
+      if (Math.hypot(e.clientX - drag.x, e.clientY - drag.y) < 4) return;
+      const ghost = drag.chip.cloneNode(true) as HTMLElement;
+      ghost.querySelector(".chip-remove")?.remove();
+      ghost.className = "chip chip-ghost";
+      ghost.removeAttribute("title");
+      ghost.setAttribute("aria-hidden", "true");
+      document.body.append(ghost);
+      drag.ghost = ghost;
+      drag.chip.classList.add("chip-dragging");
+      document.body.classList.add("chip-drag-active");
+    }
+    drag.ghost.style.transform = `translate(${e.clientX - drag.dx}px, ${e.clientY - drag.dy}px)`;
+  };
   const dropTarget = (e: PointerEvent) => {
     const target = document.elementFromPoint(e.clientX, e.clientY)?.closest<HTMLElement>("[data-recipient-field]");
     return target?.dataset.recipientField !== props.label.toLowerCase() ? target ?? null : null;
@@ -145,18 +174,27 @@ export function Recipients(props: {
               onPointerDown={(e) => {
                 if (e.isPrimary && e.button === 0 && !(e.target as Element).closest("button")) {
                   e.currentTarget.setPointerCapture(e.pointerId);
+                  const box = e.currentTarget.getBoundingClientRect();
+                  endDrag();
+                  drag = { chip: e.currentTarget, x: e.clientX, y: e.clientY, dx: e.clientX - box.left, dy: e.clientY - box.top };
                 }
               }}
               onPointerMove={(e) => {
-                if (e.currentTarget.hasPointerCapture(e.pointerId)) highlight(dropTarget(e));
+                if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
+                moveGhost(e);
+                highlight(dropTarget(e));
               }}
               onPointerUp={(e) => {
                 if (!e.currentTarget.hasPointerCapture(e.pointerId)) return;
                 const field = dropTarget(e)?.dataset.recipientField;
                 highlight(null);
+                endDrag();
                 if (field === "to" || field === "cc" || field === "bcc") props.onMove(r, field);
               }}
-              onLostPointerCapture={() => highlight(null)}
+              onLostPointerCapture={() => {
+                highlight(null);
+                endDrag();
+              }}
             >
               {chipText(r)}
               <button
