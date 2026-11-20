@@ -20,8 +20,8 @@ import { Splitters, paneColumns } from "./Splitters";
 import { TitleBar } from "./TitleBar";
 
 import { SyncStatus } from "./SyncStatus";
-import { followUpView, searchQuery, selectedFolder, selectedMessage } from "./state";
-import { readSession, writeSession } from "./session";
+import { followUpView, notify, searchQuery, selectedFolder, selectedMessage } from "./state";
+import { flushEditorWrites, readSession, writeSession } from "./session";
 
 /** What `fam ui` asks the window to show (crates/gui/src/ui_socket.rs). */
 type UiCommand =
@@ -121,7 +121,8 @@ export function App(props: { info: UiInfo }) {
         <Show when={configChanged()}>
           <span>
             config.toml changed.{" "}
-            <button class="statusbar-button" onClick={() => void invoke("restart_app")}>
+            <button class="statusbar-button" onClick={() => void flushEditorWrites().then(() => invoke("restart_app"))
+              .catch(e => notify("Couldn't restart: " + e, true))}>
               Restart
             </button>
           </span>

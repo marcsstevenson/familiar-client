@@ -27,16 +27,27 @@ export function readerWindows(): number[] {
 
 // An editor can contain several megabytes of inline images. IndexedDB keeps
 // these working copies off the localStorage quota and commits them separately.
-let editors: Promise<IDBDatabase> | undefined;
-export async function editorStore(mode: IDBTransactionMode) {
+let editors: IDBDatabase | undefined;
+export async function connectEditors() {
   if (!prefix) return;
-  editors ??= new Promise((resolve, reject) => {
+  editors = await new Promise<IDBDatabase>((resolve, reject) => {
     const open = indexedDB.open(prefix + "editors", 1);
     open.onupgradeneeded = () => open.result.createObjectStore("windows");
     open.onsuccess = () => resolve(open.result);
     open.onerror = () => reject(open.error);
   });
-  return (await editors).transaction("windows", mode).objectStore("windows");
+}
+
+export function editorStore(mode: IDBTransactionMode) {
+  return editors?.transaction("windows", mode).objectStore("windows");
+}
+
+// Working-copy transactions are opened in the input event's turn. A later
+// read on the same store (even in the main window) waits for all earlier
+// writes to commit, without transferring any of the message bodies.
+export async function flushEditorWrites() {
+  const store = editorStore("readonly");
+  if (store) await result(store.count());
 }
 
 export function result<T>(request: IDBRequest<T>): Promise<T> {

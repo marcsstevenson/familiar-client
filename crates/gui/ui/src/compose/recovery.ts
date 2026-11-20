@@ -28,17 +28,17 @@ export type WorkingCopy = {
 };
 
 export async function readEditor(id: string): Promise<WorkingCopy | undefined> {
-  const store = await editorStore("readonly");
+  const store = editorStore("readonly");
   return store && result(store.get(id));
 }
 
 export async function openEditorIds() {
-  const store = await editorStore("readonly");
+  const store = editorStore("readonly");
   return store ? (await result(store.getAllKeys())).map(String) : [];
 }
 
 export async function rememberEditor(id: string, copy?: WorkingCopy) {
-  const store = await editorStore("readwrite");
+  const store = editorStore("readwrite");
   if (!store) return;
   if (copy) store.put(copy, id);
   else store.delete(id);

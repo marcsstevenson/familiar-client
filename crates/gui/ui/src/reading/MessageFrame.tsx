@@ -47,12 +47,18 @@ export function MessageFrame(props: {
     const key = props.standalone ? "readerScroll/" + id : "readingScroll";
     const page = doc.scrollingElement;
     if (page) {
+      // A cached body awaiting inline images can be shorter than the final
+      // document. Its clamped restore must not replace the original offset.
+      let restoredTop: number | undefined;
       let visible = false;
       const restore = () => {
         const showing = frame.clientHeight > 0;
         if (showing && !visible) {
           const saved = readSession<{ id: number; top: number }>(key);
-          if (saved?.id === id) page.scrollTop = saved.top;
+          if (saved?.id === id) {
+            page.scrollTop = saved.top;
+            restoredTop = page.scrollTop;
+          }
         }
         visible = showing;
       };
@@ -60,7 +66,9 @@ export function MessageFrame(props: {
       visibility = new ResizeObserver(restore);
       visibility.observe(frame);
       doc.addEventListener("scroll", () => {
-        if (visible && frame.clientHeight) writeSession(key, { id, top: page.scrollTop });
+        if (!visible || !frame.clientHeight || page.scrollTop === restoredTop) return;
+        restoredTop = undefined;
+        writeSession(key, { id, top: page.scrollTop });
       });
     }
     // Keys pressed while the body has focus don't reach the app's window.

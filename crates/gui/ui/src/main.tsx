@@ -9,19 +9,20 @@ import { initTheme } from "./theme";
 import { ReadingPane } from "./reading/ReadingPane";
 import { SpamDialog } from "./spam/SpamDialog";
 import { notify, setSelectedMessage, setSpamDialog, spamDialog, spamSettings } from "./state";
-import { initSession, readSession, readerWindows, writeSession } from "./session";
+import { connectEditors, flushEditorWrites, initSession, readSession, readerWindows, writeSession } from "./session";
 import { openEditorIds, readEditor } from "./compose/recovery";
 import "./styles/tokens.css";
 import "./styles/app.css";
 
 const info = await uiInfo();
 initSession(info.session_store, info.bench);
+const reader = /^#reader=(\d+)$/.exec(window.location.hash);
+if (!reader) await connectEditors().catch(e => notify("Editor recovery unavailable: " + e, true));
 document.documentElement.dataset.platform = info.platform;
 const request = composeSpec();
 const editorId = request?.kind === "resume" ? request.editor : request ? crypto.randomUUID() : undefined;
 const recovered = request?.kind === "resume" ? await readEditor(request.editor) : undefined;
 const spec = request?.kind === "resume" ? recovered?.spec : request;
-const reader = /^#reader=(\d+)$/.exec(window.location.hash);
 const mainWindow = !request && !reader;
 const active = readSession<string>("active");
 const windowKey = editorId ?? (reader ? "reader/" + reader[1] : "main");
@@ -29,7 +30,13 @@ const rememberFocus = () => writeSession("active", windowKey);
 window.addEventListener("focus", rememberFocus);
 if (document.hasFocus()) rememberFocus();
 initTheme(info.theme, mainWindow);
-if (mainWindow) installComposeKeys();
+if (mainWindow) {
+  installComposeKeys();
+  await getCurrentWindow().onCloseRequested(async e => {
+    try { await flushEditorWrites(); }
+    catch (err) { e.preventDefault(); notify("Couldn't finish saving the session: " + err, true); }
+  });
+}
 if (reader) {
   const win = getCurrentWindow();
   writeSession(windowKey, await win.title());
