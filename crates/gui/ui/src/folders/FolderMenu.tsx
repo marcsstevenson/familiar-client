@@ -1,6 +1,4 @@
-// The folder context menu: pin, colour, rename and delete. Colour and pin are
-// kept on this device (`fam folder color` / `pin`); rename and delete go to the
-// server through the op queue, as `fam folder rename` / `delete` do.
+// Actions on the folder that opened the menu, including from its pinned row.
 import { For, Show, createSignal, onMount } from "solid-js";
 import { isCommandError, run } from "../api";
 import type { FolderRow } from "../../../../../bindings/commands";
@@ -45,6 +43,19 @@ export function FolderMenu(props: { folder: FolderRow; x: number; y: number; onC
     act(folder.pinned ? `Unpinned ${folder.name}` : `Pinned ${folder.name}`, () =>
       run(folder.pinned ? "folder.unpin" : "folder.pin", target()),
     );
+  const markAllRead = () =>
+    act(`Marked all messages in ${folder.name} as read`, async () => {
+      let after: string | undefined;
+      do {
+        const page = await run("mail.list", { ...target(), unread: true, limit: 500, after });
+        if (page.folders.length !== 1 || page.folders[0]?.folder_id !== folder.id) {
+          throw new Error("The folder changed. Open its menu again to mark it as read.");
+        }
+        const messages = page.messages.map((m) => m.id);
+        if (messages.length) await run("mail.read", { messages });
+        after = page.next ?? undefined;
+      } while (after);
+    });
   const colour = (c: string | null) =>
     act(c ? `${folder.name} is ${c}` : `${folder.name} has no colour`, () =>
       run("folder.color", { ...target(), color: c ?? "none" }),
@@ -63,7 +74,7 @@ export function FolderMenu(props: { folder: FolderRow; x: number; y: number; onC
       props.onClose();
     } else if (mode() === "menu" && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
       e.preventDefault();
-      const items = [...box.querySelectorAll<HTMLElement>("[role=menuitem]")];
+      const items = [...box.querySelectorAll<HTMLElement>("[role=menuitem]:enabled")];
       const i = items.indexOf(document.activeElement as HTMLElement);
       const next = (i + (e.key === "ArrowDown" ? 1 : -1) + items.length) % items.length;
       items[next]?.focus();
@@ -90,6 +101,7 @@ export function FolderMenu(props: { folder: FolderRow; x: number; y: number; onC
           <button role="menuitem" onClick={togglePin}>
             {folder.pinned ? "Unpin" : "Pin below All inboxes"}
           </button>
+          <button role="menuitem" disabled={folder.unread === 0} onClick={markAllRead}>Mark all as read</button>
           <div class="folder-menu-colours" role="group" aria-label="Colour">
             <For each={FOLDER_COLOURS}>
               {(c) => (
