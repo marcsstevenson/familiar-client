@@ -90,8 +90,15 @@ labels as folders (`crates/daemon/src/gmail_ops.rs`):
   outright (there is no Deleted Items for labels, so `--permanent` changes
   nothing) and its mail stays in All Mail and its other labels.
 - A refused move puts the message back in every folder it was in.
-- Drafts and sending come with WP G.7; until then those ops fail and are
-  undone.
+- **Drafts and sending** (WP G.7) are whole MIME messages Familiar builds
+  (`familiar_provider_gmail::Outgoing`, with `mail-builder`). A draft
+  update starts from the draft Gmail has, so what it doesn't change
+  (recipients, files, threading) stays; Gmail gives the draft a new message
+  ID each time and the local copy follows it. A reply carries
+  `In-Reply-To`/`References` and the original's thread; a forward carries
+  the original's files. A From that isn't the account's address or a
+  verified send-as address in Gmail is refused before sending (Gmail would
+  rewrite it). Gmail's API has no send later, so `--at` is refused.
 
 ## Snooze
 

@@ -9,6 +9,7 @@ use std::time::{Duration, Instant};
 use chrono::{TimeZone, Utc};
 use familiar_core::CommandError;
 use familiar_core::commands::write::{WriteFlags, submit_at};
+use familiar_core::compose::{AttachmentData, ComposeRequest, Recipient, ResponseKind};
 use familiar_core::daemon::{
     DaemonPaths, FIRST_SYNC_RESOURCE, GraphGetParams, METHOD_SEARCH_ONLINE, SearchOnlineResult,
 };
@@ -392,5 +393,190 @@ async fn gmail_folders_are_labels() {
     })
     .await;
     assert_eq!(env.folders_of("msg-receipt"), ["All Mail"]);
+    env.daemon.stop().await;
+}
+
+fn to(addr: &str) -> Vec<Recipient> {
+    vec![Recipient {
+        name: String::new(),
+        address: addr.into(),
+    }]
+}
+
+fn compose(draft: ComposeRequest, send: bool) -> WriteRequest {
+    WriteRequest::Compose {
+        draft,
+        send,
+        send_delay_secs: 0,
+        send_at: None,
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn gmail_drafts_and_sending() {
+    let env = Env::start().await;
+    // A message with an inline image and an attachment, to reply to.
+    let logo = familiar_provider_gmail::Outgoing {
+        from: ("Ann".into(), "ann@acme.example".into()),
+        to: vec![(String::new(), "kea@example.com".into())],
+        subject: "Our new logo".into(),
+        html: "<p>See <img src=\"cid:logo\"></p>".into(),
+        parts: vec![
+            familiar_provider_gmail::Part {
+                name: "logo.png".into(),
+                content_type: "image/png".into(),
+                inline: true,
+                content_id: Some("logo".into()),
+                data: b"\x89PNG-logo".to_vec(),
+            },
+            familiar_provider_gmail::Part {
+                name: "brief.pdf".into(),
+                content_type: "application/pdf".into(),
+                ..familiar_provider_gmail::Part::default()
+            },
+        ],
+        ..familiar_provider_gmail::Outgoing::default()
+    };
+    env.mock
+        .mailbox("default")
+        .add_message(
+            familiar_mock_gmail::Message::from_raw(logo.build())
+                .id("msg-logo")
+                .labels(&["INBOX"]),
+        )
+        .unwrap();
+    env.first_sync().await;
+    let raw_of = |id: &str| {
+        String::from_utf8_lossy(&env.mock.mailbox("default").message(id).unwrap().raw).into_owned()
+    };
+
+    // A new draft is saved to Gmail, and the local copy follows its ID.
+    // (The fixture has a draft of its own.)
+    let theirs = env.mock.mailbox("default").drafts();
+    let ours = |e: &Env| -> Vec<(String, String)> {
+        e.mock
+            .mailbox("default")
+            .drafts()
+            .into_iter()
+            .filter(|d| !theirs.iter().any(|t| t.0 == d.0))
+            .collect()
+    };
+    let out = env
+        .write(compose(
+            ComposeRequest {
+                subject: Some("Familiar Test draft".into()),
+                html: "<p>First go</p>".into(),
+                to: to("ann@acme.example"),
+                ..ComposeRequest::default()
+            },
+            false,
+        ))
+        .await
+        .unwrap();
+    let draft = out.ops[0].item.unwrap();
+    let drafts = ours(&env);
+    assert_eq!(drafts.len(), 1);
+    let local = |e: &Env| {
+        e.reader()
+            .message(familiar_store::MessageId(draft))
+            .unwrap()
+    };
+    assert_eq!(local(&env).unwrap().remote_id, drafts[0].1);
+
+    // An update replaces it whole and keeps what it doesn't change.
+    env.write_ok(WriteRequest::DraftUpdate {
+        message: draft,
+        from: None,
+        subject: Some("Familiar Test draft v2".into()),
+        html: None,
+        to: None,
+        cc: None,
+        bcc: None,
+        attachments: vec![AttachmentData {
+            name: "quote.pdf".into(),
+            content_type: "application/pdf".into(),
+            inline: false,
+            content_id: None,
+            content_b64: "JVBERi0xLjQ=".into(),
+            size: 8,
+        }],
+        remove_attachments: vec![],
+    })
+    .await;
+    let drafts = ours(&env);
+    assert_eq!(drafts.len(), 1);
+    let raw = raw_of(&drafts[0].1);
+    assert!(raw.contains("Familiar Test draft v2"), "{raw}");
+    assert!(
+        raw.contains("First go") && raw.contains("quote.pdf"),
+        "{raw}"
+    );
+    assert!(raw.contains("ann@acme.example"), "{raw}");
+    assert_eq!(local(&env).unwrap().remote_id, drafts[0].1);
+
+    // Sending sends that draft.
+    env.write_ok(WriteRequest::Send {
+        message: draft,
+        delay_secs: 0,
+        send_at: None,
+    })
+    .await;
+    assert!(ours(&env).is_empty());
+    let sent = env.mock.mailbox("default").sent();
+    assert_eq!(sent.len(), 1);
+    assert!(String::from_utf8_lossy(&sent[0].raw).contains("Familiar Test draft v2"));
+
+    // A reply joins the original's thread.
+    let dinner = env.mock.mailbox("default").message("msg-dinner").unwrap();
+    env.write_ok(compose(
+        ComposeRequest {
+            respond_to: Some(env.id("msg-dinner")),
+            response: Some(ResponseKind::Reply),
+            html: "<p>Yes please</p>".into(),
+            ..ComposeRequest::default()
+        },
+        true,
+    ))
+    .await;
+    let sent = env.mock.mailbox("default").sent();
+    let reply = sent.last().unwrap();
+    assert_eq!(reply.thread_id, dinner.thread_id);
+    assert!(String::from_utf8_lossy(&reply.raw).contains("In-Reply-To"));
+
+    // A reply quoting an inline image carries the image, not the attachments.
+    env.write_ok(compose(
+        ComposeRequest {
+            respond_to: Some(env.id("msg-logo")),
+            response: Some(ResponseKind::Reply),
+            html: "<p>Love it</p><blockquote><img src=\"cid:logo\"></blockquote>".into(),
+            ..ComposeRequest::default()
+        },
+        true,
+    ))
+    .await;
+    let sent = env.mock.mailbox("default").sent();
+    let parts = familiar_provider_gmail::parts_of(&sent.last().unwrap().raw);
+    assert_eq!(parts.len(), 1, "{parts:?}");
+    assert_eq!(parts[0].content_id.as_deref(), Some("logo"));
+    assert_eq!(parts[0].data, b"\x89PNG-logo");
+
+    // A From Gmail hasn't verified is refused, not rewritten.
+    let refused = env
+        .write(compose(
+            ComposeRequest {
+                from: Some(Recipient {
+                    name: String::new(),
+                    address: "old-kea@example.com".into(),
+                }),
+                subject: Some("From the old address".into()),
+                html: "<p>hi</p>".into(),
+                to: to("ann@acme.example"),
+                ..ComposeRequest::default()
+            },
+            true,
+        ))
+        .await;
+    assert!(refused.is_err(), "{refused:?}");
+    assert_eq!(env.mock.mailbox("default").sent().len(), 3);
     env.daemon.stop().await;
 }

@@ -1,6 +1,6 @@
 # Adding a Gmail account
 
-Gmail accounts sign in with your own Google OAuth client, because Familiar doesn't ship one for Google (see `designs/Gmail Plan.md`, "Sign-in and Google verification"). famd syncs Gmail mail with labels as folders, bodies for the sync window, changes through Gmail's history, and server search. Read, flag, archive, move, delete (to Trash), report and folder changes go back to Gmail; see [writes.md](writes.md#gmail-accounts). Drafts and sending come later (Gmail plan WP G.7).
+Gmail accounts sign in with your own Google OAuth client, because Familiar doesn't ship one for Google (see `designs/Gmail Plan.md`, "Sign-in and Google verification"). famd syncs Gmail mail with labels as folders, bodies for the sync window, changes through Gmail's history, and server search. Read, flag, archive, move, delete (to Trash), report, folder changes, drafts and sending go back to Gmail; see [writes.md](writes.md#gmail-accounts). Send from an alias only once Gmail has verified it (Settings, Accounts, Send mail as), and list it in `aliases = [...]` so the compose window offers it.
 
 ## 1. Make the Google client (once)
 
