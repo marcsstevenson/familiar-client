@@ -1,0 +1,147 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: MIT OR Apache-2.0 -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Familiar: a local-first mail and calendar client</title>
+  <meta name="description" content="Familiar is a fast, local-first desktop mail and calendar client with a complete command line, so you and your AI tools can use it. Your mail stays on your computer.">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="alternate icon" href="/favicon.ico">
+  <link rel="stylesheet" href="/style.css">
+  <meta property="og:title" content="Familiar">
+  <meta property="og:description" content="A fast, local-first mail and calendar client. Your mail stays on your computer.">
+  <meta property="og:image" content="https://familiarclient.com/icon.png">
+  <meta name="theme-color" content="#8a5cf6">
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap">
+      <a class="brand" href="/"><img src="/icon.svg" alt="" width="32" height="32">Familiar</a>
+      <nav class="nav">
+        <a class="hide-sm" href="#features">Features</a>
+        <a class="hide-sm" href="#agents">For AI agents</a>
+        <a href="/privacy">Privacy</a>
+        <a href="https://github.com/marcsstevenson/familiar-client">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div class="wrap">
+        <div>
+          <span class="eyebrow">Local-first mail and calendar</span>
+          <h1>Your mail, on <span class="accent">your</span> computer. Instantly.</h1>
+          <p class="lede">Familiar is a desktop mail and calendar client that keeps everything in a local store, so every screen opens in milliseconds and works offline. It has a complete command line, so you and the AI tools you choose can use it too.</p>
+          <div class="cta">
+            <a class="btn btn-primary" href="https://github.com/marcsstevenson/familiar-client">Get Familiar on GitHub</a>
+            <a class="btn btn-ghost" href="/privacy">How your data is handled</a>
+          </div>
+        </div>
+        <div class="hero-art"><img src="/icon.svg" alt="Familiar's icon, a violet kea in cut paper" width="300" height="300"></div>
+      </div>
+    </section>
+
+    <section id="features">
+      <div class="wrap">
+        <div class="section-head">
+          <h2>Why Familiar</h2>
+          <p>One Rust engine underneath a sync daemon, a command line, an MCP server and a desktop app for Windows, macOS and Linux.</p>
+        </div>
+        <div class="grid">
+          <article class="card">
+            <div class="icon"><svg viewBox="0 0 24 24"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg></div>
+            <h3>Blazingly fast</h3>
+            <p>Every screen and every command reads a local SQLite store, never the network. Sync runs in the background, so nothing you do waits on a server.</p>
+          </article>
+          <article class="card">
+            <div class="icon"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3M13 15h4"/></svg></div>
+            <h3>100% command-line coverage</h3>
+            <p>Everything the app can do, <code>fam</code> can do. Every action is one typed command, and the CLI, its JSON schema, the MCP tools and the app are all generated from it.</p>
+          </article>
+          <article class="card">
+            <div class="icon"><svg viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="13" rx="2"/><path d="M8 21h8M12 17v4"/></svg></div>
+            <h3>Runs on any OS</h3>
+            <p>Windows, macOS and Linux, built and tested on all three. The daemon and CLI have no GUI dependencies, so they also run headless on a server or in a small container.</p>
+          </article>
+          <article class="card">
+            <div class="icon"><svg viewBox="0 0 24 24"><path d="M14 3v4a1 1 0 0 0 1 1h4"/><path d="M17 21H7a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h7l5 5v11a2 2 0 0 1-2 2z"/><path d="M9 13h6M9 17h4"/></svg></div>
+            <h3>Restorable from one file</h3>
+            <p>Accounts, signatures, calendars, views, rules, shortcuts and agent permissions live in one <code>config.toml</code>. Copy it to a new machine, sign in, and your mail syncs back.</p>
+          </article>
+        </div>
+
+        <div class="stats" aria-label="Measured performance">
+          <div class="stat"><b>17 ms</b><span>open the merged inbox</span></div>
+          <div class="stat"><b>22 ms</b><span>search, 50 results</span></div>
+          <div class="stat"><b>&lt; 40 MB</b><span>daemon memory when idle</span></div>
+          <div class="stat"><b>&lt; 12 ms</b><span>search p95 on 500,000 messages</span></div>
+        </div>
+        <p class="note">Measured on real accounts (9,400 messages in 46 folders) and a synthetic 500,000-message mailbox, release build on Windows. The app's budgets are checked on every build.</p>
+      </div>
+    </section>
+
+    <section id="agents" class="band">
+      <div class="wrap split">
+        <div>
+          <h2>Built for you and your AI tools</h2>
+          <p style="color:var(--ink-2)">Because every action is a command, Familiar works as well for an AI agent as for a person. You decide what an agent may do.</p>
+          <ul class="list">
+            <li><strong>Over 50 commands</strong> across mail, drafts, folders, calendar, contacts and sync, each with <code>--json</code> output and stable exit codes.</li>
+            <li><strong>MCP server built in.</strong> <code>fam mcp serve</code> offers every command as a tool to Claude and other MCP clients.</li>
+            <li><strong>Safe by default.</strong> Agents can read and save drafts. Sending, deleting and other writes need a grant you add to your config, and every write is recorded in an audit log.</li>
+            <li><strong>Optional AI features</strong>, such as finding calendar events in an email or a second opinion on spam, are off until you turn them on.</li>
+          </ul>
+        </div>
+        <pre><code>$ fam mail search "from:school newsletter" --json
+$ fam draft reply 4182 --body "Thanks, see you then"
+$ fam cal list --days 7
+
+# Let Claude Code use it, read and draft only
+$ claude mcp add familiar -- fam mcp serve --allow read,draft</code></pre>
+      </div>
+    </section>
+
+    <section>
+      <div class="wrap">
+        <div class="section-head">
+          <h2>Your accounts</h2>
+          <p>Familiar signs in to your mail provider with its official sign-in page and talks to it directly from your computer.</p>
+        </div>
+        <div class="grid">
+          <article class="card">
+            <h3>Microsoft</h3>
+            <p>Outlook.com, Hotmail and Microsoft 365: mail, calendars and contacts, through Microsoft Graph.</p>
+          </article>
+          <article class="card">
+            <h3>Gmail and Google Calendar</h3>
+            <p>Gmail support is being added through Google's Gmail, Calendar and People APIs: reading, labelling, archiving and sending your mail, managing your calendar events, and suggesting your contacts as you type. As with every account, your Google data goes only between your computer and Google.</p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="band">
+      <div class="wrap privacy-callout">
+        <div class="icon"><svg viewBox="0 0 24 24"><rect x="4" y="11" width="16" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg></div>
+        <div>
+          <h2>Your mail never touches our servers</h2>
+          <p style="color:var(--ink-2);max-width:42em">There are no Familiar servers to touch. Mail, calendars and contacts are synced straight from your provider to a store on your own computer. Sign-in tokens stay in your operating system's keychain. Familiar has no analytics, no tracking and no ads. Read the <a href="/privacy">privacy policy</a> for the details, including how Google user data is handled.</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <span>Familiar is open source under MIT or Apache-2.0.</span>
+      <nav>
+        <a href="/privacy">Privacy policy</a>
+        <a href="https://github.com/marcsstevenson/familiar-client">GitHub</a>
+        <a href="mailto:privacy@familiarclient.com">privacy@familiarclient.com</a>
+      </nav>
+    </div>
+  </footer>
+</body>
+</html>

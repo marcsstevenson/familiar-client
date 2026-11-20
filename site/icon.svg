@@ -1,0 +1,22 @@
+<!-- SPDX-License-Identifier: MIT OR Apache-2.0 -->
+<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 100 100" role="img" aria-labelledby="title desc">
+  <title id="title">Kea / Cut Paper Icon</title>
+  <desc id="desc">A circular kea icon with white feather, eye and beak cutouts and transparent space around the bird.</desc>
+  <defs>
+    <clipPath id="badge">
+      <circle cx="50" cy="50" r="46.7" />
+    </clipPath>
+    <clipPath id="profile">
+      <path d="M-10 1 C9 2 30 5 49 16 C46 11 42 7 37 4 C56 8 69 22 73 36 C74 40 74 44 75 48 C82 55 86 63 84 71 C82 78 74 85 64 87 C68 81 72 74 71 68 C64 68 58 66 51 64 C44 68 41 75 41 83 C41 92 43 99 47 105 L-10 105 Z" />
+    </clipPath>
+  </defs>
+  <g clip-path="url(#badge)">
+    <path fill="#fff" d="M18 0 H37 L37.7 4.25 C42.7 7.25 46.7 11.25 49.7 16.25 L51 23 H18 Z" />
+    <g clip-path="url(#profile)">
+      <rect width="100" height="100" fill="#fff" />
+      <path fill="#8a5cf6" fill-rule="evenodd" d="M0 0 H100 V100 H0 Z
+M-12 8 C15 6 45 8 64 24 C37 17 10 18 -12 23 Z M-12 30 C7 25 24 27 29 33 C17 34 4 40 -12 43 Z M-12 52 C7 47 30 47 45 53 C27 57 14 66 7 75 L-12 70 Z M1 81 C10 74 23 70 33 69 C26 78 25 87 27 96 C14 93 6 88 1 81 Z M33 34.5 C33 27.9 38.8 23.9 45.8 23.9 C53.1 23.9 58.6 28.4 58.6 34.9 C58.6 41.5 53.1 46.2 46 46.2 C38.8 46.2 33 41.4 33 34.5 Z M40.5 34.4 A6.4 6.4 0 1 0 53.3 34.4 A6.4 6.4 0 1 0 40.5 34.4 Z M62 46.5 C70 46 77 51 80 59 C72 60 65 54 62 46.5 Z" />
+    </g>
+  </g>
+  <circle cx="50" cy="50" r="46.7" fill="none" stroke="#8a5cf6" stroke-width="5.6" />
+</svg>

@@ -1,0 +1,127 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: MIT OR Apache-2.0 -->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Privacy policy · Familiar</title>
+  <meta name="description" content="How Familiar handles your mail, calendar and contacts data, including data from Google and Microsoft accounts.">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
+  <link rel="alternate icon" href="/favicon.ico">
+  <link rel="stylesheet" href="/style.css">
+  <meta name="theme-color" content="#8a5cf6">
+</head>
+<body>
+  <header class="site-header">
+    <div class="wrap">
+      <a class="brand" href="/"><img src="/icon.svg" alt="" width="32" height="32">Familiar</a>
+      <nav class="nav">
+        <a href="/">Home</a>
+        <a href="https://github.com/marcsstevenson/familiar-client">GitHub</a>
+      </nav>
+    </div>
+  </header>
+
+  <main class="doc">
+    <span class="eyebrow">Privacy</span>
+    <h1>Privacy policy</h1>
+    <p class="meta">Effective 20 November 2026</p>
+
+    <p>Familiar is a desktop mail and calendar client, developed by Marc Stevenson and published as open source at <a href="https://github.com/marcsstevenson/familiar-client">github.com/marcsstevenson/familiar-client</a>. This policy explains what data Familiar accesses, where it goes, and the choices you have. "We" means the developer of Familiar.</p>
+
+    <div class="summary">
+      <ul>
+        <li>Familiar runs on your computer. There are no Familiar servers, and we never receive your mail, calendar, contacts or sign-in tokens.</li>
+        <li>Your data goes only between your computer and your mail provider (Google or Microsoft), and is stored on your computer.</li>
+        <li>Familiar has no analytics, telemetry, advertising or tracking, and we never sell or share your data.</li>
+        <li>Optional AI features are off until you turn them on, and then send only the one email you ask about, through an AI tool you have chosen and signed in to yourself.</li>
+      </ul>
+    </div>
+
+    <h2>What Familiar accesses</h2>
+    <p>When you add an account, you sign in on your provider's own sign-in page and grant Familiar access. Familiar then uses that access to show and manage, on your computer, your:</p>
+    <ul>
+      <li><strong>Mail:</strong> messages, attachments, folders or labels, drafts, and the addresses you send from.</li>
+      <li><strong>Calendars:</strong> your calendars and their events, including invitations and your replies to them.</li>
+      <li><strong>Contacts:</strong> your saved contacts and the addresses your provider keeps from past mail, used to suggest recipients as you type.</li>
+      <li><strong>Basic profile:</strong> your name and email address, to label the account.</li>
+    </ul>
+    <p>Familiar only reads or changes this data when you, or a tool you have allowed on your own computer, ask it to, or when it syncs in the background to keep your local copy up to date.</p>
+
+    <h2 id="google">Google user data</h2>
+    <p>For Gmail accounts, Familiar uses the Gmail API, the Google Calendar API and the Google People API, and asks for these permissions:</p>
+    <div class="table-scroll">
+      <table>
+        <thead><tr><th>Permission</th><th>What Familiar does with it</th></tr></thead>
+        <tbody>
+          <tr><td><code>openid</code>, <code>email</code>, <code>profile</code></td><td>Identifies which Google account you signed in with and shows its name and address.</td></tr>
+          <tr><td><code>gmail.modify</code></td><td>Syncs your mail to your computer, and carries out what you do in Familiar: mark read or unread, star, label, archive, move to Trash, and save drafts. It cannot permanently delete mail.</td></tr>
+          <tr><td><code>gmail.send</code></td><td>Sends the mail you write and choose to send.</td></tr>
+          <tr><td><code>gmail.settings.basic</code></td><td>Reads your send-as addresses and their signatures, so you can send from them, and keeps the Gmail filters you set up in Familiar's rules in step with Gmail.</td></tr>
+          <tr><td><code>calendar</code></td><td>Syncs your calendars and events, and creates, changes or replies to events when you ask.</td></tr>
+          <tr><td><code>contacts.readonly</code>, <code>contacts.other.readonly</code></td><td>Reads your contacts and Google's saved "other contacts" to suggest recipients. Familiar never changes your contacts.</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3>How Google user data is used, stored and shared</h3>
+    <ul>
+      <li><strong>Use:</strong> Google user data is used only to provide Familiar's features to you, in the app and its command line on your computer. It is not used for advertising, profiling, credit decisions or any purpose other than showing and managing your own mail, calendar and contacts.</li>
+      <li><strong>Storage:</strong> data received from Google is stored only on your computer, in Familiar's local database and search index inside your user folder. It is never sent to or stored on a server run by us. Your Google sign-in tokens are kept in your operating system's keychain (Windows Credential Manager, macOS Keychain or the Linux Secret Service), or in an encrypted file if you choose that for a machine with no keychain.</li>
+      <li><strong>Transfer:</strong> Familiar sends Google user data to nobody except Google itself, apart from the one case you control in "Optional AI features" below. We do not sell it, and we do not share it with advertisers, data brokers or anyone else.</li>
+      <li><strong>Human access:</strong> nobody other than you reads your data. We have no access to it, because it never leaves your computer for us.</li>
+      <li><strong>AI and machine learning:</strong> Google user data is not used to develop, improve or train generalised or non-personalised AI or machine-learning models, by us or, through Familiar, by anyone else.</li>
+    </ul>
+
+    <div class="limited-use">
+      <p>Familiar's use and transfer to any other app of information received from Google APIs will adhere to the <a href="https://developers.google.com/terms/api-services-user-data-policy">Google API Services User Data Policy</a>, including the Limited Use requirements.</p>
+    </div>
+
+    <h2 id="microsoft">Microsoft accounts</h2>
+    <p>For Outlook.com, Hotmail and Microsoft 365 accounts, Familiar uses Microsoft Graph in the same way: mail, calendars and contacts are synced straight between your computer and Microsoft, stored only on your computer, and used only to provide Familiar's features to you.</p>
+
+    <h2 id="ai">Optional AI features</h2>
+    <p>Familiar has two optional features that use an AI model: finding calendar events in an email, and a second opinion on whether an email is spam or a scam. Both are <strong>off by default</strong>. Nothing is sent to any AI service unless you turn them on in Familiar's settings file, and you can limit them to chosen accounts.</p>
+    <p>When they are on, Familiar does not contact an AI service itself. It passes the email you asked about to an AI command-line tool that you have installed and signed in to yourself (Anthropic's Claude Code or OpenAI's Codex). That tool sends it to its provider under your own account and that provider's terms. What is passed is limited to that one email: its subject, sender, date, up to 20,000 characters of its text, and the names of its attachments. For finding events, that text can include the text of its PDF attachments. For the spam check, it also includes the email's Reply-To address, number of recipients and links, and facts Familiar works out about it, such as its sender-authentication results and whether you have written to the sender before. No other mail, calendar or contact data is sent. We never receive it, and never see your AI tool's sign-in. AI features are user-facing only, run when you ask (or, for the spam check, only if you also turn on background checking), and are never used to train models by us.</p>
+
+    <h2 id="agents">AI agents on your computer</h2>
+    <p>Familiar has a command line and a built-in MCP server, so you can let AI assistants you run, such as Claude Code, use your mail and calendar. This only happens if you set it up. By default an agent can read and save drafts; sending, deleting and other changes need a permission you add to your settings file, and every change is written to a local audit log you can view with <code>fam audit list</code>. Data an agent reads is handled under the terms of the agent you chose.</p>
+
+    <h2>Data we collect</h2>
+    <p>None. Familiar has no accounts with us, no analytics, no crash reporting and no telemetry. It connects only to your mail providers, and to an AI tool's provider when you have turned AI features on.</p>
+    <p>This website is a static site hosted on Cloudflare. It sets no cookies and runs no analytics or tracking scripts. Cloudflare may keep standard technical logs, such as IP addresses, to deliver and protect the site.</p>
+
+    <h2>Keeping and deleting your data</h2>
+    <p>Your data stays on your computer until you remove it. You can:</p>
+    <ul>
+      <li>Sign out of an account with <code>fam auth logout &lt;account&gt;</code> (or every account with <code>--all</code>), which deletes its tokens from your computer.</li>
+      <li>Revoke Familiar's access to your Google account at any time at <a href="https://myaccount.google.com/permissions">myaccount.google.com/permissions</a>, or to your Microsoft account at <a href="https://account.live.com/consent/Manage">account.live.com/consent/Manage</a>.</li>
+      <li>Delete Familiar's data folder (<code>.familiar\data</code> in your user folder on Windows, and your system's local application data folder, under <code>Familiar</code>, on macOS and Linux) to remove all synced mail, calendars, contacts and the search index. Uninstalling the app and deleting this folder removes everything Familiar stored.</li>
+    </ul>
+    <p>Because we hold none of your data, there is nothing for us to delete on our side, but we're happy to help if you have questions.</p>
+
+    <h2>Security</h2>
+    <p>Familiar connects to Google and Microsoft only over HTTPS, signs in with OAuth and PKCE so it never sees your password, and keeps tokens in your operating system's secure storage. Its source code is public, so anyone can check what it does.</p>
+
+    <h2>Children</h2>
+    <p>Familiar is not directed at children under 13 and does not knowingly collect data from them.</p>
+
+    <h2>Changes to this policy</h2>
+    <p>If this policy changes, the new version will be posted on this page with a new effective date. Earlier versions are kept in the project's public history on GitHub.</p>
+
+    <h2 id="contact">Contact</h2>
+    <p>Questions about this policy or your data: <a href="mailto:privacy@familiarclient.com">privacy@familiarclient.com</a>.</p>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <span>Familiar is open source under MIT or Apache-2.0.</span>
+      <nav>
+        <a href="/">Home</a>
+        <a href="https://github.com/marcsstevenson/familiar-client">GitHub</a>
+        <a href="mailto:privacy@familiarclient.com">privacy@familiarclient.com</a>
+      </nav>
+    </div>
+  </footer>
+</body>
+</html>
