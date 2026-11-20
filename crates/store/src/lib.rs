@@ -46,8 +46,9 @@ pub use bodies::{BodyHash, INLINE_BODY_MAX};
 pub use calendar::{Attendee, Calendar, Event, EventData, EventRange, NewCalendar};
 pub use contacts::{Contact, NewContact, Person, SenderHistory};
 pub use conversation::{
-    Conversation, ConversationFolder, ConversationMessage, ConversationSummary, DRAFTS,
-    LatestMessage, MessageCopy, SENT_ITEMS, TRASH_FOLDERS, normalize_subject,
+    ALL_MAIL, ALL_MAIL_REMOTE_ID, Conversation, ConversationFolder, ConversationMessage,
+    ConversationSummary, DRAFTS, LatestMessage, MessageCopy, SENT_ITEMS, TRASH_FOLDERS,
+    normalize_subject,
 };
 pub use error::{Error, Result};
 pub use migrate::{MIGRATIONS, Migration, SCHEMA_VERSION};

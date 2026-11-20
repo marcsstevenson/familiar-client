@@ -423,3 +423,29 @@ fn matching_tells_local_finds_from_server_only_finds() {
     assert_eq!(m.len(), 2);
     assert!(!m.contains(&all[2]));
 }
+
+#[test]
+fn folder_matches_every_label_a_message_has() {
+    let mut e = Env::new();
+    e.mailbox();
+    let r = Reader::open(&e.w.paths().root).unwrap();
+    let agm = r.message_by_remote(e.club, "agm").unwrap().unwrap();
+    let (club_inbox, committee) = (e.club_inbox, e.committee);
+
+    // Gmail-style: the AGM notice is in the Inbox and labelled Committee.
+    e.w.write(|tx| tx.set_message_folders(agm.id, &[club_inbox, committee]))
+        .unwrap();
+    assert_eq!(e.index(), 1);
+    assert_eq!(e.ids("folder:committee"), ["minutes", "agm"]);
+    assert_eq!(e.ids("folder:inbox account:parklands"), ["agm"]);
+    assert_eq!(
+        e.ids("-folder:committee account:parklands"),
+        Vec::<String>::new()
+    );
+
+    // Taking the label off takes it out of folder:committee.
+    e.w.write(|tx| tx.set_message_folders(agm.id, &[club_inbox]))
+        .unwrap();
+    assert_eq!(e.index(), 1);
+    assert_eq!(e.ids("folder:committee"), ["minutes"]);
+}
