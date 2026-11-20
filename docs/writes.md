@@ -67,9 +67,31 @@ provider's own report process, so its filter learns from it:
   and the next sync shows where the server put it. Graph's answer is not a
   whole message, so it is not read. Not junk is only for messages in Junk
   Email; junk on a message already there does nothing.
-- **Gmail (later).** The op payload (`report_message` with a provider-neutral
-  `Report`) is the seam. Gmail has no report API beyond its labels: junk and
-  phishing add `SPAM` and remove `INBOX`, not junk does the reverse.
+- **Gmail.** Gmail has no report API beyond its labels: junk and phishing
+  move the message to Spam, not junk moves it back to the Inbox.
+
+## Gmail accounts
+
+The same commands work on Gmail accounts (Gmail plan WP G.6), with Gmail's
+labels as folders (`crates/daemon/src/gmail_ops.rs`):
+
+- **Read and flag** are the `UNREAD` and `STARRED` labels.
+- **Move** takes the label the message is filed under (its primary folder:
+  the Inbox for Inbox mail) off and puts the destination's on; its other
+  labels stay. **Archive** takes the Inbox label off, so the message stays
+  in All Mail and its other labels; mail not in the Inbox is left alone.
+- **Delete** moves to Trash (`messages.trash`), and moving out of Trash
+  untrashes it. A message in Trash or Spam shows only there. Familiar can't
+  delete Gmail mail for good (its Google scope doesn't allow it), so
+  `--permanent` is refused; Gmail empties Trash after 30 days.
+- **Folders are labels named by their path.** Creating one creates
+  `Parent/Name`; renaming or moving one renames its label and every label
+  under it (Gmail doesn't do that itself); deleting one deletes those labels
+  outright (there is no Deleted Items for labels, so `--permanent` changes
+  nothing) and its mail stays in All Mail and its other labels.
+- A refused move puts the message back in every folder it was in.
+- Drafts and sending come with WP G.7; until then those ops fail and are
+  undone.
 
 ## Snooze
 

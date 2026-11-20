@@ -62,6 +62,10 @@ pub enum OpPayload {
         to: i64,
         /// Local folder ID it came from.
         from: i64,
+        /// Gmail: every folder (label) the message was in before, so a
+        /// refused move can put it back. Filled in when applied.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        prev_folders: Vec<i64>,
     },
     /// Report a message as junk, phishing or not junk. The server moves it
     /// (out of Junk Email for not junk); locally it moves to `to` at once.
@@ -74,6 +78,9 @@ pub enum OpPayload {
         to: i64,
         /// Local folder ID it came from.
         from: i64,
+        /// Gmail: the folders it was in before, as for `MoveMessage`.
+        #[serde(default, skip_serializing_if = "Vec::is_empty")]
+        prev_folders: Vec<i64>,
     },
     /// Delete a message for good. Applied locally once the server has it.
     DeleteMessage {
@@ -952,6 +959,15 @@ pub fn plan(tx: &WriteTx<'_>, req: &WriteRequest) -> Result<Vec<Planned>, Comman
             for m in messages(ids)? {
                 let key = key_of(m.account);
                 let folders = tx.folders(m.account).map_err(store_err)?;
+                if let Some(all_mail) = well_known(&folders, familiar_store::ALL_MAIL) {
+                    // Gmail: archiving takes the Inbox label off; mail
+                    // that isn't in the Inbox is archived already.
+                    let in_inbox = well_known(&folders, "inbox").is_some_and(|i| i.id == m.folder);
+                    if in_inbox {
+                        push_move(&mut out, &m, all_mail, &key, "archive");
+                    }
+                    continue;
+                }
                 let dest = well_known(&folders, "archive").ok_or_else(|| {
                     CommandError::new(ErrorKind::NotFound, format!("{key} has no Archive folder"))
                 })?;
@@ -996,6 +1012,7 @@ pub fn plan(tx: &WriteTx<'_>, req: &WriteRequest) -> Result<Vec<Planned>, Comman
                         report: *report,
                         to: to.id.0,
                         from: m.folder.0,
+                        prev_folders: Vec::new(),
                     },
                 });
             }
@@ -1014,6 +1031,12 @@ pub fn plan(tx: &WriteTx<'_>, req: &WriteRequest) -> Result<Vec<Planned>, Comman
                     )
                 })?;
                 let in_deleted = is_under(&folders, m.folder, deleted.id);
+                if *permanent && well_known(&folders, familiar_store::ALL_MAIL).is_some() {
+                    return Err(CommandError::usage(format!(
+                        "{key} is a Gmail account: Gmail empties Trash itself after 30 days, \
+                         and Familiar can't delete Gmail mail for good"
+                    )));
+                }
                 match (in_deleted, permanent) {
                     (false, false) => push_move(&mut out, &m, deleted, &key, "delete"),
                     (true, true) => out.push(Planned {
@@ -1055,6 +1078,7 @@ pub fn plan(tx: &WriteTx<'_>, req: &WriteRequest) -> Result<Vec<Planned>, Comman
                 .as_deref()
                 .map(|p| need_folder(&folders, p, &a.key))
                 .transpose()?;
+            refuse_gmail_parent(&a, parent)?;
             let clash = folders
                 .iter()
                 .any(|f| f.parent == parent.map(|p| p.id) && f.name.eq_ignore_ascii_case(name));
@@ -1120,6 +1144,7 @@ pub fn plan(tx: &WriteTx<'_>, req: &WriteRequest) -> Result<Vec<Planned>, Comman
                 .as_deref()
                 .map(|p| need_folder(&folders, p, &a.key))
                 .transpose()?;
+            refuse_gmail_parent(&a, dest)?;
             if let Some(d) = dest {
                 if is_under(&folders, d.id, f.id) {
                     return Err(CommandError::usage("a folder can't move into itself"));
@@ -1150,6 +1175,23 @@ pub fn plan(tx: &WriteTx<'_>, req: &WriteRequest) -> Result<Vec<Planned>, Comman
             let folders = tx.folders(a.id).map_err(store_err)?;
             let f = need_folder(&folders, folder, &a.key)?;
             refuse_well_known(f, "deleted")?;
+            if a.provider == "gmail" {
+                // A label is deleted outright; its mail keeps its other
+                // labels and stays in All Mail. --permanent changes nothing.
+                out.push(Planned {
+                    delay_secs: 0,
+                    account: a.id,
+                    account_key: a.key.clone(),
+                    summary: format!("delete label {:?} (its mail stays in All Mail)", f.name),
+                    payload: OpPayload::DeleteFolder {
+                        folder: f.id.0,
+                        from: f.parent.map(|p| p.0),
+                        deleted_items: None,
+                        permanent: true,
+                    },
+                });
+                return Ok(out);
+            }
             let deleted = well_known(&folders, "deleteditems");
             let in_deleted = deleted.is_some_and(|d| is_under(&folders, f.id, d.id));
             if in_deleted != *permanent {
@@ -1671,6 +1713,22 @@ fn refuse_well_known(f: &Folder, what: &str) -> Result<(), CommandError> {
     Ok(())
 }
 
+/// Gmail labels nest only under other user labels, not Inbox or the like.
+fn refuse_gmail_parent(
+    a: &familiar_store::Account,
+    parent: Option<&Folder>,
+) -> Result<(), CommandError> {
+    match parent {
+        Some(p) if a.provider == "gmail" && p.well_known.is_some() => {
+            Err(CommandError::usage(format!(
+                "Gmail labels can't go inside {:?}; put it at the top level or in another label",
+                p.name
+            )))
+        }
+        _ => Ok(()),
+    }
+}
+
 /// Messages grouped by account, in first-seen order, so a folder created
 /// for an account is the one made just before its moves (see `submit`).
 fn by_account(ms: Vec<familiar_store::Message>) -> Vec<(AccountId, Vec<familiar_store::Message>)> {
@@ -1723,6 +1781,7 @@ fn move_to_named(
                 message: m.id.0,
                 to: 0,
                 from: m.folder.0,
+                prev_folders: Vec::new(),
             },
         });
     }
@@ -1814,6 +1873,7 @@ fn push_move(
             message: m.id.0,
             to: dest.id.0,
             from: m.folder.0,
+            prev_folders: Vec::new(),
         },
     });
 }
@@ -1863,9 +1923,25 @@ fn apply_inner(
         OpPayload::SetFlag {
             message, flagged, ..
         } => tx.set_flagged(MessageId(*message), *flagged),
-        OpPayload::MoveMessage { message, to, .. }
-        | OpPayload::ReportMessage { message, to, .. } => {
-            tx.move_message(MessageId(*message), FolderId(*to))
+        OpPayload::MoveMessage {
+            message,
+            to,
+            from,
+            prev_folders,
+        }
+        | OpPayload::ReportMessage {
+            message,
+            to,
+            from,
+            prev_folders,
+            ..
+        } => {
+            if is_gmail(tx, account)? {
+                *prev_folders = gmail_move(tx, account, *message, *from, *to)?;
+                Ok(())
+            } else {
+                tx.move_message(MessageId(*message), FolderId(*to))
+            }
         }
         OpPayload::DeleteMessage { .. } => Ok(()),
         OpPayload::CreateFolder {
@@ -1902,6 +1978,48 @@ fn apply_inner(
     }
 }
 
+/// Whether `account` is a Gmail account.
+pub fn is_gmail(tx: &WriteTx<'_>, account: AccountId) -> familiar_store::Result<bool> {
+    Ok(tx
+        .accounts()?
+        .iter()
+        .any(|a| a.id == account && a.provider == "gmail"))
+}
+
+/// A Gmail move: the message loses the label it moved from and gains the
+/// one it moved to, keeping its others; Trash and Spam replace them all, as
+/// Gmail shows it. Moving to All Mail only takes the label off (archive).
+/// Returns the folders it was in before.
+fn gmail_move(
+    tx: &WriteTx<'_>,
+    account: AccountId,
+    message: i64,
+    from: i64,
+    to: i64,
+) -> familiar_store::Result<Vec<i64>> {
+    let id = MessageId(message);
+    let all_mail = tx.ensure_all_mail(account)?;
+    let prev = tx.message_folders(id)?;
+    let to = FolderId(to);
+    let hidden = tx
+        .folder(to)?
+        .and_then(|f| f.well_known)
+        .is_some_and(|w| w == "deleteditems" || w == "junkemail");
+    let mut next: Vec<FolderId> = if hidden {
+        Vec::new()
+    } else {
+        prev.iter()
+            .copied()
+            .filter(|f| f.0 != from && *f != all_mail)
+            .collect()
+    };
+    if to != all_mail && !next.contains(&to) {
+        next.push(to);
+    }
+    tx.set_message_folders(id, &next)?;
+    Ok(prev.into_iter().map(|f| f.0).collect())
+}
+
 /// Undoes an op's local change (it was refused, or cancelled).
 pub fn undo_local(tx: &WriteTx<'_>, p: &OpPayload) -> familiar_store::Result<()> {
     let gone = |r: familiar_store::Result<()>| match r {
@@ -1920,6 +2038,27 @@ pub fn undo_local(tx: &WriteTx<'_>, p: &OpPayload) -> familiar_store::Result<()>
         OpPayload::SetRead { message, prev, .. } => gone(tx.set_read(MessageId(*message), *prev)),
         OpPayload::SetFlag { message, prev, .. } => {
             gone(tx.set_flagged(MessageId(*message), *prev))
+        }
+        OpPayload::MoveMessage {
+            message,
+            prev_folders,
+            ..
+        }
+        | OpPayload::ReportMessage {
+            message,
+            prev_folders,
+            ..
+        } if !prev_folders.is_empty() => {
+            let mut back = Vec::new();
+            for f in prev_folders {
+                if tx.folder(FolderId(*f))?.is_some() {
+                    back.push(FolderId(*f));
+                }
+            }
+            if back.is_empty() {
+                return Ok(());
+            }
+            gone(tx.set_message_folders(MessageId(*message), &back))
         }
         OpPayload::MoveMessage { message, from, .. }
         | OpPayload::ReportMessage { message, from, .. } => {

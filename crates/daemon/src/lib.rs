@@ -18,6 +18,7 @@
 
 pub mod check;
 pub mod engine;
+pub mod gmail_ops;
 pub mod hooks;
 pub mod indexer;
 pub mod ipc;
@@ -269,10 +270,13 @@ impl Daemon {
                     if let Some(n) = opts.page_size {
                         sync = sync.with_page_size(n);
                     }
-                    runners.push(ops::Runner::Gmail(ops::GmailOps {
+                    runners.push(ops::Runner::Gmail(gmail_ops::GmailOps {
                         key: spec.key.clone(),
                         account: id,
+                        api: api.clone(),
+                        sync: GmailSync::new(api.clone(), id),
                         w: w.clone(),
+                        policy: policy.clone(),
                         clock: opts.clock.clone(),
                         wake: ops_wake.clone(),
                         signals: signals.clone(),

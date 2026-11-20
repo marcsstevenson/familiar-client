@@ -4,6 +4,8 @@
 use base64::Engine as _;
 
 use familiar_provider::{Error, Priority, Result};
+use reqwest::Method;
+use serde_json::json;
 
 use crate::client::GmailClient;
 use crate::model::{GmailLabel, GmailMessage, HistoryPage, MessageList, Profile};
@@ -204,6 +206,93 @@ impl GmailApi {
         match self.client.get(&path, priority).await {
             Ok(v) => Ok(serde_json::from_value(v)?),
             Err(Error::NotFound(m)) => Err(Error::SyncStateGone(m)),
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Adds and removes labels on a message (`messages.modify`). Safe to
+    /// send twice.
+    pub async fn modify(
+        &self,
+        id: &str,
+        add: &[&str],
+        remove: &[&str],
+        priority: Priority,
+    ) -> Result<()> {
+        let body = json!({"addLabelIds": add, "removeLabelIds": remove});
+        self.client
+            .post(&format!("/messages/{}/modify", enc(id)), &body, priority)
+            .await?;
+        Ok(())
+    }
+
+    /// Moves a message to Trash (`messages.trash`).
+    pub async fn trash(&self, id: &str, priority: Priority) -> Result<()> {
+        self.client
+            .post(
+                &format!("/messages/{}/trash", enc(id)),
+                &json!({}),
+                priority,
+            )
+            .await?;
+        Ok(())
+    }
+
+    /// Takes a message out of Trash (`messages.untrash`).
+    pub async fn untrash(&self, id: &str, priority: Priority) -> Result<()> {
+        self.client
+            .post(
+                &format!("/messages/{}/untrash", enc(id)),
+                &json!({}),
+                priority,
+            )
+            .await?;
+        Ok(())
+    }
+
+    /// Creates a label called `name` (a `/` path nests it) and returns its
+    /// ID. A name Gmail already has is refused (409), never reused: the
+    /// local folder would be merged into the existing one.
+    pub async fn create_label(&self, name: &str, priority: Priority) -> Result<String> {
+        let body = json!({
+            "name": name,
+            "labelListVisibility": "labelShow",
+            "messageListVisibility": "show",
+        });
+        let v = self.client.post("/labels", &body, priority).await?;
+        v["id"]
+            .as_str()
+            .map(str::to_string)
+            .ok_or_else(|| Error::Decode("label without an id".into()))
+    }
+
+    /// Renames a label. Gmail doesn't rename the labels nested under it.
+    pub async fn rename_label(&self, id: &str, name: &str, priority: Priority) -> Result<()> {
+        self.client
+            .request(
+                Method::PATCH,
+                &format!("/labels/{}", enc(id)),
+                Some(&json!({"name": name})),
+                priority,
+            )
+            .await?;
+        Ok(())
+    }
+
+    /// Deletes a label; its messages keep their other labels. A label
+    /// that's already gone is fine.
+    pub async fn delete_label(&self, id: &str, priority: Priority) -> Result<()> {
+        match self
+            .client
+            .request(
+                Method::DELETE,
+                &format!("/labels/{}", enc(id)),
+                None,
+                priority,
+            )
+            .await
+        {
+            Ok(_) | Err(Error::NotFound(_)) => Ok(()),
             Err(e) => Err(e),
         }
     }
