@@ -84,13 +84,18 @@ BEGIN
        AND (thread_id IS NOT NEW.thread_id OR received_at IS NOT NEW.received_at
             OR is_read IS NOT NEW.is_read);
 
-    -- A move: the old primary location's row goes to the new one.
+    -- A move: the old primary location's row goes to the new one, unless
+    -- the message is already there (a Gmail label). That is checked rather
+    -- than left to OR IGNORE, because an outer UPSERT's conflict handling
+    -- overrides a trigger's.
     DELETE FROM message_folders
      WHERE message_id = NEW.id AND folder_id = OLD.folder_id
        AND OLD.folder_id IS NOT NEW.folder_id;
-    INSERT OR IGNORE INTO message_folders (message_id, folder_id, thread_id, received_at, is_read)
+    INSERT INTO message_folders (message_id, folder_id, thread_id, received_at, is_read)
     SELECT NEW.id, NEW.folder_id, NEW.thread_id, NEW.received_at, NEW.is_read
-     WHERE OLD.folder_id IS NOT NEW.folder_id;
+     WHERE OLD.folder_id IS NOT NEW.folder_id
+       AND NOT EXISTS (SELECT 1 FROM message_folders
+                        WHERE message_id = NEW.id AND folder_id = NEW.folder_id);
 
     UPDATE threads SET (message_count, unread_count, last_received_at, last_message_id) =
         (SELECT count(*), coalesce(sum(is_read = 0), 0), max(received_at), id

@@ -179,6 +179,30 @@ fn deleting_a_label_keeps_its_messages_in_their_other_folders() {
 }
 
 #[test]
+fn a_header_resync_into_one_of_its_labels_keeps_working() {
+    let dir = tempfile::tempdir().unwrap();
+    let mut w = Writer::open(dir.path()).unwrap();
+    let g = gmail(&mut w);
+    let id = w
+        .write(|tx| {
+            let id = tx.upsert_message(&msg(g.a, g.inbox, "m1", "t1", 100, false))?;
+            tx.set_message_folders(id, &[g.inbox, g.acme])?;
+            Ok(id)
+        })
+        .unwrap();
+    // The sync stores the header under a label the message already has.
+    w.write(|tx| tx.upsert_message(&msg(g.a, g.acme, "m1", "t1", 100, false)))
+        .unwrap();
+    let r = Reader::open(dir.path()).unwrap();
+    assert_eq!(r.message(id).unwrap().unwrap().folder, g.acme);
+    assert_eq!(r.message_folders(id).unwrap(), [g.acme, g.all]);
+    w.write(|tx| tx.set_message_folders(id, &[g.inbox, g.acme]))
+        .unwrap();
+    assert_eq!(r.message_folders(id).unwrap(), [g.inbox, g.acme, g.all]);
+    assert_eq!(w.repair_derived().unwrap(), 0);
+}
+
+#[test]
 fn folders_of_another_account_are_refused() {
     let dir = tempfile::tempdir().unwrap();
     let mut w = Writer::open(dir.path()).unwrap();
