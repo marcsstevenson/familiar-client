@@ -49,7 +49,7 @@ impl Default for OpSignals {
 }
 
 impl OpSignals {
-    fn bump(&self) {
+    pub(crate) fn bump(&self) {
         self.changed.send_modify(|n| *n += 1);
     }
 }
@@ -69,14 +69,14 @@ pub struct OpRunner {
 }
 
 /// Why an op didn't land.
-enum Failure {
+pub(crate) enum Failure {
     /// Try again later.
     Passing(String, Duration),
     /// The server won't take it.
     Final(String),
 }
 
-fn classify(e: &GraphError, policy: &SyncPolicy, attempts: u32) -> Failure {
+pub(crate) fn classify(e: &GraphError, policy: &SyncPolicy, attempts: u32) -> Failure {
     let msg = e.to_string();
     match e {
         GraphError::Network(_) | GraphError::Throttled { .. } | GraphError::Store(_) => {
@@ -736,64 +736,11 @@ fn attachment_json(a: &AttachmentData) -> Value {
 pub enum Runner {
     /// Sends writes to Graph.
     Graph(OpRunner),
-    /// Gmail accounts.
-    Gmail(GmailOps),
+    /// Sends writes to Gmail.
+    Gmail(crate::gmail_ops::GmailOps),
 }
 
-/// What a Gmail account's queued writes get until Gmail writes land (Gmail
-/// plan WP G.6): each one fails at once with its local change undone, so
-/// nothing waits in the queue for ever.
-pub struct GmailOps {
-    pub(crate) key: String,
-    pub(crate) account: AccountId,
-    pub(crate) w: SharedWriter,
-    pub(crate) clock: Clock,
-    pub(crate) wake: Arc<Notify>,
-    pub(crate) signals: Arc<OpSignals>,
-    pub(crate) shutdown: watch::Receiver<bool>,
-}
-
-/// Why a Gmail write fails for now.
-pub const GMAIL_READ_ONLY: &str =
-    "Gmail accounts are read-only in this version of Familiar; changes come in a later update";
-
-impl GmailOps {
-    /// Runs until the daemon shuts down.
-    pub async fn run(self) {
-        loop {
-            if *self.shutdown.borrow() {
-                break;
-            }
-            let now = (self.clock)();
-            let acc = self.account;
-            match self.w.write(|tx| tx.claim_op_for(acc, now)) {
-                Ok(Some(op)) => {
-                    let payload = OpPayload::of(&op).ok();
-                    fail_op(
-                        &self.w,
-                        &self.key,
-                        acc,
-                        &self.signals,
-                        &op,
-                        payload.as_ref(),
-                        GMAIL_READ_ONLY,
-                    );
-                    continue;
-                }
-                Ok(None) => {}
-                Err(e) => crate::log(&format!("{}: op queue: {e}", self.key)),
-            }
-            let mut shutdown = self.shutdown.clone();
-            tokio::select! {
-                _ = self.wake.notified() => {}
-                _ = shutdown.changed() => {}
-                _ = tokio::time::sleep(Duration::from_secs(60)) => {}
-            }
-        }
-    }
-}
-
-fn fail_op(
+pub(crate) fn fail_op(
     w: &SharedWriter,
     key: &str,
     acc: AccountId,

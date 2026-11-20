@@ -562,7 +562,15 @@ impl GmailSync {
 }
 
 /// The folders for a message's labels, All Mail left to the store.
+///
+/// A message in Trash or Spam is shown there only, as Gmail shows it:
+/// its other labels stay on Gmail but it leaves those folders.
 fn label_folders(labels: &[String], folders: &HashMap<String, FolderId>) -> Vec<FolderId> {
+    for hidden in ["TRASH", "SPAM"] {
+        if labels.iter().any(|l| l == hidden) {
+            return folders.get(hidden).copied().into_iter().collect();
+        }
+    }
     labels
         .iter()
         .filter(|l| l.as_str() != ALL_MAIL)
