@@ -1456,7 +1456,9 @@ dependencies = [
  "familiar-auth",
  "familiar-config",
  "familiar-core",
+ "familiar-mock-gmail",
  "familiar-mock-graph",
+ "familiar-provider-gmail",
  "familiar-provider-graph",
  "familiar-rules",
  "familiar-search",
@@ -1531,6 +1533,22 @@ dependencies = [
  "reqwest 0.12.28",
  "serde_json",
  "thiserror 2.0.21",
+ "tokio",
+]
+
+[[package]]
+name = "familiar-provider-gmail"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "familiar-mock-gmail",
+ "familiar-provider",
+ "familiar-store",
+ "mail-parser",
+ "reqwest 0.12.28",
+ "serde",
+ "serde_json",
+ "tempfile",
  "tokio",
 ]
 
@@ -2105,6 +2123,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
 dependencies = [
  "foldhash",
+]
+
+[[package]]
+name = "hashify"
+version = "0.2.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dd1246c0e5493286aeb2dde35b1f4eb9c4ce00e628641210a5e553fc001a1f26"
+dependencies = [
+ "indexmap 2.14.2",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
 ]
 
 [[package]]
@@ -2862,6 +2892,15 @@ name = "lz4_flex"
 version = "0.14.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "ecbdfe44b1bd960b68170b417450a628c43f7cf56bb3c5317e61cb230ee7f226"
+
+[[package]]
+name = "mail-parser"
+version = "0.11.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4ec00bda90c6e645a54506c630c2820cd6b1890cfd2b0a169b50f74b2b8c7c86"
+dependencies = [
+ "hashify",
+]
 
 [[package]]
 name = "maplit"

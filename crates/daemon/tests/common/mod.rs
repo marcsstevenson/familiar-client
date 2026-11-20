@@ -82,7 +82,7 @@ impl Env {
                 email: "pat@example.com".into(),
                 display_name: "Pat".into(),
                 tenant_id: None,
-                client: self.client(),
+                client: self.client().into(),
             }],
         );
         o.policy = policy;

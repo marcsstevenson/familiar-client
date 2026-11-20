@@ -398,6 +398,10 @@ pub struct SearchOnlineParams {
     /// The `$search` value, with its surrounding quotes
     /// (see [`familiar_search::to_kql`]).
     pub kql: String,
+    /// The same search in Gmail's syntax, for Gmail accounts
+    /// (see [`familiar_search::to_gmail_q`]).
+    #[serde(default)]
+    pub gmail_q: Option<String>,
     /// Only these accounts (config name or address); all when empty.
     #[serde(default)]
     pub accounts: Vec<String>,

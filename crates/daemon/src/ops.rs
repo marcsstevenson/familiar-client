@@ -188,65 +188,15 @@ impl OpRunner {
     /// Gives up on an op: undoes its change, and cancels and undoes later
     /// ops that depend on a folder it was creating.
     async fn fail(&mut self, op: &Op, payload: Option<&OpPayload>, msg: &str) {
-        crate::log(&format!(
-            "{}: op {} ({}) failed: {msg}",
-            self.key, op.id.0, op.kind
-        ));
-        let acc = self.account;
-        let r = self.w.write(|tx| {
-            let created = match payload {
-                Some(OpPayload::CreateDraft(d)) => {
-                    Some(familiar_store::message_target(MessageId(d.message)))
-                }
-                Some(OpPayload::CreateEvent(e)) => {
-                    Some(familiar_store::event_target(EventId(e.event)))
-                }
-                _ => None,
-            };
-            if let Some(target) = created {
-                for o in tx.open_ops()? {
-                    if o.account == acc
-                        && o.id > op.id
-                        && o.state == OpState::Pending
-                        && o.target == target
-                    {
-                        tx.fail_op(o.id, "the item it changes couldn't be created")?;
-                    }
-                }
-            }
-            if let Some(OpPayload::CreateFolder { folder, .. }) = payload {
-                let mut later: Vec<Op> = tx
-                    .open_ops()?
-                    .into_iter()
-                    .filter(|o| o.account == acc && o.id > op.id && o.state == OpState::Pending)
-                    .collect();
-                later.reverse();
-                for o in later {
-                    let Ok(p) = OpPayload::of(&o) else { continue };
-                    if p.uses_folder(*folder) {
-                        undo_local(tx, &p)?;
-                        tx.fail_op(o.id, "the folder it needed couldn't be created")?;
-                    }
-                }
-            }
-            if let Some(p) = payload {
-                undo_local(tx, p)?;
-            }
-            tx.fail_op(op.id, msg)?;
-            tx.add_audit(&NewAudit {
-                account: Some(acc),
-                source: op.source.clone(),
-                command: op.kind.clone(),
-                outcome: "failed".into(),
-                op: Some(op.id),
-                detail: format!("{}: {msg}", op.summary),
-            })?;
-            Ok(())
-        });
-        if let Err(e) = r {
-            crate::log(&format!("{}: op {}: {e}", self.key, op.id.0));
-        }
-        self.signals.bump();
+        fail_op(
+            &self.w,
+            &self.key,
+            self.account,
+            &self.signals,
+            op,
+            payload,
+            msg,
+        );
     }
 
     fn message_remote(&self, id: i64) -> Result<String, GraphError> {
@@ -780,4 +730,132 @@ fn attachment_json(a: &AttachmentData) -> Value {
         v["contentId"] = json!(c);
     }
     v
+}
+
+/// An account's op runner: Graph's, or Gmail's.
+pub enum Runner {
+    /// Sends writes to Graph.
+    Graph(OpRunner),
+    /// Gmail accounts.
+    Gmail(GmailOps),
+}
+
+/// What a Gmail account's queued writes get until Gmail writes land (Gmail
+/// plan WP G.6): each one fails at once with its local change undone, so
+/// nothing waits in the queue for ever.
+pub struct GmailOps {
+    pub(crate) key: String,
+    pub(crate) account: AccountId,
+    pub(crate) w: SharedWriter,
+    pub(crate) clock: Clock,
+    pub(crate) wake: Arc<Notify>,
+    pub(crate) signals: Arc<OpSignals>,
+    pub(crate) shutdown: watch::Receiver<bool>,
+}
+
+/// Why a Gmail write fails for now.
+pub const GMAIL_READ_ONLY: &str =
+    "Gmail accounts are read-only in this version of Familiar; changes come in a later update";
+
+impl GmailOps {
+    /// Runs until the daemon shuts down.
+    pub async fn run(self) {
+        loop {
+            if *self.shutdown.borrow() {
+                break;
+            }
+            let now = (self.clock)();
+            let acc = self.account;
+            match self.w.write(|tx| tx.claim_op_for(acc, now)) {
+                Ok(Some(op)) => {
+                    let payload = OpPayload::of(&op).ok();
+                    fail_op(
+                        &self.w,
+                        &self.key,
+                        acc,
+                        &self.signals,
+                        &op,
+                        payload.as_ref(),
+                        GMAIL_READ_ONLY,
+                    );
+                    continue;
+                }
+                Ok(None) => {}
+                Err(e) => crate::log(&format!("{}: op queue: {e}", self.key)),
+            }
+            let mut shutdown = self.shutdown.clone();
+            tokio::select! {
+                _ = self.wake.notified() => {}
+                _ = shutdown.changed() => {}
+                _ = tokio::time::sleep(Duration::from_secs(60)) => {}
+            }
+        }
+    }
+}
+
+fn fail_op(
+    w: &SharedWriter,
+    key: &str,
+    acc: AccountId,
+    signals: &OpSignals,
+    op: &Op,
+    payload: Option<&OpPayload>,
+    msg: &str,
+) {
+    crate::log(&format!(
+        "{}: op {} ({}) failed: {msg}",
+        key, op.id.0, op.kind
+    ));
+    let r = w.write(|tx| {
+        let created = match payload {
+            Some(OpPayload::CreateDraft(d)) => {
+                Some(familiar_store::message_target(MessageId(d.message)))
+            }
+            Some(OpPayload::CreateEvent(e)) => Some(familiar_store::event_target(EventId(e.event))),
+            _ => None,
+        };
+        if let Some(target) = created {
+            for o in tx.open_ops()? {
+                if o.account == acc
+                    && o.id > op.id
+                    && o.state == OpState::Pending
+                    && o.target == target
+                {
+                    tx.fail_op(o.id, "the item it changes couldn't be created")?;
+                }
+            }
+        }
+        if let Some(OpPayload::CreateFolder { folder, .. }) = payload {
+            let mut later: Vec<Op> = tx
+                .open_ops()?
+                .into_iter()
+                .filter(|o| o.account == acc && o.id > op.id && o.state == OpState::Pending)
+                .collect();
+            later.reverse();
+            for o in later {
+                let Ok(p) = OpPayload::of(&o) else { continue };
+                if p.uses_folder(*folder) {
+                    undo_local(tx, &p)?;
+                    tx.fail_op(o.id, "the folder it needed couldn't be created")?;
+                }
+            }
+        }
+        if let Some(p) = payload {
+            undo_local(tx, p)?;
+        }
+        tx.fail_op(op.id, msg)?;
+        tx.add_audit(&NewAudit {
+            account: Some(acc),
+            source: op.source.clone(),
+            command: op.kind.clone(),
+            outcome: "failed".into(),
+            op: Some(op.id),
+            detail: format!("{}: {msg}", op.summary),
+        })?;
+        Ok(())
+    });
+    if let Err(e) = r {
+        crate::log(&format!("{key}: op {}: {e}", op.id.0));
+    }
+    signals.bump();
 }

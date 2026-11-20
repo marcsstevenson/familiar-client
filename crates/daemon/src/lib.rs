@@ -31,12 +31,13 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use familiar_core::daemon::DaemonPaths;
+use familiar_provider_gmail::{GmailApi, GmailClient, GmailSync};
 use familiar_provider_graph::{CalendarApi, CalendarSync, GraphClient, MailApi, MailSync};
 use familiar_store::{NewAccount, SharedWriter, Writer};
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
 
-use crate::engine::{AccountShared, Engine};
+use crate::engine::{AccountShared, Engine, MailSource};
 use crate::policy::{Clock, SyncPolicy, system_clock};
 use crate::service::{AccountHandle, Service};
 
@@ -62,8 +63,29 @@ pub struct AccountSpec {
     pub display_name: String,
     /// Directory tenant for work accounts.
     pub tenant_id: Option<String>,
-    /// A Graph client for the mailbox.
-    pub client: GraphClient,
+    /// A client for the mailbox.
+    pub client: AccountClient,
+}
+
+/// The provider client for one mailbox.
+#[derive(Clone, Debug)]
+pub enum AccountClient {
+    /// Microsoft Graph.
+    Graph(GraphClient),
+    /// Gmail.
+    Gmail(GmailClient),
+}
+
+impl From<GraphClient> for AccountClient {
+    fn from(c: GraphClient) -> Self {
+        AccountClient::Graph(c)
+    }
+}
+
+impl From<GmailClient> for AccountClient {
+    fn from(c: GmailClient) -> Self {
+        AccountClient::Gmail(c)
+    }
 }
 
 /// Everything the daemon needs.
@@ -185,54 +207,92 @@ impl Daemon {
         let mut accounts = HashMap::new();
         let mut engines = Vec::new();
         for spec in opts.accounts {
+            let provider = match spec.client {
+                AccountClient::Graph(_) => "graph",
+                AccountClient::Gmail(_) => "gmail",
+            };
             let id = w
                 .write(|t| {
                     t.upsert_account(&NewAccount {
                         key: spec.key.clone(),
                         email: spec.email.clone(),
                         display_name: spec.display_name.clone(),
-                        provider: "graph".into(),
+                        provider: provider.into(),
                         tenant_id: spec.tenant_id.clone(),
                     })
                 })
                 .map_err(StartError::Store)?;
-            let cal_api = CalendarApi::new(spec.client.clone());
-            let calendar = CalendarSync::new(cal_api.clone(), id);
-            let contacts = familiar_provider_graph::ContactSync::new(
-                familiar_provider_graph::ContactsApi::new(spec.client.clone()),
-                id,
-            );
-            let api = MailApi::new(spec.client);
-            let mut sync = MailSync::new(api.clone(), id);
-            if let Some(n) = opts.page_size {
-                sync = sync.with_page_size(n);
-            }
             let shared = Arc::new(AccountShared::new(&spec.key));
             let ops_wake = Arc::new(tokio::sync::Notify::new());
-            runners.push(ops::OpRunner {
-                key: spec.key.clone(),
-                account: id,
-                api: api.clone(),
-                cal: cal_api,
-                w: w.clone(),
-                policy: policy.clone(),
-                clock: opts.clock.clone(),
-                wake: ops_wake.clone(),
-                signals: signals.clone(),
-                shutdown: rx.clone(),
-            });
-            engines.push(Engine::new(
-                spec.key.clone(),
-                id,
-                sync,
-                calendar,
-                contacts,
-                w.clone(),
-                policy.clone(),
-                opts.clock.clone(),
-                shared.clone(),
-                rx.clone(),
-            ));
+            let api = match spec.client {
+                AccountClient::Graph(client) => {
+                    let cal_api = CalendarApi::new(client.clone());
+                    let calendar = CalendarSync::new(cal_api.clone(), id);
+                    let contacts = familiar_provider_graph::ContactSync::new(
+                        familiar_provider_graph::ContactsApi::new(client.clone()),
+                        id,
+                    );
+                    let api = MailApi::new(client);
+                    let mut sync = MailSync::new(api.clone(), id);
+                    if let Some(n) = opts.page_size {
+                        sync = sync.with_page_size(n);
+                    }
+                    runners.push(ops::Runner::Graph(ops::OpRunner {
+                        key: spec.key.clone(),
+                        account: id,
+                        api: api.clone(),
+                        cal: cal_api,
+                        w: w.clone(),
+                        policy: policy.clone(),
+                        clock: opts.clock.clone(),
+                        wake: ops_wake.clone(),
+                        signals: signals.clone(),
+                        shutdown: rx.clone(),
+                    }));
+                    engines.push(Engine::new(
+                        spec.key.clone(),
+                        id,
+                        MailSource::Graph(sync),
+                        Some(calendar),
+                        Some(contacts),
+                        w.clone(),
+                        policy.clone(),
+                        opts.clock.clone(),
+                        shared.clone(),
+                        rx.clone(),
+                    ));
+                    service::AccountApi::Graph(api)
+                }
+                AccountClient::Gmail(client) => {
+                    let api = GmailApi::new(client);
+                    let mut sync = GmailSync::new(api.clone(), id);
+                    if let Some(n) = opts.page_size {
+                        sync = sync.with_page_size(n);
+                    }
+                    runners.push(ops::Runner::Gmail(ops::GmailOps {
+                        key: spec.key.clone(),
+                        account: id,
+                        w: w.clone(),
+                        clock: opts.clock.clone(),
+                        wake: ops_wake.clone(),
+                        signals: signals.clone(),
+                        shutdown: rx.clone(),
+                    }));
+                    engines.push(Engine::new(
+                        spec.key.clone(),
+                        id,
+                        MailSource::Gmail(sync),
+                        None,
+                        None,
+                        w.clone(),
+                        policy.clone(),
+                        opts.clock.clone(),
+                        shared.clone(),
+                        rx.clone(),
+                    ));
+                    service::AccountApi::Gmail(api)
+                }
+            };
             accounts.insert(
                 id,
                 AccountHandle {
@@ -255,7 +315,10 @@ impl Daemon {
         });
         let mut tasks: Vec<JoinHandle<()>> =
             engines.into_iter().map(|e| tokio::spawn(e.run())).collect();
-        tasks.extend(runners.into_iter().map(|r| tokio::spawn(r.run())));
+        tasks.extend(runners.into_iter().map(|r| match r {
+            ops::Runner::Graph(r) => tokio::spawn(r.run()),
+            ops::Runner::Gmail(r) => tokio::spawn(r.run()),
+        }));
         tasks.push(snooze::spawn(service.clone(), rx.clone()));
         if let Some(t) = indexer::spawn(&opts.paths.index, w.clone(), rx.clone()) {
             tasks.push(t);
