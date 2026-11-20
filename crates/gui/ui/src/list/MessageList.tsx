@@ -190,7 +190,12 @@ export function MessageList() {
       // then the selection already has its new place.
       if (focusId() === sel) {
         setSelIndex(ix);
-        if (ix !== null && !keepScroll && !restored) scrollIntoView(ix);
+        if (ix !== null) {
+          if (!keepScroll && !restored) scrollIntoView(ix);
+          // The reader's actions need its row even when the list was left
+          // several pages away from the open message.
+          void loadPage(Math.floor(ix / PAGE));
+        }
       }
       setRev((x) => x + 1);
       prefetch();
