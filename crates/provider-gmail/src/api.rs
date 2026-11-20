@@ -251,28 +251,19 @@ impl GmailApi {
     }
 
     /// Creates a label called `name` (a `/` path nests it) and returns its
-    /// ID. If one by that name is already there (a retry after a lost
-    /// answer), that one's ID.
+    /// ID. A name Gmail already has is refused (409), never reused: the
+    /// local folder would be merged into the existing one.
     pub async fn create_label(&self, name: &str, priority: Priority) -> Result<String> {
         let body = json!({
             "name": name,
             "labelListVisibility": "labelShow",
             "messageListVisibility": "show",
         });
-        match self.client.post("/labels", &body, priority).await {
-            Ok(v) => v["id"]
-                .as_str()
-                .map(str::to_string)
-                .ok_or_else(|| Error::Decode("label without an id".into())),
-            Err(Error::Graph { status: 409, .. }) => self
-                .labels(priority)
-                .await?
-                .into_iter()
-                .find(|l| l.name.eq_ignore_ascii_case(name))
-                .map(|l| l.id)
-                .ok_or_else(|| Error::Decode(format!("label {name:?} clashes but isn't listed"))),
-            Err(e) => Err(e),
-        }
+        let v = self.client.post("/labels", &body, priority).await?;
+        v["id"]
+            .as_str()
+            .map(str::to_string)
+            .ok_or_else(|| Error::Decode("label without an id".into()))
     }
 
     /// Renames a label. Gmail doesn't rename the labels nested under it.
