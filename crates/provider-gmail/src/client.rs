@@ -60,9 +60,12 @@ impl ClientOptions {
 
 /// What a request costs in Gmail quota units, from Google's quota table.
 pub fn units(method: &Method, path: &str) -> u32 {
-    let path = path.split('?').next().unwrap_or(path);
+    let (path, query) = path.split_once('?').unwrap_or((path, ""));
     let segs: Vec<&str> = path.trim_matches('/').split('/').collect();
     match (method.as_str(), segs.as_slice()) {
+        ("GET", ["messages", _]) if query.contains("format=raw") => 60,
+        ("GET", ["messages", _]) if query.contains("format=minimal") => 5,
+        ("GET", ["messages", _]) => 20,
         (_, ["history"]) => 2,
         ("GET", ["labels", ..]) | ("GET", ["profile"]) => 1,
         ("POST", ["messages", "send"]) | ("POST", ["drafts", "send"]) => 100,
@@ -344,7 +347,9 @@ mod tests {
     #[test]
     fn costs() {
         assert_eq!(units(&Method::GET, "/history?startHistoryId=1"), 2);
-        assert_eq!(units(&Method::GET, "/messages/abc?format=raw"), 5);
+        assert_eq!(units(&Method::GET, "/messages/abc?format=raw"), 60);
+        assert_eq!(units(&Method::GET, "/messages/abc?format=metadata"), 20);
+        assert_eq!(units(&Method::GET, "/messages?q=x"), 5);
         assert_eq!(units(&Method::POST, "/messages/send"), 100);
         assert_eq!(units(&Method::GET, "/labels"), 1);
     }

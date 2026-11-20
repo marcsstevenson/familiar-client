@@ -102,8 +102,6 @@ pub struct LabelReport {
 pub struct MailReport {
     /// Messages added or updated.
     pub upserted: usize,
-    /// Messages whose labels or flags changed in place.
-    pub relabelled: usize,
     /// Messages removed locally.
     pub deleted: usize,
     /// History pages or listing pages read.
@@ -184,13 +182,33 @@ impl GmailSync {
             .map(|l| (l.name.clone(), l.id.clone()))
             .collect();
         let mut report = LabelReport::default();
+        let mut keep: HashSet<String> = labels.iter().map(|l| l.id.clone()).collect();
+        keep.insert(ALL_MAIL.to_string());
+        // Messages in labels that are going: they lose that label, not
+        // their local copy (deleting a folder deletes the messages whose
+        // primary location it is).
+        let mut leaving: Vec<(FolderId, MessageId)> = Vec::new();
+        let reader = Reader::open(&w.paths().root)?;
+        for f in reader.folders(acc)? {
+            if keep.contains(&f.remote_id) {
+                continue;
+            }
+            let mut after = None;
+            loop {
+                let rows = reader.messages(f.id, after, 1000)?;
+                let Some(last) = rows.last() else { break };
+                after = Some(Cursor {
+                    received_at: last.received_at,
+                    id: last.id.0,
+                });
+                leaving.extend(rows.iter().map(|m| (f.id, m.id)));
+            }
+        }
+        drop(reader);
         w.write(|tx| {
             let busy = tx.open_op_targets(acc)?;
-            let mut keep: HashSet<String> = HashSet::new();
-            keep.insert(ALL_MAIL.to_string());
-            tx.ensure_all_mail(acc)?;
+            let all_mail = tx.ensure_all_mail(acc)?;
             for l in &labels {
-                keep.insert(l.id.clone());
                 if let Some(f) = tx.folder_by_remote(acc, &l.id)? {
                     if busy.contains(&familiar_store::folder_target(f.id)) {
                         continue;
@@ -227,8 +245,16 @@ impl GmailSync {
                 {
                     continue;
                 }
-                // Its messages go with it; the next history round or resync
-                // brings back any that are still in other labels.
+                for (folder, m) in &leaving {
+                    if *folder == f.id {
+                        let rest: Vec<FolderId> = tx
+                            .message_folders(*m)?
+                            .into_iter()
+                            .filter(|x| *x != f.id && *x != all_mail)
+                            .collect();
+                        tx.set_message_folders(*m, &rest)?;
+                    }
+                }
                 tx.delete_folder(f.id)?;
                 report.removed += 1;
             }
@@ -263,27 +289,43 @@ impl GmailSync {
             Some(h) => match self.history_round(w, &h, priority).await {
                 Err(Error::SyncStateGone(_)) => {
                     w.write(|tx| tx.reset_sync_state(acc, HISTORY_RESOURCE))?;
-                    let mut r = self.listing_page(w, priority).await?;
+                    let mut r = self.listing_page(w, true, priority).await?;
                     r.restarted = true;
                     Ok(r)
                 }
                 r => r,
             },
-            None => self.listing_page(w, priority).await,
+            None => self.listing_page(w, false, priority).await,
         }
     }
 
+    /// One listing page. `resync` is set when history expired: that
+    /// listing must see every page in one run to know what to remove, so a
+    /// resync interrupted by a restart starts over (a first sync resumes).
     async fn listing_page<W: StoreWriter>(
         &mut self,
         w: &mut W,
+        resync: bool,
         priority: Priority,
     ) -> Result<MailReport> {
         let acc = self.account;
-        let saved = w
+        let mut saved = w
             .write(|tx| tx.sync_state(acc, LISTING_RESOURCE))?
             .and_then(|s| s.delta_link);
+        let mut resync = resync;
+        if let Some(mark) = &saved {
+            if mark.ends_with(" resync") {
+                resync = true;
+                if self.seen.is_none() {
+                    saved = None;
+                }
+            }
+        }
         let (start, token) = match saved.as_deref().and_then(|s| s.split_once(' ')) {
-            Some((h, t)) => (h.to_string(), Some(t.to_string())),
+            Some((h, t)) => (
+                h.to_string(),
+                Some(t.trim_end_matches(" resync").to_string()),
+            ),
             None => {
                 // History from before the listing, so nothing that changes
                 // while it runs is missed.
@@ -311,7 +353,11 @@ impl GmailSync {
         report.upserted += self.store_headers(w, &got, priority).await?;
         match page.next_page_token {
             Some(next) => {
-                let mark = format!("{start} {next}");
+                let mark = if resync {
+                    format!("{start} {next} resync")
+                } else {
+                    format!("{start} {next}")
+                };
                 w.write(|tx| tx.set_sync_state(acc, LISTING_RESOURCE, None, Some(&mark), now()))?;
                 report.more = true;
             }
@@ -416,25 +462,28 @@ impl GmailSync {
         let acc = self.account;
         let mut report = MailReport::default();
         let mut token: Option<String> = None;
-        // Latest known labels per message, new messages, deleted ones.
-        let mut labels: HashMap<String, Vec<String>> = HashMap::new();
-        let mut added: HashSet<String> = HashSet::new();
+        // History records name what changed but don't reliably carry a
+        // message's labels after the change, so changed messages are read
+        // again; deletions are applied as they are.
+        let mut changed: Vec<String> = Vec::new();
+        let mut seen: HashSet<String> = HashSet::new();
         let mut deleted: HashSet<String> = HashSet::new();
         let latest = loop {
             let page = self.api.history(start, token.as_deref(), priority).await?;
             report.pages += 1;
             for rec in page.history {
-                for m in rec.messages_added {
+                for m in rec
+                    .messages_added
+                    .into_iter()
+                    .chain(rec.labels_added)
+                    .chain(rec.labels_removed)
+                {
                     deleted.remove(&m.message.id);
-                    added.insert(m.message.id.clone());
-                    labels.insert(m.message.id, m.message.label_ids);
-                }
-                for m in rec.labels_added.into_iter().chain(rec.labels_removed) {
-                    labels.insert(m.message.id, m.message.label_ids);
+                    if seen.insert(m.message.id.clone()) {
+                        changed.push(m.message.id);
+                    }
                 }
                 for m in rec.messages_deleted {
-                    added.remove(&m.message.id);
-                    labels.remove(&m.message.id);
                     deleted.insert(m.message.id);
                 }
             }
@@ -443,11 +492,17 @@ impl GmailSync {
                 None => break page.history_id.unwrap_or_else(|| start.to_string()),
             }
         };
+        changed.retain(|id| !deleted.contains(id));
 
-        // Gone for good.
+        let got = self.fetch_metadata(&changed, priority).await?;
+        // Deleted for good, or gone by the time it was read.
+        let found: HashSet<&str> = got.iter().map(|m| m.id.as_str()).collect();
         let gone: Vec<MessageId> = w.write(|tx| {
             let mut ids = Vec::new();
-            for r in &deleted {
+            for r in deleted
+                .iter()
+                .chain(changed.iter().filter(|r| !found.contains(r.as_str())))
+            {
                 if let Some(m) = tx.message_by_remote(acc, r)? {
                     ids.push(m.id);
                 }
@@ -455,58 +510,7 @@ impl GmailSync {
             Ok(ids)
         })?;
         report.deleted += delete_local(w, acc, &gone)?;
-
-        // Label changes on messages the store has; the rest need headers.
-        let mut folders = self.folder_ids(w)?;
-        let unknown_label = labels
-            .values()
-            .flatten()
-            .any(|l| !folders.contains_key(l) && !is_system_id(l));
-        if unknown_label {
-            self.sync_labels(w, priority).await?;
-            folders = self.folder_ids(w)?;
-        }
-        let mut fetch: Vec<String> = Vec::new();
-        let mut relabelled = 0;
-        w.write(|tx| {
-            let busy = tx.open_op_targets(acc)?;
-            for (remote, ls) in &labels {
-                let local = match tx.message_by_remote(acc, remote)? {
-                    Some(l) if !added.contains(remote) => l,
-                    _ => {
-                        fetch.push(remote.clone());
-                        continue;
-                    }
-                };
-                if busy.contains(&familiar_store::message_target(local.id)) {
-                    continue;
-                }
-                tx.set_message_folders(local.id, &label_folders(ls, &folders))?;
-                tx.set_read(local.id, !ls.iter().any(|l| l == "UNREAD"))?;
-                tx.set_flagged(local.id, ls.iter().any(|l| l == "STARRED"))?;
-                relabelled += 1;
-            }
-            Ok(())
-        })?;
-        report.relabelled = relabelled;
-        if !fetch.is_empty() {
-            let got = self.fetch_metadata(&fetch, priority).await?;
-            let found: HashSet<&str> = got.iter().map(|m| m.id.as_str()).collect();
-            // Listed in history but gone by now.
-            let vanished: Vec<MessageId> = w.write(|tx| {
-                let mut ids = Vec::new();
-                for r in &fetch {
-                    if !found.contains(r.as_str()) {
-                        if let Some(m) = tx.message_by_remote(acc, r)? {
-                            ids.push(m.id);
-                        }
-                    }
-                }
-                Ok(ids)
-            })?;
-            report.deleted += delete_local(w, acc, &vanished)?;
-            report.upserted += self.store_headers(w, &got, priority).await?;
-        }
+        report.upserted += self.store_headers(w, &got, priority).await?;
         w.write(|tx| tx.set_sync_state(acc, HISTORY_RESOURCE, None, Some(&latest), now()))?;
         Ok(report)
     }

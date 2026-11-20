@@ -126,6 +126,9 @@ async fn labels_become_folders() {
     }
 
     // A label deleted on Gmail goes; a new one arrives.
+    // The receipt is archived with only this label.
+    e.sync_all().await;
+    let receipt = e.message("msg-receipt").unwrap();
     let mbx = e.mock.mailbox("default");
     mbx.delete_label("Label_3").unwrap();
     mbx.add_label(Label::user("Travel").id("Label_9")).unwrap();
@@ -144,6 +147,13 @@ async fn labels_become_folders() {
         .collect();
     assert!(names.contains(&"Travel".to_string()));
     assert!(!names.contains(&"Receipts".to_string()));
+    // Its message stays, with its local ID, in All Mail.
+    let kept = e.message("msg-receipt").unwrap();
+    assert_eq!(kept.id, receipt.id);
+    assert_eq!(
+        e.reader().folder(kept.folder).unwrap().unwrap().name,
+        "All Mail"
+    );
 }
 
 #[tokio::test]
@@ -210,9 +220,10 @@ async fn first_sync_lists_everything_then_history_follows() {
         .await
         .unwrap();
     assert!(!r.more && !r.restarted);
-    assert_eq!((r.upserted, r.relabelled, r.deleted), (1, 2, 1));
-    // One history page and one header fetch, no listing.
-    assert_eq!(e.mock.requests().len() - before, 2);
+    // Three changed messages read again, one deleted.
+    assert_eq!((r.upserted, r.deleted), (3, 1));
+    // One history page and three header fetches, no listing.
+    assert_eq!(e.mock.requests().len() - before, 4);
     let f = e.by_folder();
     assert!(f["All Mail"].contains(&"msg-dinner".to_string()));
     assert!(!f["Inbox"].contains(&"msg-dinner".to_string()));
@@ -232,7 +243,7 @@ async fn first_sync_lists_everything_then_history_follows() {
         .sync_mail(&mut e.w, Priority::Background)
         .await
         .unwrap();
-    assert_eq!((r.upserted, r.relabelled, r.deleted, r.pages), (0, 0, 0, 1));
+    assert_eq!((r.upserted, r.deleted, r.pages), (0, 0, 1));
 }
 
 #[tokio::test]
@@ -328,4 +339,27 @@ async fn server_search_uses_gmail_syntax() {
     assert!(ids.contains(&"msg-acme-1"), "{ids:?}");
     assert!(!ids.contains(&"msg-dinner"));
     assert!(found.iter().all(|m| m.header("Subject").is_some()));
+}
+
+#[tokio::test]
+async fn an_interrupted_resync_starts_over() {
+    let mut e = env().await;
+    e.sync_all().await;
+    let mbx = e.mock.mailbox("default");
+    mbx.modify("msg-photos", &[], &["STARRED"]).unwrap();
+    mbx.expire_history();
+    mbx.delete_message("msg-promo").unwrap();
+    let r = e
+        .sync
+        .sync_mail(&mut e.w, Priority::Background)
+        .await
+        .unwrap();
+    assert!(r.restarted && r.more);
+    // famd restarts mid-resync: the listing starts over, so it still
+    // knows everything Gmail has and drops what went.
+    let api = e.sync.api().clone();
+    e.sync = GmailSync::new(api, e.acc).with_page_size(3);
+    e.sync_all().await;
+    assert!(e.message("msg-promo").is_none());
+    assert_eq!(e.total(), 11);
 }

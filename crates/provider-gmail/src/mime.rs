@@ -65,7 +65,9 @@ fn unescape(s: &str) -> String {
     while let Some(i) = rest.find('&') {
         out.push_str(&rest[..i]);
         rest = &rest[i..];
-        let Some(end) = rest[..rest.len().min(10)].find(';') else {
+        // Entities are ASCII: look for the `;` byte, so a multibyte
+        // character after a bare `&` can't split a slice.
+        let Some(end) = rest.bytes().take(10).position(|b| b == b';') else {
             out.push('&');
             rest = &rest[1..];
             continue;
@@ -188,6 +190,7 @@ mod tests {
     fn snippets_are_unescaped() {
         assert_eq!(unescape("it&#39;s &lt;b&gt; &amp; more"), "it's <b> & more");
         assert_eq!(unescape("AT&T &unknown; &#x263A;"), "AT&T &unknown; ☺");
+        assert_eq!(unescape("&éééé &amp;é"), "&éééé &é");
     }
 
     #[test]

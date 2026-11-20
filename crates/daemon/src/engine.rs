@@ -494,7 +494,7 @@ impl Engine {
             self.first_sync_done = true;
             crate::log(&format!("{}: headers for all history are in", self.key));
         }
-        if r.upserted + r.relabelled > 0 {
+        if r.upserted > 0 {
             self.bodies_pending = true;
             self.body_cursor = None;
         }
