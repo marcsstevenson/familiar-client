@@ -446,6 +446,10 @@ async fn gmail_drafts_and_sending() {
         )
         .unwrap();
     env.first_sync().await;
+    // The first sync may have listed the mailbox before it was added; the
+    // history poll brings it in then.
+    env.until("the logo message", |e| e.message("msg-logo").is_some())
+        .await;
     let raw_of = |id: &str| {
         String::from_utf8_lossy(&env.mock.mailbox("default").message(id).unwrap().raw).into_owned()
     };
