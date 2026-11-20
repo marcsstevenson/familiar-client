@@ -1,6 +1,6 @@
 # Adding a Gmail account
 
-Gmail accounts sign in with your own Google OAuth client, because Familiar doesn't ship one for Google (see `designs/Gmail Plan.md`, "Sign-in and Google verification"). Mail sync for Gmail is still being built (Gmail plan WP G.5); until then famd skips Gmail accounts and says so in its log.
+Gmail accounts sign in with your own Google OAuth client, because Familiar doesn't ship one for Google (see `designs/Gmail Plan.md`, "Sign-in and Google verification"). famd syncs Gmail mail read-only for now: labels as folders, bodies for the sync window, changes through Gmail's history, and server search. Changes made in Familiar (read, flag, move and so on) are refused and undone until Gmail writes land (Gmail plan WP G.6).
 
 ## 1. Make the Google client (once)
 
