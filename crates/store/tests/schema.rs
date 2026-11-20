@@ -76,7 +76,6 @@ fn second_writer_is_refused_until_first_closes() {
     // Readers don't need the lock.
     Reader::open(dir.path()).unwrap();
     drop(w);
-    assert!(!Writer::is_held(dir.path()));
     Writer::open(dir.path()).unwrap();
 }
 
@@ -111,6 +110,9 @@ fn writer_lock_holds_across_processes() {
     assert_eq!(child(), Some(3), "child must see the lock");
     drop(w);
     assert_eq!(child(), Some(0), "lock is released on drop");
+    // Probe after the child exits. Between fork and exec it can briefly
+    // inherit a lock descriptor from another test running in this process.
+    assert!(!Writer::is_held(dir.path()));
 }
 
 #[test]
