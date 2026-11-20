@@ -233,6 +233,9 @@ pub struct EventUpdateOp {
     pub series: Option<String>,
     /// What changes.
     pub changes: EventChanges,
+    /// Absolute Google series patch prepared before sending, reused on a retry.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub google_series_patch: Option<Value>,
     /// The rows as they were.
     pub prev: Vec<EventSnapshot>,
 }

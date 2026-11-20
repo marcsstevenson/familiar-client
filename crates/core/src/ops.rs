@@ -1445,6 +1445,7 @@ pub fn plan(tx: &WriteTx<'_>, req: &WriteRequest) -> Result<Vec<Planned>, Comman
                     event: e.id.0,
                     series: master,
                     changes: changes.clone(),
+                    google_series_patch: None,
                     prev: events::snapshot(&rows),
                 }),
             });

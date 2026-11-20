@@ -386,8 +386,9 @@ impl Engine {
 
         // Calendars, between the tree and the folders.
         if self.calendar_due <= now {
+            let result = self.sync_calendars().await;
             self.calendar_due = Instant::now() + self.policy.calendar_interval;
-            self.sync_calendars().await?;
+            result?;
             return Ok(Next::Now);
         }
         if self.contacts.is_some() && self.contacts_due <= now {

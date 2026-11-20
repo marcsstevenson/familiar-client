@@ -175,6 +175,80 @@ fn event(calendar: &str, id: &str) -> String {
     format!("{}/{}", collection(calendar), enc(id))
 }
 
+/// Gmail link routed to the signed-in mailbox containing the source message.
+pub fn mail_link(address: &str, remote: &str) -> String {
+    format!(
+        "https://mail.google.com/mail/?authuser={}#all/{}",
+        enc(address),
+        enc(remote)
+    )
+}
+
+fn master_when(value: &Value) -> Result<(i64, bool)> {
+    if let Some(date) = value["date"].as_str() {
+        let date = NaiveDate::parse_from_str(date, "%Y-%m-%d")
+            .map_err(|_| Error::Decode("invalid master date".into()))?;
+        return Ok((familiar_core::events::date_secs(date), true));
+    }
+    let date_time = value["dateTime"]
+        .as_str()
+        .and_then(|t| {
+            familiar_core::tz::graph_date_time(t, value["timeZone"].as_str().unwrap_or("UTC"))
+        })
+        .ok_or_else(|| Error::Decode("invalid master dateTime".into()))?;
+    Ok((date_time.timestamp(), false))
+}
+
+fn series_changes(c: &EventChanges, occurrence: &EventData, master: &Value) -> Result<Value> {
+    let (start_at, is_all_day) = master_when(&master["start"])?;
+    let (end_at, _) = master_when(&master["end"])?;
+    let start_zone = master["start"]["timeZone"]
+        .as_str()
+        .or(occurrence.start_tz.as_deref())
+        .unwrap_or("UTC");
+    let end_zone = master["end"]["timeZone"].as_str().unwrap_or(start_zone);
+    let local = |at, all_day, zone| {
+        let zone = familiar_core::tz::parse_zone(if all_day { "UTC" } else { zone })
+            .ok_or_else(|| invalid("unknown event time zone"))?;
+        DateTime::from_timestamp(at, 0)
+            .map(|t| t.with_timezone(&zone).naive_local())
+            .ok_or_else(|| invalid("invalid event timestamp"))
+    };
+    let day_offset = local(start_at, is_all_day, start_zone)?.date()
+        - local(
+            occurrence.start_at,
+            occurrence.is_all_day,
+            occurrence.start_tz.as_deref().unwrap_or(start_zone),
+        )?
+        .date();
+    let all_day = c.all_day.unwrap_or(is_all_day);
+    let translate = |at, zone| -> Result<i64> {
+        let zone = c.time_zone.as_deref().unwrap_or(zone);
+        let shifted = local(at, all_day, zone)?
+            .checked_add_signed(day_offset)
+            .ok_or_else(|| invalid("series date out of range"))?;
+        Ok(if all_day {
+            shifted.and_utc().timestamp()
+        } else {
+            instant(shifted.date(), shifted.time(), zone)
+        })
+    };
+    let mut edit = c.clone();
+    edit.start_at = c.start_at.map(|t| translate(t, start_zone)).transpose()?;
+    edit.end_at = c.end_at.map(|t| translate(t, end_zone)).transpose()?;
+    changes(
+        &edit,
+        &EventData {
+            start_at,
+            end_at,
+            is_all_day,
+            start_tz: Some(start_zone.into()),
+            end_tz: Some(end_zone.into()),
+            ..Default::default()
+        },
+    )
+}
+
 impl GmailApi {
     /// Insert once across retries, returning the first instance for a series.
     pub async fn insert_event(
@@ -227,12 +301,31 @@ impl GmailApi {
         c: &EventChanges,
         before: &EventData,
     ) -> Result<()> {
-        let b = changes(c, before)?;
+        self.patch_event(cal, id, &changes(c, before)?).await
+    }
+
+    /// Resolve an occurrence-relative time change against the master once.
+    pub async fn series_patch(
+        &self,
+        cal: &str,
+        id: &str,
+        c: &EventChanges,
+        before: &EventData,
+    ) -> Result<Value> {
+        let master = self
+            .client()
+            .calendar_request(Method::GET, &event(cal, id), None, Priority::User)
+            .await?;
+        series_changes(c, before, &master)
+    }
+
+    /// Send an already resolved, retryable event edit.
+    pub async fn patch_event(&self, cal: &str, id: &str, b: &Value) -> Result<()> {
         self.client()
             .calendar_request(
                 Method::PATCH,
                 &format!("{}?sendUpdates=all", event(cal, id)),
-                Some(&b),
+                Some(b),
                 Priority::User,
             )
             .await?;
@@ -308,6 +401,25 @@ fn response_body(email: &str, response: Rsvp, comment: Option<&str>) -> Value {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn later_occurrence_retimes_master_across_dst() {
+        let at = |s: &str| DateTime::parse_from_rfc3339(s).unwrap().timestamp();
+        let master = json!({"start":{"dateTime":"2026-03-01T09:00:00-05:00","timeZone":"America/New_York"},"end":{"dateTime":"2026-03-01T10:00:00-05:00","timeZone":"America/New_York"}});
+        let selected = EventData {
+            start_at: at("2026-03-15T09:00:00-04:00"),
+            start_tz: Some("America/New_York".into()),
+            ..Default::default()
+        };
+        let c = EventChanges {
+            start_at: Some(at("2026-03-16T10:00:00-04:00")),
+            end_at: Some(at("2026-03-16T11:00:00-04:00")),
+            ..Default::default()
+        };
+        let patch = series_changes(&c, &selected, &master).unwrap();
+        assert_eq!(patch["start"]["dateTime"], "2026-03-02T15:00:00+00:00");
+        assert_eq!(patch["end"]["dateTime"], "2026-03-02T16:00:00+00:00");
+    }
+
     #[test]
     fn weekly_until_is_inclusive_in_local_zone() {
         let r = Recurrence {

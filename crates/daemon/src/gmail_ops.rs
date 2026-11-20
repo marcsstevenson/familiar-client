@@ -557,11 +557,10 @@ impl GmailOps {
 
     async fn refresh_calendar(&self, id: i64) -> Result<(), Error> {
         let (_, cal) = self.event_row(id)?;
-        let now = (self.clock)();
-        let window = (
-            cal.window_start.unwrap_or(now - 30 * 86400),
-            cal.window_end.unwrap_or(now + 365 * 86400),
-        );
+        let window = cal
+            .window_start
+            .zip(cal.window_end)
+            .unwrap_or_else(|| self.policy.calendar_window((self.clock)()));
         GoogleCalendarSync::new(self.api.clone(), self.account)
             .sync_events(&mut self.w.clone(), &cal.remote_id, window, Priority::User)
             .await?;
@@ -577,10 +576,23 @@ impl GmailOps {
         let source = if let Some(id) = e.from_mail {
             let msg = self.local_message(id)?;
             let escape = familiar_core::compose::text_to_html;
+            let subject = escape(if msg.subject.is_empty() {
+                "(no subject)"
+            } else {
+                &msg.subject
+            });
+            let title = if msg.account == self.account
+                && !msg.remote_id.starts_with(LOCAL_REMOTE_PREFIX)
+            {
+                let (_, address) = self.own_address()?;
+                let link =
+                    familiar_provider_gmail::calendar_writes::mail_link(&address, &msg.remote_id);
+                format!("<a href=\"{}\">{subject}</a>", escape(&link))
+            } else {
+                subject
+            };
             Some(format!(
-                "<p>From the email <a href=\"https://mail.google.com/mail/#all/{}\">{}</a> from {}.</p>",
-                escape(&msg.remote_id),
-                escape(&msg.subject),
+                "<p>From the email {title} from {}.</p>",
                 escape(&msg.from.addr)
             ))
         } else {
@@ -692,9 +704,25 @@ impl GmailOps {
                     .map(|s| serde_json::from_value(s.data.clone()))
                     .transpose()?
                     .unwrap_or(row.data.clone());
-                self.api
-                    .edit_event(&cal.remote_id, id, &u.changes, &before)
-                    .await?;
+                if let Some(patch) = &u.google_series_patch {
+                    self.api.patch_event(&cal.remote_id, id, patch).await?;
+                } else if u.series.is_some()
+                    && (u.changes.retimes() || u.changes.time_zone.is_some())
+                {
+                    let patch = self
+                        .api
+                        .series_patch(&cal.remote_id, id, &u.changes, &before)
+                        .await?;
+                    let mut saved = u.clone();
+                    saved.google_series_patch = Some(patch.clone());
+                    let json = serde_json::to_string(&OpPayload::UpdateEvent(saved))?;
+                    self.w.write(|tx| tx.set_op_payload(op.id, &json))?;
+                    self.api.patch_event(&cal.remote_id, id, &patch).await?;
+                } else {
+                    self.api
+                        .edit_event(&cal.remote_id, id, &u.changes, &before)
+                        .await?;
+                }
             }
             OpPayload::RespondEvent(r) => {
                 let (row, cal) = self.event_row(r.event)?;

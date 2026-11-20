@@ -18,6 +18,8 @@ use crate::{Error, GmailApi, Priority, Result, api::enc};
 struct Page<T> {
     items: Vec<T>,
     next_page_token: Option<String>,
+    #[serde(default)]
+    default_reminders: Vec<Reminder>,
 }
 
 #[derive(Deserialize)]
@@ -33,7 +35,10 @@ struct Entry {
 }
 
 fn writable(role: Option<&str>) -> bool {
-    matches!(role, Some("owner" | "writer"))
+    matches!(
+        role,
+        Some("owner" | "writer" | "writerWithoutPrivateAccess")
+    )
 }
 
 #[derive(Default, Deserialize)]
@@ -83,6 +88,18 @@ impl When {
 }
 
 #[derive(Deserialize)]
+struct Reminder {
+    minutes: i64,
+}
+
+#[derive(Default, Deserialize)]
+#[serde(default, rename_all = "camelCase")]
+struct Reminders {
+    use_default: bool,
+    overrides: Vec<Reminder>,
+}
+
+#[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct Event {
     id: String,
@@ -95,6 +112,8 @@ struct Event {
     summary: Option<String>,
     location: Option<String>,
     description: Option<String>,
+    #[serde(default)]
+    reminders: Reminders,
     html_link: Option<String>,
     etag: Option<String>,
     #[serde(default)]
@@ -108,7 +127,12 @@ struct Event {
 }
 
 impl Event {
-    fn row(self, account: AccountId, calendar: CalendarId) -> Result<Option<EventData>> {
+    fn row(
+        self,
+        account: AccountId,
+        calendar: CalendarId,
+        defaults: &[Reminder],
+    ) -> Result<Option<EventData>> {
         if self.status.as_deref() == Some("cancelled") {
             return Ok(None);
         }
@@ -177,7 +201,18 @@ impl Event {
                     addr: a.email,
                 })
                 .collect(),
-            preview: self.description.unwrap_or_default(),
+            preview: familiar_core::compose::preview_of(
+                self.description.as_deref().unwrap_or_default(),
+            ),
+            // Familiar displays one reminder. Use the one closest to the event.
+            reminder_minutes: (if self.reminders.use_default {
+                defaults
+            } else {
+                &self.reminders.overrides
+            })
+            .iter()
+            .map(|r| r.minutes)
+            .min(),
             web_link: self.html_link,
             change_key: self.etag,
             ..Default::default()
@@ -226,22 +261,21 @@ impl GoogleCalendarSync {
         &self,
         base: &str,
         priority: Priority,
-    ) -> Result<(Vec<T>, usize)> {
+    ) -> Result<Vec<Page<T>>> {
         let mut path = base.to_owned();
-        let mut items = Vec::new();
-        let mut pages = 0;
+        let mut pages = Vec::new();
         loop {
             let value = self
                 .api
                 .client()
                 .calendar_request(reqwest::Method::GET, &path, None, priority)
                 .await?;
-            let page: Page<T> = serde_json::from_value(value)?;
-            items.extend(page.items);
-            pages += 1;
-            match page.next_page_token {
+            let mut page: Page<T> = serde_json::from_value(value)?;
+            let next = page.next_page_token.take();
+            pages.push(page);
+            match next {
                 Some(token) => path = format!("{base}&pageToken={}", enc(&token)),
-                None => return Ok((items, pages)),
+                None => return Ok(pages),
             }
         }
     }
@@ -252,7 +286,7 @@ impl GoogleCalendarSync {
         w: &mut W,
         priority: Priority,
     ) -> Result<CalendarListReport> {
-        let (entries, _) = self
+        let pages = self
             .pages::<Entry>(
                 "/users/me/calendarList?maxResults=250&showHidden=true",
                 priority,
@@ -261,7 +295,7 @@ impl GoogleCalendarSync {
         Ok(w.write(|tx| {
             let mut seen = HashSet::new();
             let mut report = CalendarListReport::default();
-            for entry in entries {
+            for entry in pages.into_iter().flat_map(|page| page.items) {
                 seen.insert(entry.id.clone());
                 tx.upsert_calendar(&NewCalendar {
                     account: self.account,
@@ -309,11 +343,16 @@ impl GoogleCalendarSync {
             bound(window.0)?,
             bound(window.1)?
         );
-        let (events, pages) = self.pages::<Event>(&path, priority).await?;
-        let rows = events
-            .into_iter()
-            .filter_map(|e| e.row(self.account, cal.id).transpose())
-            .collect::<Result<Vec<_>>>()?;
+        let pages = self.pages::<Event>(&path, priority).await?;
+        let page_count = pages.len();
+        let mut rows = Vec::new();
+        for page in pages {
+            for event in page.items {
+                if let Some(row) = event.row(self.account, cal.id, &page.default_reminders)? {
+                    rows.push(row);
+                }
+            }
+        }
         Ok(w.write(|tx| {
             let round = tx.begin_event_round(cal.id, window.0, window.1)?;
             let busy = tx.open_op_targets(self.account)?;
@@ -339,7 +378,7 @@ impl GoogleCalendarSync {
             Ok(EventSyncReport {
                 upserted,
                 removed: tx.finish_event_round(cal.id, round)?,
-                pages,
+                pages: page_count,
                 full_round: true,
                 restarted: false,
             })
@@ -353,10 +392,11 @@ mod tests {
     use serde_json::{Value, json};
 
     #[test]
-    fn only_owner_and_writer_can_edit() {
+    fn maps_calendar_write_roles() {
         for (role, expected) in [
             ("owner", true),
             ("writer", true),
+            ("writerWithoutPrivateAccess", true),
             ("reader", false),
             ("freeBusyReader", false),
         ] {
@@ -370,7 +410,7 @@ mod tests {
     }
 
     fn map(value: Value) -> Result<Option<EventData>> {
-        serde_json::from_value::<Event>(value)?.row(AccountId(1), CalendarId(2))
+        serde_json::from_value::<Event>(value)?.row(AccountId(1), CalendarId(2), &[])
     }
 
     #[test]
@@ -390,6 +430,34 @@ mod tests {
         assert_eq!(row.series_master_id.as_deref(), Some("master"));
         assert_eq!(row.ical_uid.as_deref(), Some("uid"));
         assert_eq!(row.response.as_deref(), Some("tentativelyAccepted"));
+    }
+
+    #[test]
+    fn descriptions_become_bounded_plain_text() {
+        let row = map(
+            json!({"id":"notes", "start":{"date":"2026-11-01"}, "end":{"date":"2026-11-02"},
+            "description": format!("<b>Kea &amp; tūī</b>  {}", "ā".repeat(300))}),
+        )
+        .unwrap()
+        .unwrap();
+        assert!(row.preview.starts_with("Kea & tūī ā"));
+        assert!(row.preview.chars().count() <= 255);
+    }
+
+    #[test]
+    fn explicit_reminders_override_calendar_defaults_even_when_empty() {
+        for (overrides, expected) in [
+            (json!([{"minutes":30},{"minutes":0}]), Some(0)),
+            (json!([]), None),
+        ] {
+            let event: Event = serde_json::from_value(json!({"id":"override", "start":{"date":"2026-11-01"},
+                "end":{"date":"2026-11-02"}, "reminders":{"useDefault":false,"overrides":overrides}})).unwrap();
+            let row = event
+                .row(AccountId(1), CalendarId(2), &[Reminder { minutes: 10 }])
+                .unwrap()
+                .unwrap();
+            assert_eq!(row.reminder_minutes, expected);
+        }
     }
 
     #[test]
@@ -418,7 +486,7 @@ mod tests {
             let phase = state.load(Ordering::SeqCst);
             async move {
                 let second = uri.query().unwrap().contains("pageToken=a%2Bb");
-                let event = |id| json!({"id":id,"start":{"dateTime":"2026-11-01T00:00:00Z"},
+                let event = |id| json!({"id":id,"reminders":{"useDefault":true},"start":{"dateTime":"2026-11-01T00:00:00Z"},
                     "end":{"dateTime":"2026-11-01T01:00:00Z"}});
                 Json(match (uri.path(), second) {
                     ("/calendar/v3/users/me/calendarList", false) => json!({"items":[
@@ -431,7 +499,7 @@ mod tests {
                         json!({"items":[event(if phase == 0 {"old"} else {"new"})],"nextPageToken":"a+b"})
                     }
                     ("/calendar/v3/calendars/one%2Fprimary/events", true) => match phase {
-                        0 => json!({"items":[event("keep")]}),
+                        0 => json!({"defaultReminders":[{"method":"popup","minutes":15}],"items":[event("keep")]}),
                         1 => json!({"items":[{"id":"bad"}]}),
                         _ => json!({"items":[event("keep"),{"id":"old","status":"cancelled"}]}),
                     },
@@ -477,6 +545,11 @@ mod tests {
             .await
             .unwrap();
         assert_eq!((first.pages, first.upserted, first.removed), (2, 2, 0));
+        let keep = w
+            .write(|tx| tx.event_by_remote(primary.id, "keep"))
+            .unwrap()
+            .unwrap();
+        assert_eq!(keep.data.reminder_minutes, Some(15));
         phase.store(1, Ordering::SeqCst);
         assert!(
             sync.sync_events(&mut w, "one/primary", window, Priority::User)
