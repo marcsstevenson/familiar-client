@@ -110,6 +110,14 @@ pub fn parts_of(raw: &[u8]) -> Vec<Part> {
         .collect()
 }
 
+/// The Message-ID of an RFC 5322 message, without `<>`.
+pub fn message_id(raw: &[u8]) -> Option<String> {
+    MessageParser::default()
+        .parse_headers(raw)?
+        .message_id()
+        .map(bare)
+}
+
 impl Outgoing {
     /// Reads a message Gmail has (a draft, to update it).
     pub fn from_raw(raw: &[u8]) -> Self {
@@ -247,6 +255,7 @@ mod tests {
         assert_eq!(back.in_reply_to, o.in_reply_to);
         assert_eq!(back.references, o.references);
         assert_eq!(back.parts.len(), 2, "{:?}", back.parts);
+        assert!(message_id(&raw).is_some_and(|m| !m.contains('<')));
         let pdf = back.parts.iter().find(|p| p.name == "quote.pdf").unwrap();
         assert_eq!(pdf.data, b"%PDF-1.4");
         assert!(!pdf.inline);

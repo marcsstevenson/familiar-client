@@ -30,7 +30,7 @@ use std::time::Duration;
 use base64::Engine as _;
 use familiar_core::compose::{AttachmentData, DraftOp, DraftUpdateOp, Recipient, ResponseKind};
 use familiar_core::ops::{OpPayload, OpResult, finish_local};
-use familiar_provider_gmail::{GmailApi, GmailSync, Mailbox, Outgoing, Part, parts_of};
+use familiar_provider_gmail::{GmailApi, GmailSync, Mailbox, Outgoing, Part, message_id, parts_of};
 use familiar_provider_graph::{Error, Priority};
 use familiar_store::{
     ALL_MAIL_REMOTE_ID, AccountId, Folder, FolderId, LOCAL_REMOTE_PREFIX, MessageId, NewAudit, Op,
@@ -109,7 +109,7 @@ impl GmailOps {
                 return;
             }
         };
-        match self.send(&payload).await {
+        match self.send(&op, &payload).await {
             Ok(result) => {
                 let acc = self.account;
                 let deletes_label = matches!(payload, OpPayload::DeleteFolder { .. });
@@ -281,6 +281,23 @@ impl GmailOps {
         Ok((a.display_name, a.email))
     }
 
+    /// Saves a changed payload, so a retry sees it.
+    fn save(&self, op: &Op, p: &OpPayload) {
+        let r = serde_json::to_string(p)
+            .map_err(|e| e.to_string())
+            .and_then(|json| {
+                self.w
+                    .write(|tx| tx.set_op_payload(op.id, &json))
+                    .map_err(|e| e.to_string())
+            });
+        if let Err(e) = r {
+            crate::log(&format!(
+                "{}: op {}: can't save its payload: {e}",
+                self.key, op.id.0
+            ));
+        }
+    }
+
     /// Points the local draft at its new Gmail message.
     fn set_remote(&self, local: i64, remote: &str) {
         let r = self
@@ -315,6 +332,20 @@ impl GmailOps {
             if kind == ResponseKind::Forward {
                 o.parts = parts_of(&self.api.raw(&orig.remote_id, pr).await?);
             } else {
+                // The quoted original may show inline images; carry those
+                // (not its attachments) so they aren't broken in the reply.
+                if o.html.contains("cid:") {
+                    let html = &o.html;
+                    o.parts = parts_of(&self.api.raw(&orig.remote_id, pr).await?)
+                        .into_iter()
+                        .filter(|p| {
+                            p.inline
+                                && p.content_id
+                                    .as_ref()
+                                    .is_some_and(|c| html.contains(&format!("cid:{c}")))
+                        })
+                        .collect();
+                }
                 if let Some(mid) = &orig.internet_message_id {
                     let mid = mid
                         .trim_start_matches('<')
@@ -402,7 +433,17 @@ impl GmailOps {
         })
     }
 
-    async fn send_draft(&self, message: i64, internet_id: Option<&str>) -> Result<(), Error> {
+    async fn send_draft(&self, op: &Op, p: &OpPayload) -> Result<(), Error> {
+        let OpPayload::SendDraft {
+            message,
+            internet_message_id,
+            ..
+        } = p
+        else {
+            unreachable!()
+        };
+        let message = *message;
+        let mut internet_id = internet_message_id.clone();
         let pr = Priority::User;
         let m = self.local_message(message)?;
         let (_, own) = self.own_address()?;
@@ -423,13 +464,27 @@ impl GmailOps {
         }
         match self.api.find_draft(&m.remote_id, pr).await? {
             Some(d) => {
+                // Keep the Message-ID first, so a retry after a lost answer
+                // can find the sent copy.
+                if internet_id.is_none() {
+                    internet_id = message_id(&self.api.raw(&m.remote_id, pr).await?);
+                    let mut saved = p.clone();
+                    if let OpPayload::SendDraft {
+                        internet_message_id,
+                        ..
+                    } = &mut saved
+                    {
+                        internet_message_id.clone_from(&internet_id);
+                    }
+                    self.save(op, &saved);
+                }
                 self.api.send_draft(&d, pr).await?;
                 Ok(())
             }
             None => {
                 // A retry after a send whose answer was lost: it went if
                 // Gmail has it in Sent.
-                if let Some(id) = internet_id {
+                if let Some(id) = &internet_id {
                     let id = id.trim_start_matches('<').trim_end_matches('>');
                     let q = format!("in:sent rfc822msgid:{id}");
                     if !self.api.search(&q, 1, pr).await?.is_empty() {
@@ -441,7 +496,7 @@ impl GmailOps {
         }
     }
 
-    async fn send(&self, p: &OpPayload) -> Result<OpResult, Error> {
+    async fn send(&self, op: &Op, p: &OpPayload) -> Result<OpResult, Error> {
         let pr = Priority::User;
         match p {
             OpPayload::SetRead { message, read, .. } => {
@@ -503,16 +558,11 @@ impl GmailOps {
             }
             OpPayload::CreateDraft(d) => return self.create_draft(d).await,
             OpPayload::UpdateDraft(u) => return self.update_draft(u).await,
-            OpPayload::SendDraft {
-                message,
-                internet_message_id,
-                send_at,
-            } => {
+            OpPayload::SendDraft { send_at, .. } => {
                 if send_at.is_some() {
                     return Err(final_error(GMAIL_NO_SEND_LATER));
                 }
-                self.send_draft(*message, internet_message_id.as_deref())
-                    .await?
+                self.send_draft(op, p).await?
             }
             OpPayload::CreateEvent(_)
             | OpPayload::UpdateEvent(_)

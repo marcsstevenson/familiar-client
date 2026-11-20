@@ -23,7 +23,7 @@ mod sync;
 
 pub use api::{DraftRef, GmailApi, LIST_PAGE_SIZE, METADATA_HEADERS, SendAs};
 pub use client::{ClientOptions, DEFAULT_UNITS_PER_MINUTE, GMAIL_V1, GmailClient, units};
-pub use compose::{Mailbox, Outgoing, Part, parts_of};
+pub use compose::{Mailbox, Outgoing, Part, message_id, parts_of};
 pub use familiar_provider::{
     AuthTokens, Error, Priority, Result, Scheduler, StaticToken, TokenSource,
 };
