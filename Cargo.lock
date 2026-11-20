@@ -1540,7 +1540,10 @@ dependencies = [
 name = "familiar-provider-gmail"
 version = "0.1.0"
 dependencies = [
+ "axum",
  "base64 0.22.1",
+ "chrono",
+ "familiar-core",
  "familiar-mock-gmail",
  "familiar-provider",
  "familiar-store",

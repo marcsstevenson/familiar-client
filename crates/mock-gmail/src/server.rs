@@ -11,7 +11,7 @@ use axum::body::Body;
 use axum::extract::{Request, State as AxState};
 use axum::http::{HeaderMap, HeaderValue, StatusCode};
 use axum::response::Response;
-use serde_json::Value;
+use serde_json::{Value, json};
 use tokio::sync::oneshot;
 
 use crate::api::{self, ApiError, Reply};
@@ -52,6 +52,7 @@ struct Budget {
 }
 
 struct State {
+    calendar_events: HashMap<String, Vec<Value>>,
     mailboxes: HashMap<String, MailboxState>,
     auth: Auth,
     faults: Vec<Fault>,
@@ -152,6 +153,7 @@ impl Builder {
             auth.add_static(t, k);
         }
         let state = State {
+            calendar_events: HashMap::new(),
             mailboxes: self
                 .mailboxes
                 .into_iter()
@@ -757,6 +759,82 @@ fn split_api_path(path: &str) -> Option<(bool, &str, &str)> {
     Some((upload, user, rest))
 }
 
+fn calendar_route(
+    events: &mut Vec<Value>,
+    method: &str,
+    route: &str,
+    body: &[u8],
+) -> Result<Reply, ApiError> {
+    const EVENTS: &str = "/calendars/cal-primary/events";
+    let parse_body = || {
+        serde_json::from_slice::<serde_json::Map<String, Value>>(body)
+            .map_err(|e| ApiError::new(400, "invalidArgument", e.to_string()))
+    };
+    let missing = || {
+        ApiError::new(
+            404,
+            "notFound",
+            format!("Unknown mock calendar resource {route}"),
+        )
+    };
+    match (method, route) {
+        ("GET", "/users/me/calendarList") => Ok(Reply::Json(json!({
+            "items": [{"id":"cal-primary","primary":true,"summary":"Kea calendar",
+                       "timeZone":"Pacific/Auckland","accessRole":"owner"}]
+        }))),
+        ("GET", EVENTS) => Ok(Reply::Json(
+            json!({"timeZone":"Pacific/Auckland","items":events}),
+        )),
+        ("POST", EVENTS) => {
+            let mut event = Value::Object(parse_body()?);
+            let id = event["id"].as_str().unwrap_or_default();
+            if !(5..=1024).contains(&id.len())
+                || !id
+                    .bytes()
+                    .all(|c| c.is_ascii_digit() || (b'a'..=b'v').contains(&c))
+            {
+                return Err(ApiError::new(
+                    400,
+                    "invalidArgument",
+                    "Expected a base32hex event ID",
+                ));
+            }
+            if events.iter().any(|e| e["id"] == id) {
+                return Err(ApiError::new(409, "duplicate", "Event already exists"));
+            }
+            event["status"] = json!("confirmed");
+            event["organizer"] = json!({"self":true});
+            events.push(event.clone());
+            Ok(Reply::Json(event))
+        }
+        _ => {
+            let id = route
+                .strip_prefix(EVENTS)
+                .and_then(|s| s.strip_prefix('/'))
+                .ok_or_else(missing)?;
+            let i = events
+                .iter()
+                .position(|e| e["id"] == id)
+                .ok_or_else(missing)?;
+            match method {
+                "GET" => Ok(Reply::Json(events[i].clone())),
+                "PATCH" => {
+                    events[i]
+                        .as_object_mut()
+                        .expect("event object")
+                        .extend(parse_body()?);
+                    Ok(Reply::Json(events[i].clone()))
+                }
+                "DELETE" => {
+                    events.remove(i);
+                    Ok(Reply::Empty)
+                }
+                _ => Err(missing()),
+            }
+        }
+    }
+}
+
 #[allow(clippy::too_many_arguments)]
 async fn serve(
     shared: &Arc<Shared>,
@@ -768,7 +846,11 @@ async fn serve(
     body: &[u8],
     in_batch: bool,
 ) -> (Out, Option<String>) {
-    let Some((upload, user, rest)) = split_api_path(path) else {
+    let calendar = path.strip_prefix("/calendar/v3");
+    let Some((upload, user, rest)) = calendar
+        .map(|rest| (false, "me", rest))
+        .or_else(|| split_api_path(path))
+    else {
         let e = ApiError::new(404, "notFound", format!("The mock does not serve {path}"));
         return (Out::error(&e), None);
     };
@@ -788,23 +870,37 @@ async fn serve(
     let p = params(query);
     let result = {
         let mut st = shared.lock();
-        let mbx = st.mailboxes.get_mut(&mailbox).expect("admitted");
-        if user != "me" && !user.eq_ignore_ascii_case(&mbx.email) {
-            Err(ApiError::new(
-                403,
-                "forbidden",
-                format!("Delegation denied for {}", mbx.email),
-            ))
+        if let Some(route) = calendar {
+            let events = st
+                .calendar_events
+                .entry(mailbox.clone())
+                .or_insert_with(|| {
+                    vec![json!({
+                        "id":"event-october","summary":"Kea appointment","status":"confirmed",
+                        "start":{"dateTime":"2026-10-30T09:00:00+13:00"},
+                        "end":{"dateTime":"2026-10-30T10:00:00+13:00"}
+                    })]
+                });
+            calendar_route(events, method, route, body)
         } else {
-            let req = api::Req {
-                method,
-                path: rest,
-                params: &p,
-                content_type,
-                body,
-                upload,
-            };
-            api::route(mbx, &req)
+            let mbx = st.mailboxes.get_mut(&mailbox).expect("admitted");
+            if user != "me" && !user.eq_ignore_ascii_case(&mbx.email) {
+                Err(ApiError::new(
+                    403,
+                    "forbidden",
+                    format!("Delegation denied for {}", mbx.email),
+                ))
+            } else {
+                let req = api::Req {
+                    method,
+                    path: rest,
+                    params: &p,
+                    content_type,
+                    body,
+                    upload,
+                };
+                api::route(mbx, &req)
+            }
         }
     };
     drop(guard);

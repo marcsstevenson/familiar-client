@@ -15,6 +15,8 @@
 //! this crate does one step at a time and keeps mail only in the store.
 
 mod api;
+mod calendar;
+pub mod calendar_writes;
 mod client;
 mod compose;
 mod mime;
@@ -22,6 +24,7 @@ mod model;
 mod sync;
 
 pub use api::{DraftRef, GmailApi, LIST_PAGE_SIZE, METADATA_HEADERS, SendAs};
+pub use calendar::{CalendarListReport, EventSyncReport, GoogleCalendarSync};
 pub use client::{ClientOptions, DEFAULT_UNITS_PER_MINUTE, GMAIL_V1, GmailClient, units};
 pub use compose::{Mailbox, Outgoing, Part, message_id, parts_of};
 pub use familiar_provider::{

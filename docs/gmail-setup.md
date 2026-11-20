@@ -28,3 +28,9 @@ fam auth login gmail
 The browser opens at Google. Google says the app isn't verified: choose **Advanced**, then **Go to Familiar (unsafe)**, and allow everything. `fam auth status --check gmail` proves the sign-in by reading your Gmail profile.
 
 There is no `--device-code` for Gmail: Google doesn't offer device code sign-in for Gmail. On a machine without a browser, sign in on one with a browser and copy the encrypted token file across (`FAMILIAR_TOKEN_STORE=file`, see [sign-in.md](sign-in.md)).
+
+## 4. View Google calendars
+
+Open Calendar in Familiar. The calendar picker groups your personal, shared, and subscribed calendars under the Gmail account. Use its checkboxes to choose which calendars appear together. Shared calendars retain their Google access permissions.
+
+To check sync from the CLI, run `fam cal calendars --account gmail` and `fam cal list --account gmail --days 30`. The daemon refreshes the calendar list and the events in the configured calendar window every five minutes.

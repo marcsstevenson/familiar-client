@@ -29,12 +29,15 @@ use std::time::Duration;
 
 use base64::Engine as _;
 use familiar_core::compose::{AttachmentData, DraftOp, DraftUpdateOp, Recipient, ResponseKind};
+use familiar_core::events::EventOp;
 use familiar_core::ops::{OpPayload, OpResult, finish_local};
-use familiar_provider_gmail::{GmailApi, GmailSync, Mailbox, Outgoing, Part, message_id, parts_of};
+use familiar_provider_gmail::{
+    GmailApi, GmailSync, GoogleCalendarSync, Mailbox, Outgoing, Part, message_id, parts_of,
+};
 use familiar_provider_graph::{Error, Priority};
 use familiar_store::{
-    ALL_MAIL_REMOTE_ID, AccountId, Folder, FolderId, LOCAL_REMOTE_PREFIX, MessageId, NewAudit, Op,
-    SharedWriter,
+    ALL_MAIL_REMOTE_ID, AccountId, Calendar, CalendarId, Event, EventId, Folder, FolderId,
+    LOCAL_REMOTE_PREFIX, MessageId, NewAudit, Op, SharedWriter,
 };
 use tokio::sync::{Notify, watch};
 
@@ -133,6 +136,41 @@ impl GmailOps {
                 });
                 if let Err(e) = r {
                     crate::log(&format!("{}: op {} landed but: {e}", self.key, op.id.0));
+                    if matches!(
+                        payload,
+                        OpPayload::CreateEvent(_)
+                            | OpPayload::UpdateEvent(_)
+                            | OpPayload::RespondEvent(_)
+                            | OpPayload::DeleteEvent(_)
+                    ) {
+                        let at = (self.clock)()
+                            + self
+                                .policy
+                                .op_retry(op.attempts.max(1) as u32)
+                                .as_secs()
+                                .max(1) as i64;
+                        if let Err(err) = self.w.write(|tx| tx.retry_op(op.id, &e.to_string(), at))
+                        {
+                            crate::log(&format!(
+                                "{}: scheduling retry of op {}: {err}",
+                                self.key, op.id.0
+                            ));
+                        }
+                    }
+                } else {
+                    let expanded = match &payload {
+                        OpPayload::CreateEvent(e) if e.fields.recurrence.is_some() => Some(e.event),
+                        OpPayload::UpdateEvent(e) if e.series.is_some() => Some(e.event),
+                        _ => None,
+                    };
+                    if let Some(id) = expanded {
+                        if let Err(e) = self.refresh_calendar(id).await {
+                            crate::log(&format!(
+                                "{}: refreshing calendar after op {}: {e}",
+                                self.key, op.id.0
+                            ));
+                        }
+                    }
                 }
                 if deletes_label {
                     let mut w = self.w.clone();
@@ -496,6 +534,96 @@ impl GmailOps {
         }
     }
 
+    fn calendar(&self, id: CalendarId) -> Result<Calendar, Error> {
+        self.w
+            .write(|tx| tx.calendars(self.account))?
+            .into_iter()
+            .find(|c| c.id == id)
+            .ok_or_else(|| Error::NotFound(format!("calendar {}", id.0)))
+    }
+
+    fn event_row(&self, id: i64) -> Result<(Event, Calendar), Error> {
+        let row = self
+            .w
+            .write(|tx| tx.event(EventId(id)))?
+            .filter(|e| e.data.account == self.account)
+            .ok_or_else(|| Error::NotFound(format!("event {id}")))?;
+        let cal = self.calendar(row.data.calendar)?;
+        if !cal.can_edit {
+            return Err(final_error("this Google calendar is read-only"));
+        }
+        Ok((row, cal))
+    }
+
+    async fn refresh_calendar(&self, id: i64) -> Result<(), Error> {
+        let (_, cal) = self.event_row(id)?;
+        let window = cal
+            .window_start
+            .zip(cal.window_end)
+            .unwrap_or_else(|| self.policy.calendar_window((self.clock)()));
+        GoogleCalendarSync::new(self.api.clone(), self.account)
+            .sync_events(&mut self.w.clone(), &cal.remote_id, window, Priority::User)
+            .await?;
+        Ok(())
+    }
+
+    async fn create_event(&self, e: &EventOp) -> Result<(), Error> {
+        let (row, cal) = self.event_row(e.event)?;
+        if !row.data.remote_id.starts_with(LOCAL_REMOTE_PREFIX) {
+            // The server ID was saved before an interruption completing this op.
+            return Ok(());
+        }
+        let source = if let Some(id) = e.from_mail {
+            let msg = self.local_message(id)?;
+            let escape = familiar_core::compose::text_to_html;
+            let subject = escape(if msg.subject.is_empty() {
+                "(no subject)"
+            } else {
+                &msg.subject
+            });
+            let title = if msg.account == self.account
+                && !msg.remote_id.starts_with(LOCAL_REMOTE_PREFIX)
+            {
+                let (_, address) = self.own_address()?;
+                let link =
+                    familiar_provider_gmail::calendar_writes::mail_link(&address, &msg.remote_id);
+                format!("<a href=\"{}\">{subject}</a>", escape(&link))
+            } else {
+                subject
+            };
+            Some(format!(
+                "<p>From the email {title} from {}.</p>",
+                escape(&msg.from.addr)
+            ))
+        } else {
+            None
+        };
+        let created = self
+            .api
+            .insert_event(&cal.remote_id, e, source.as_deref())
+            .await?;
+        let remote = created["id"]
+            .as_str()
+            .ok_or_else(|| Error::Decode("created event has no id".into()))?;
+        // Keep optimistic changes from later operations, updating only identity.
+        self.w.write(|tx| {
+            let mut current = tx
+                .event(row.id)?
+                .ok_or_else(|| familiar_store::Error::NotFound(format!("event {}", row.id.0)))?
+                .data;
+            current.remote_id = remote.to_owned();
+            current.ical_uid = created["iCalUID"].as_str().map(str::to_owned);
+            current.web_link = created["htmlLink"].as_str().map(str::to_owned);
+            current.change_key = created["etag"].as_str().map(str::to_owned);
+            current.series_master_id = created["recurringEventId"].as_str().map(str::to_owned);
+            if current.series_master_id.is_some() {
+                current.kind = "occurrence".into();
+            }
+            tx.replace_event(row.id, &current)
+        })?;
+        Ok(())
+    }
+
     async fn send(&self, op: &Op, p: &OpPayload) -> Result<OpResult, Error> {
         let pr = Priority::User;
         match p {
@@ -564,13 +692,60 @@ impl GmailOps {
                 }
                 self.send_draft(op, p).await?
             }
-            OpPayload::CreateEvent(_)
-            | OpPayload::UpdateEvent(_)
-            | OpPayload::RespondEvent(_)
-            | OpPayload::DeleteEvent(_) => {
-                return Err(final_error(
-                    "Gmail accounts have no calendar in Familiar yet",
-                ));
+            OpPayload::CreateEvent(e) => self.create_event(e).await?,
+            OpPayload::UpdateEvent(u) => {
+                let (row, cal) = self.event_row(u.event)?;
+                let id = u.series.as_deref().unwrap_or(&row.data.remote_id);
+                // A later queued edit can already be visible in row.data.
+                let before = u
+                    .prev
+                    .iter()
+                    .find(|s| s.id == u.event)
+                    .map(|s| serde_json::from_value(s.data.clone()))
+                    .transpose()?
+                    .unwrap_or(row.data.clone());
+                if let Some(patch) = &u.google_series_patch {
+                    self.api.patch_event(&cal.remote_id, id, patch).await?;
+                } else if u.series.is_some()
+                    && (u.changes.retimes() || u.changes.time_zone.is_some())
+                {
+                    let patch = self
+                        .api
+                        .series_patch(&cal.remote_id, id, &u.changes, &before)
+                        .await?;
+                    let mut saved = u.clone();
+                    saved.google_series_patch = Some(patch.clone());
+                    let json = serde_json::to_string(&OpPayload::UpdateEvent(saved))?;
+                    self.w.write(|tx| tx.set_op_payload(op.id, &json))?;
+                    self.api.patch_event(&cal.remote_id, id, &patch).await?;
+                } else {
+                    self.api
+                        .edit_event(&cal.remote_id, id, &u.changes, &before)
+                        .await?;
+                }
+            }
+            OpPayload::RespondEvent(r) => {
+                let (row, cal) = self.event_row(r.event)?;
+                let id = r.series.as_deref().unwrap_or(&row.data.remote_id);
+                self.api
+                    .rsvp_event(
+                        &cal.remote_id,
+                        id,
+                        r.response,
+                        r.comment.as_deref(),
+                        r.send_response,
+                    )
+                    .await?;
+            }
+            OpPayload::DeleteEvent(d) => {
+                if d.comment.as_deref().is_some_and(|c| !c.is_empty()) {
+                    return Err(final_error(
+                        "Google Calendar cannot send a cancellation note; delete without a comment",
+                    ));
+                }
+                let (row, cal) = self.event_row(d.event)?;
+                let id = d.series.as_deref().unwrap_or(&row.data.remote_id);
+                self.api.remove_event(&cal.remote_id, id).await?;
             }
         }
         Ok(OpResult::default())
