@@ -10,6 +10,7 @@ publish.workspace = true
 
 [dependencies]
 familiar-auth.workspace = true
+familiar-provider.workspace = true
 familiar-core.workspace = true
 familiar-store.workspace = true
 chrono = { version = "0.4", default-features = false, features = ["std"] }

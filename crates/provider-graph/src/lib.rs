@@ -17,10 +17,8 @@
 mod calendar;
 mod client;
 mod contacts;
-mod error;
 mod mail;
 mod model;
-mod scheduler;
 mod sync;
 mod write;
 
@@ -29,16 +27,18 @@ pub use calendar::{
     GraphCalendar, GraphDateTime, GraphEvent, GraphLocation, GraphOwner, GraphResponse,
     events_resource,
 };
-pub use client::{AuthTokens, ClientOptions, GRAPH_V1, GraphClient, StaticToken, TokenSource};
+pub use client::{ClientOptions, GRAPH_V1, GraphClient};
 pub use contacts::{CONTACT_FIELDS, ContactSync, ContactsApi, GraphContact, GraphContactEmail};
-pub use error::{Error, Result};
+pub use familiar_provider::{
+    AuthTokens, Error, MAILBOX_CONCURRENCY, Permit, Priority, Result, Scheduler, SchedulerStats,
+    StaticToken, TokenSource,
+};
 pub use mail::{DELTA_PAGE_SIZE, MailApi, STATE_FIELDS};
 pub use model::{
     DeltaItem, FOLDER_FIELDS, GraphBody, GraphFolder, GraphMessage, GraphRecipient, HEADER_FIELDS,
     Page, WELL_KNOWN_FOLDERS, importance, parse_time,
 };
 pub use reqwest::Method;
-pub use scheduler::{MAILBOX_CONCURRENCY, Permit, Priority, Scheduler, SchedulerStats};
 pub use sync::{
     FOLDERS_RESOURCE, FolderTreeReport, MailSync, MessageSyncReport, messages_resource,
 };

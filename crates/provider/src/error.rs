@@ -4,7 +4,7 @@
 /// A provider result.
 pub type Result<T, E = Error> = std::result::Result<T, E>;
 
-/// Everything that can go wrong talking to Graph or applying what it said.
+/// Everything that can go wrong talking to a mail provider or applying what it said.
 #[derive(Debug, thiserror::Error)]
 pub enum Error {
     /// The request never got an HTTP answer (DNS, TLS, connection reset, timeout).

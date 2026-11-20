@@ -1522,6 +1522,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "familiar-provider"
+version = "0.1.0"
+dependencies = [
+ "familiar-auth",
+ "familiar-store",
+ "reqwest 0.12.28",
+ "serde_json",
+ "thiserror 2.0.21",
+ "tokio",
+]
+
+[[package]]
 name = "familiar-provider-graph"
 version = "0.1.0"
 dependencies = [
@@ -1529,6 +1541,7 @@ dependencies = [
  "familiar-auth",
  "familiar-core",
  "familiar-mock-graph",
+ "familiar-provider",
  "familiar-store",
  "reqwest 0.12.28",
  "serde",
