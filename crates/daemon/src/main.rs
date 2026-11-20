@@ -11,7 +11,7 @@ use std::sync::Arc;
 use familiar_auth::Auth;
 use familiar_core::daemon::DaemonPaths;
 use familiar_daemon::policy::SyncPolicy;
-use familiar_daemon::{AccountSpec, Daemon, DaemonOptions, log};
+use familiar_daemon::{AccountClient, AccountSpec, Daemon, DaemonOptions, log};
 use familiar_provider_graph::{AuthTokens, ClientOptions, GraphClient};
 
 const HELP: &str = "famd: the Familiar sync daemon
@@ -23,7 +23,8 @@ the desktop app on a local socket (named pipe on Windows). Runs in the
 foreground; stop it with Ctrl-C.
 
 Environment: FAMILIAR_CONFIG (config path), FAMILIAR_DATA_DIR (store, socket
-and token file), FAMILIAR_GRAPH_URL (another Graph, such as the mock).";
+and token file), FAMILIAR_GRAPH_URL and FAMILIAR_GMAIL_URL (another Graph or Gmail, such as
+the mocks).";
 
 fn main() -> ExitCode {
     if let Some(a) = std::env::args().nth(1) {
@@ -69,19 +70,24 @@ fn run() -> Result<(), (u8, String)> {
     let paths = DaemonPaths::resolve().map_err(|e| (e.exit_code(), e.message))?;
     let auth = Arc::new(Auth::from_env().map_err(|e| (3, e.to_string()))?);
     let graph = auth.endpoints().graph.clone();
+    let gmail = auth.endpoints().gmail.clone();
 
     let mut accounts = Vec::new();
     for (key, a) in &config.accounts {
-        if a.provider == familiar_config::Provider::Gmail {
-            // Gmail sync arrives with the Gmail plan's WP G.5.
-            log(&format!("{key}: Gmail accounts don't sync yet; skipped"));
-            continue;
-        }
-        let client = GraphClient::new(
-            ClientOptions::with_base(graph.clone()),
-            Arc::new(AuthTokens::new(auth.clone(), key.clone())),
-        )
-        .map_err(|e| (1, e.to_string()))?;
+        let tokens = Arc::new(AuthTokens::new(auth.clone(), key.clone()));
+        let client: AccountClient = match a.provider {
+            familiar_config::Provider::Graph => {
+                GraphClient::new(ClientOptions::with_base(graph.clone()), tokens)
+                    .map_err(|e| (1, e.to_string()))?
+                    .into()
+            }
+            familiar_config::Provider::Gmail => familiar_provider_gmail::GmailClient::new(
+                familiar_provider_gmail::ClientOptions::with_base(gmail.clone()),
+                tokens,
+            )
+            .map_err(|e| (1, e.to_string()))?
+            .into(),
+        };
         let tenant_id = familiar_config::validate::is_guid(&a.tenant).then(|| a.tenant.clone());
         accounts.push(AccountSpec {
             key: key.clone(),

@@ -177,7 +177,7 @@ async fn offline_notice() {
             email: "pat@example.com".into(),
             display_name: "Pat".into(),
             tenant_id: None,
-            client,
+            client: client.into(),
         }],
     );
     o.policy = fast_policy();

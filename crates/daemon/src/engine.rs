@@ -21,6 +21,13 @@
 //!    older than `sync.headers` are pruned, the on-demand cache is trimmed
 //!    to `sync.cache_limit` and unreferenced body files are deleted.
 //!
+//! **Gmail accounts** have one change feed for the whole mailbox, so steps
+//! 1 and 2 differ: step 1 is the label tree, and step 2 is one
+//! [`GmailSync::sync_mail`] call, every `inbox_interval`. The first sync
+//! lists the mailbox a page per step, newest first, and is recorded in the
+//! store when the listing is done. Gmail calendars and contacts aren't
+//! synced yet.
+//!
 //! **Calendars** run between steps 1 and 2, at start and every
 //! `calendar_interval` (5 min), so a long first mail sync doesn't hold them
 //! up: the calendar list, then each calendar's events by calendarView delta
@@ -41,6 +48,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use familiar_core::daemon::{AccountLive, FIRST_SYNC_RESOURCE, SyncPhase};
+use familiar_provider_gmail::GmailSync;
 use familiar_provider_graph::{
     CalendarSync, ContactSync, Error as GraphError, MailSync, Priority, events_resource,
     messages_resource,
@@ -164,13 +172,21 @@ struct FolderPlan {
     synced: bool,
 }
 
+/// Where an account's mail comes from.
+pub enum MailSource {
+    /// Microsoft Graph, folder by folder.
+    Graph(MailSync),
+    /// Gmail, one change feed for the mailbox.
+    Gmail(GmailSync),
+}
+
 /// One account's sync loop.
 pub struct Engine {
     key: String,
     account: AccountId,
-    sync: MailSync,
-    calendar: CalendarSync,
-    contacts: ContactSync,
+    sync: MailSource,
+    calendar: Option<CalendarSync>,
+    contacts: Option<ContactSync>,
     w: SharedWriter,
     policy: Arc<SyncPolicy>,
     clock: Clock,
@@ -183,6 +199,8 @@ pub struct Engine {
     bodies_pending: bool,
     body_cursor: Option<Cursor>,
     ageing_due: Instant,
+    /// Gmail: when the next history round (or listing page) is due.
+    mail_due: Instant,
     calendar_due: Instant,
     contacts_due: Instant,
     failures: u32,
@@ -191,14 +209,15 @@ pub struct Engine {
 }
 
 impl Engine {
-    /// An engine for `account` (already in the store) syncing through `sync`.
+    /// An engine for `account` (already in the store) syncing through
+    /// `sync`, with calendars and contacts where the provider has them.
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         key: String,
         account: AccountId,
-        sync: MailSync,
-        calendar: CalendarSync,
-        contacts: ContactSync,
+        sync: MailSource,
+        calendar: Option<CalendarSync>,
+        contacts: Option<ContactSync>,
         w: SharedWriter,
         policy: Arc<SyncPolicy>,
         clock: Clock,
@@ -222,6 +241,7 @@ impl Engine {
             bodies_pending: true,
             body_cursor: None,
             ageing_due: Instant::now(),
+            mail_due: Instant::now(),
             calendar_due: Instant::now(),
             contacts_due: Instant::now(),
             failures: 0,
@@ -266,6 +286,7 @@ impl Engine {
                 self.tree_due = Some(now);
                 self.calendar_due = now;
                 self.contacts_due = now;
+                self.mail_due = now;
                 for f in self.folders.values_mut() {
                     f.due = now;
                 }
@@ -335,23 +356,36 @@ impl Engine {
             if self.tree_due.is_none() {
                 self.phase(SyncPhase::FolderTree);
             }
-            self.sync
-                .sync_folder_tree(&mut self.w, Priority::Background)
-                .await?;
-            self.tree_due = Some(Instant::now() + self.policy.tree_interval);
-            self.plan_folders()?;
+            match &mut self.sync {
+                MailSource::Graph(s) => {
+                    s.sync_folder_tree(&mut self.w, Priority::Background)
+                        .await?;
+                    self.tree_due = Some(Instant::now() + self.policy.tree_interval);
+                    self.plan_folders()?;
+                }
+                MailSource::Gmail(g) => {
+                    g.sync_labels(&mut self.w, Priority::Background).await?;
+                    self.tree_due = Some(Instant::now() + self.policy.tree_interval);
+                }
+            }
             return Ok(Next::Now);
         }
 
         // Calendars, between the tree and the folders.
-        if self.calendar_due <= now {
+        if self.calendar.is_some() && self.calendar_due <= now {
             self.sync_calendars().await?;
             self.calendar_due = Instant::now() + self.policy.calendar_interval;
             return Ok(Next::Now);
         }
-        if self.contacts_due <= now {
+        if self.contacts.is_some() && self.contacts_due <= now {
             self.sync_contacts().await?;
             self.contacts_due = Instant::now() + self.policy.contacts_interval;
+            return Ok(Next::Now);
+        }
+
+        // 2. Gmail: the mailbox's change feed.
+        if matches!(self.sync, MailSource::Gmail(_)) && self.mail_due <= now {
+            self.gmail_round().await?;
             return Ok(Next::Now);
         }
 
@@ -368,7 +402,10 @@ impl Engine {
             self.sync_round(&batch).await?;
             return Ok(Next::Now);
         }
-        if !self.first_sync_done && self.folders.values().all(|f| f.synced) {
+        if !self.first_sync_done
+            && matches!(self.sync, MailSource::Graph(_))
+            && self.folders.values().all(|f| f.synced)
+        {
             let at = (self.clock)();
             let acc = self.account;
             self.w
@@ -393,10 +430,16 @@ impl Engine {
         }
 
         // Idle until the next thing is due.
-        let mut next = self
-            .ageing_due
-            .min(self.calendar_due)
-            .min(self.contacts_due);
+        let mut next = self.ageing_due;
+        if self.calendar.is_some() {
+            next = next.min(self.calendar_due);
+        }
+        if self.contacts.is_some() {
+            next = next.min(self.contacts_due);
+        }
+        if matches!(self.sync, MailSource::Gmail(_)) {
+            next = next.min(self.mail_due);
+        }
         if let Some(t) = self.tree_due {
             next = next.min(t);
         }
@@ -411,6 +454,60 @@ impl Engine {
         });
         self.shared.served.store(self.serving, Ordering::SeqCst);
         Ok(Next::At(next))
+    }
+
+    /// One Gmail step: a page of the first listing, or a history round.
+    async fn gmail_round(&mut self) -> Result<(), GraphError> {
+        if !self.first_sync_done {
+            self.phase(SyncPhase::Headers);
+        }
+        let MailSource::Gmail(g) = &mut self.sync else {
+            return Ok(());
+        };
+        let acc = self.account;
+        let r = match g.sync_mail(&mut self.w, Priority::Background).await {
+            Ok(r) => r,
+            Err(e) => {
+                let msg = e.to_string();
+                let _ = self.w.write(|tx| {
+                    tx.set_sync_error(acc, familiar_provider_gmail::HISTORY_RESOURCE, &msg)
+                });
+                return Err(e);
+            }
+        };
+        if r.restarted {
+            crate::log(&format!(
+                "{}: Gmail no longer has history from the last sync; listing the mailbox again",
+                self.key
+            ));
+        }
+        let now = Instant::now();
+        self.mail_due = if r.more {
+            now
+        } else {
+            now + self.policy.inbox_interval
+        };
+        if !r.more && !self.first_sync_done {
+            let at = (self.clock)();
+            self.w
+                .write(|tx| tx.set_sync_state(acc, FIRST_SYNC_RESOURCE, None, None, at))?;
+            self.first_sync_done = true;
+            crate::log(&format!("{}: headers for all history are in", self.key));
+        }
+        if r.upserted + r.relabelled > 0 {
+            self.bodies_pending = true;
+            self.body_cursor = None;
+        }
+        if let Some(before) = self.policy.headers_start((self.clock)()) {
+            self.w.write(|tx| tx.prune_headers(acc, before))?;
+        }
+        let at = (self.clock)();
+        self.shared.update(|l| {
+            l.headers_synced += r.upserted as u64;
+            l.last_round_at = Some(at);
+            l.detail = None;
+        });
+        Ok(())
     }
 
     /// Brings the folder plan in line with the stored folder tree.
@@ -454,8 +551,10 @@ impl Engine {
                     .sync_state(acc, &messages_resource(remote))?
                     .is_some();
                 if !started {
-                    let (n, _) = self
-                        .sync
+                    let MailSource::Graph(sync) = &mut self.sync else {
+                        break;
+                    };
+                    let (n, _) = sync
                         .store_headers_page(&mut self.w, remote, 50, None, Priority::Background)
                         .await?;
                     self.shared.update(|l| l.headers_synced += n as u64);
@@ -463,8 +562,10 @@ impl Engine {
             }
         }
         let refs: Vec<&str> = batch.iter().map(String::as_str).collect();
-        let (upserted, moved) = match self
-            .sync
+        let MailSource::Graph(sync) = &mut self.sync else {
+            return Ok(());
+        };
+        let (upserted, moved) = match sync
             .sync_folders(&mut self.w, &refs, Priority::Background)
             .await
         {
@@ -485,8 +586,10 @@ impl Engine {
                 // bookmark.
                 let (mut upserted, mut moved) = (0, 0);
                 for remote in batch {
-                    match self
-                        .sync
+                    let MailSource::Graph(sync) = &mut self.sync else {
+                        break;
+                    };
+                    match sync
                         .sync_folders(&mut self.w, &[remote.as_str()], Priority::Background)
                         .await
                     {
@@ -577,10 +680,16 @@ impl Engine {
         }
         drop(r);
         self.phase(SyncPhase::Bodies);
-        let results = self
-            .sync
-            .fetch_bodies(&mut self.w, &ids, Priority::Background)
-            .await?;
+        let results = match &self.sync {
+            MailSource::Graph(s) => {
+                s.fetch_bodies(&mut self.w, &ids, Priority::Background)
+                    .await?
+            }
+            MailSource::Gmail(g) => {
+                g.fetch_bodies(&mut self.w, &ids, Priority::Background)
+                    .await?
+            }
+        };
         let mut ok = 0u64;
         let mut first_err = None;
         for (id, r) in results {
@@ -613,15 +722,17 @@ impl Engine {
         let prev = self.shared.snapshot().phase;
         self.phase(SyncPhase::Calendar);
         let acc = self.account;
-        self.calendar
+        let Some(calendar) = &mut self.calendar else {
+            return Ok(());
+        };
+        calendar
             .sync_calendars(&mut self.w, Priority::Background)
             .await?;
         let window = self.policy.calendar_window((self.clock)());
         let calendars = self.w.write(|tx| tx.calendars(acc))?;
         let (mut up, mut rm) = (0, 0);
         for cal in calendars {
-            match self
-                .calendar
+            match calendar
                 .sync_events(&mut self.w, &cal.remote_id, window, Priority::Background)
                 .await
             {
@@ -657,7 +768,10 @@ impl Engine {
     /// contacts, say) is logged and left until next time.
     async fn sync_contacts(&mut self) -> Result<(), GraphError> {
         let acc = self.account;
-        match self.contacts.sync(&mut self.w, Priority::Background).await {
+        let Some(contacts) = &mut self.contacts else {
+            return Ok(());
+        };
+        match contacts.sync(&mut self.w, Priority::Background).await {
             Ok((n, rm)) => {
                 let at = (self.clock)();
                 self.w

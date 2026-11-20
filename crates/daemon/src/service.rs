@@ -33,12 +33,21 @@ use crate::policy::{Clock, SyncPolicy};
 pub struct AccountHandle {
     /// Its key in `config.toml`.
     pub key: String,
-    /// Graph reads for on-demand fetches (shares the engine's scheduler).
-    pub api: MailApi,
+    /// Reads for on-demand fetches (shares the engine's scheduler).
+    pub api: AccountApi,
     /// Live status and wake-up.
     pub shared: Arc<AccountShared>,
     /// Wakes the account's op runner.
     pub ops_wake: Arc<tokio::sync::Notify>,
+}
+
+/// An account's provider reads.
+#[derive(Clone, Debug)]
+pub enum AccountApi {
+    /// Microsoft Graph.
+    Graph(MailApi),
+    /// Gmail.
+    Gmail(familiar_provider_gmail::GmailApi),
 }
 
 /// Everything a request can touch.
@@ -304,18 +313,22 @@ impl Service {
                 }
             }
         };
-        handle
-            .api
-            .client()
-            .get(&p.path, Priority::User, &[])
-            .await
-            .map_err(|e| match e {
-                // A malformed request is the caller's mistake, not the server's.
-                GraphError::Graph { status: 400, .. } => {
-                    CommandError::usage(format!("Graph rejected the request: {e}"))
-                }
-                e => command_error(e),
-            })
+        let got = match &handle.api {
+            AccountApi::Graph(api) => api.client().get(&p.path, Priority::User, &[]).await,
+            AccountApi::Gmail(api) => {
+                // `fam api` paths can name the whole Gmail path or just the
+                // part under the signed-in user.
+                let path = p.path.strip_prefix("/gmail/v1/users/me").unwrap_or(&p.path);
+                api.client().get(path, Priority::User).await
+            }
+        };
+        got.map_err(|e| match e {
+            // A malformed request is the caller's mistake, not the server's.
+            GraphError::Graph { status: 400, .. } => {
+                CommandError::usage(format!("the server rejected the request: {e}"))
+            }
+            e => command_error(e),
+        })
     }
 
     /// `daemon.status`.
@@ -351,12 +364,23 @@ impl Service {
         targets.sort_by(|a, b| a.1.key.cmp(&b.1.key));
         let rules = crate::check::Rules::new(&self.policy, (self.clock)());
         let mut accounts = Vec::new();
+        let named = p.account.is_some();
         for (id, a) in targets {
+            let api = match &a.api {
+                AccountApi::Graph(api) => api,
+                AccountApi::Gmail(_) if named => {
+                    return Err(CommandError::usage(format!(
+                        "{}: the consistency check doesn't cover Gmail accounts yet",
+                        a.key
+                    )));
+                }
+                AccountApi::Gmail(_) => continue,
+            };
             accounts.push(
                 crate::check::check_account(crate::check::CheckRun {
                     key: &a.key,
                     account: *id,
-                    api: &a.api,
+                    api,
                     shared: &a.shared,
                     root: &self.w.paths().root,
                     rules,
@@ -388,8 +412,19 @@ impl Service {
     }
 
     async fn download(&self, acc: &AccountHandle, m: &Message) -> Result<BodyRef, CommandError> {
-        let body = acc
-            .api
+        let api = match &acc.api {
+            AccountApi::Graph(api) => api,
+            AccountApi::Gmail(api) => {
+                let raw = api
+                    .raw(&m.remote_id, Priority::User)
+                    .await
+                    .map_err(command_error)?;
+                let mut w = self.w.clone();
+                return familiar_provider_gmail::store_body(&mut w, m.id, &raw)
+                    .map_err(command_error);
+            }
+        };
+        let body = api
             .body(&m.remote_id, Priority::User)
             .await
             .map_err(command_error)?;
@@ -524,11 +559,37 @@ impl Service {
         // is one or two requests.
         let mut answers = Vec::new();
         for (id, h, key) in &targets {
-            answers.push(
-                search_account(&h.api, &p.kql, limit)
-                    .await
-                    .map(|found| (*id, key.clone(), found)),
-            );
+            let found = match &h.api {
+                AccountApi::Graph(api) => search_account(api, &p.kql, limit).await.map(|msgs| {
+                    msgs.into_iter()
+                        .map(|g| {
+                            let folder = g.parent_folder_id.clone();
+                            (g.to_new_message(*id, FolderId(0)), folder)
+                        })
+                        .collect::<Vec<_>>()
+                }),
+                AccountApi::Gmail(api) => match &p.gmail_q {
+                    Some(q) => api.search(q, limit, Priority::User).await.map(|msgs| {
+                        let folders: std::collections::HashSet<String> = r
+                            .folders(*id)
+                            .map(|f| f.into_iter().map(|f| f.remote_id).collect())
+                            .unwrap_or_default();
+                        msgs.iter()
+                            .map(|g| {
+                                let folder =
+                                    familiar_provider_gmail::primary_label(&g.label_ids, &folders)
+                                        .to_string();
+                                (
+                                    familiar_provider_gmail::to_new_message(g, *id, FolderId(0)),
+                                    Some(folder),
+                                )
+                            })
+                            .collect()
+                    }),
+                    None => Ok(Vec::new()),
+                },
+            };
+            answers.push(found.map(|found| (*id, key.clone(), found)));
         }
         let mut out = SearchOnlineResult::default();
         for (i, a) in answers.into_iter().enumerate() {
@@ -536,10 +597,11 @@ impl Service {
             match a {
                 Ok((account, key, msgs)) => {
                     out.searched.push(key.clone());
-                    for g in msgs {
-                        let n = g.to_new_message(account, FolderId(0));
-                        let local = r.message_by_remote(account, &g.id).map_err(store_error)?;
-                        let folder = match &g.parent_folder_id {
+                    for (n, parent) in msgs {
+                        let local = r
+                            .message_by_remote(account, &n.remote_id)
+                            .map_err(store_error)?;
+                        let folder = match &parent {
                             Some(f) => r
                                 .folder_by_remote(account, f)
                                 .map_err(store_error)?
@@ -549,7 +611,7 @@ impl Service {
                         .or(local.as_ref().map(|m| m.folder.0));
                         out.hits.push(OnlineHit {
                             account: key.clone(),
-                            remote_id: g.id.clone(),
+                            remote_id: n.remote_id.clone(),
                             local_id: local.as_ref().map(|m| m.id.0),
                             folder_id: folder,
                             subject: n.subject,

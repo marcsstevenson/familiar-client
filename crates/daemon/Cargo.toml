@@ -20,6 +20,7 @@ familiar-auth.workspace = true
 familiar-config.workspace = true
 familiar-core.workspace = true
 familiar-provider-graph.workspace = true
+familiar-provider-gmail.workspace = true
 familiar-store.workspace = true
 familiar-search.workspace = true
 familiar-rules.workspace = true
@@ -31,6 +32,7 @@ tokio = { version = "1", features = ["rt-multi-thread", "net", "io-util", "macro
 base64 = "0.22"
 chrono = { version = "0.4", default-features = false, features = ["std"] }
 familiar-mock-graph.workspace = true
+familiar-mock-gmail.workspace = true
 rusqlite = { version = "0.41", features = ["bundled"] }
 tempfile = "3"
 
