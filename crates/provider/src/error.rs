@@ -15,8 +15,8 @@ pub enum Error {
     #[error("not signed in: {0}")]
     Auth(String),
 
-    /// Graph kept throttling after every retry.
-    #[error("Graph is still throttling after {attempts} attempts ({code})")]
+    /// The server kept throttling after every retry.
+    #[error("the server is still throttling after {attempts} attempts ({code})")]
     Throttled {
         /// Attempts made.
         attempts: u32,
@@ -34,7 +34,7 @@ pub enum Error {
     SyncStateGone(String),
 
     /// Any other Graph error.
-    #[error("Graph {status} {code}: {message}")]
+    #[error("server error {status} {code}: {message}")]
     Graph {
         /// HTTP status.
         status: u16,
@@ -47,7 +47,7 @@ pub enum Error {
     },
 
     /// Graph answered with something we couldn't read.
-    #[error("unexpected response from Graph: {0}")]
+    #[error("unexpected response from the server: {0}")]
     Decode(String),
 
     /// The local store refused a write.

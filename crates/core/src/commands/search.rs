@@ -20,7 +20,7 @@ use crate::error::{CommandError, ErrorKind};
 use crate::registry::{Access, Command, CommandSpec, Context};
 use familiar_search::online::{Filters, MAX_ONLINE, refine};
 use familiar_search::{
-    LocalPage, OnlineHit, Query, Searcher, account_ids_named, folder_ids_named, to_kql,
+    LocalPage, OnlineHit, Query, Searcher, account_ids_named, folder_ids_named, to_gmail_q, to_kql,
 };
 use familiar_store::{AccountId, Cursor, FolderId, Message, MessageId, Reader};
 use schemars::JsonSchema;
@@ -358,6 +358,7 @@ fn online_hits(
             METHOD_SEARCH_ONLINE,
             &SearchOnlineParams {
                 kql,
+                gmail_q: to_gmail_q(q),
                 accounts: q.accounts.clone(),
                 limit: limit.min(MAX_ONLINE),
             },

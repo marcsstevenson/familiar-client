@@ -22,7 +22,7 @@ pub mod text;
 use std::path::{Path, PathBuf};
 
 pub use index::{BATCH, Fields, INDEX_VERSION, Indexer, Opened, TOKENIZER};
-pub use online::{OnlineHit, to_kql};
+pub use online::{OnlineHit, to_gmail_q, to_kql};
 pub use query::{ParseError, Query, TextField, TextTerm};
 pub use searcher::{LocalPage, Searcher, account_ids_named, folder_ids_named};
 

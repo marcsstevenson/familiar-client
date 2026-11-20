@@ -18,6 +18,7 @@ familiar-core = { path = "crates/core" }
 familiar-auth = { path = "crates/auth" }
 familiar-provider = { path = "crates/provider" }
 familiar-provider-graph = { path = "crates/provider-graph" }
+familiar-provider-gmail = { path = "crates/provider-gmail" }
 familiar-store = { path = "crates/store" }
 familiar-search = { path = "crates/search" }
 familiar-rules = { path = "crates/rules" }

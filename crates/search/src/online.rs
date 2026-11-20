@@ -88,6 +88,33 @@ pub fn to_kql(q: &Query) -> Option<String> {
     Some(format!("\"{}\"", parts.join(" ")))
 }
 
+/// The query's words and phrases as a Gmail search (`messages.list?q=`),
+/// or `None` if it has none. As with [`to_kql`], everything else is applied
+/// locally by [`refine`]. Gmail has no `body:` operator, so body terms are
+/// plain words.
+pub fn to_gmail_q(q: &Query) -> Option<String> {
+    let mut parts = Vec::new();
+    for t in &q.text {
+        let text = t.text.replace(['"', '\\'], " ");
+        let text = text.trim();
+        if text.is_empty() {
+            continue;
+        }
+        let value = if text.contains(char::is_whitespace) {
+            format!("\"{text}\"")
+        } else {
+            text.to_string()
+        };
+        parts.push(match t.field {
+            TextField::Any | TextField::Body => value,
+            TextField::From => format!("from:{value}"),
+            TextField::To => format!("to:{value}"),
+            TextField::Subject => format!("subject:{value}"),
+        });
+    }
+    (!parts.is_empty()).then(|| parts.join(" "))
+}
+
 /// What the query's filters resolved to locally.
 #[derive(Debug, Clone, Default)]
 pub struct Filters {
@@ -186,6 +213,20 @@ mod tests {
         // Quotes and backslashes can't break out of the value.
         let q = Query::parse(r#"a\"b"#, 0).unwrap();
         assert_eq!(to_kql(&q).unwrap(), r#""\"a b\"""#);
+    }
+
+    #[test]
+    fn gmail_q() {
+        let q = Query::parse(
+            r#"invoice "annual meeting" from:club subject:"AGM 2026" body:x -spam has:attachment"#,
+            0,
+        )
+        .unwrap();
+        assert_eq!(
+            to_gmail_q(&q).unwrap(),
+            r#"invoice "annual meeting" from:club subject:"AGM 2026" x"#
+        );
+        assert_eq!(to_gmail_q(&Query::parse("is:unread", 0).unwrap()), None);
     }
 
     #[test]
