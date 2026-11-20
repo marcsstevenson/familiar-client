@@ -235,7 +235,10 @@ impl GmailClient {
                 .lock()
                 .unwrap_or_else(|e| e.into_inner())
                 .take(cost);
-            if !wait.is_zero() {
+            // A user request is counted but never waits: the budget is well
+            // under Google's limit, and the background work behind it slows
+            // down to pay the units back.
+            if !wait.is_zero() && priority == Priority::Background {
                 tokio::time::sleep(wait).await;
             }
             let permit = self.inner.scheduler.acquire(priority).await;
