@@ -2000,6 +2000,10 @@ fn gmail_move(
     let id = MessageId(message);
     let all_mail = tx.ensure_all_mail(account)?;
     let prev = tx.message_folders(id)?;
+    // Gmail owns these labels. Filing a sent message or a draft keeps its label.
+    let keep_from = tx
+        .folder(FolderId(from))?
+        .is_some_and(|f| matches!(f.remote_id.as_str(), "SENT" | "DRAFT"));
     let to = FolderId(to);
     let hidden = tx
         .folder(to)?
@@ -2010,7 +2014,7 @@ fn gmail_move(
     } else {
         prev.iter()
             .copied()
-            .filter(|f| f.0 != from && *f != all_mail)
+            .filter(|f| (keep_from || f.0 != from) && *f != all_mail)
             .collect()
     };
     if to != all_mail && !next.contains(&to) {

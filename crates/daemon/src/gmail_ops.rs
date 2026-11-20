@@ -223,7 +223,7 @@ impl GmailOps {
             if to.as_deref() != Some("SPAM") {
                 remove.push("SPAM");
             }
-        } else if let Some(f) = from.as_deref() {
+        } else if let Some(f) = from.as_deref().filter(|f| !matches!(*f, "SENT" | "DRAFT")) {
             remove.push(f);
         }
         let add: Vec<&str> = to.as_deref().into_iter().collect();
