@@ -1953,7 +1953,7 @@ export interface Commands {
   "api": { input: ApiInput; output: AnyValue };
   /** List the audit log of writes */
   "audit.list": { input: AuditListInput; output: AuditListOutput };
-  /** Sign in to a Microsoft account */
+  /** Sign in to a Microsoft or Gmail account */
   "auth.login": { input: AuthLoginInput; output: AccountSignIn };
   /** Sign out: forget an account's tokens */
   "auth.logout": { input: AuthLogoutInput; output: AuthLogoutOutput };

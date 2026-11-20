@@ -3,7 +3,7 @@
 //! duplicates. Every problem found is reported, not just the first.
 
 use crate::model::{
-    AGENT_ACCESS, CURRENT_VERSION, Config, MAX_SEND_DELAY_SECONDS, PER_ACCOUNT_ACCESS,
+    AGENT_ACCESS, CURRENT_VERSION, Config, MAX_SEND_DELAY_SECONDS, PER_ACCOUNT_ACCESS, Provider,
 };
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -123,6 +123,15 @@ pub fn check(c: &Config) -> Vec<Problem> {
             ));
         }
         match a.tenant.as_str() {
+            "" if a.provider == Provider::Gmail => {}
+            _ if a.provider == Provider::Gmail => p.push(Problem::error(
+                format!("{base}.tenant"),
+                "Gmail accounts have no tenant; remove it",
+            )),
+            "" => p.push(Problem::error(
+                format!("{base}.tenant"),
+                "is missing: `consumers` for Outlook.com and Hotmail, otherwise the tenant ID or domain",
+            )),
             "consumers" => {}
             "organizations" | "common" => p.push(Problem::warning(
                 format!("{base}.tenant"),

@@ -72,6 +72,11 @@ fn run() -> Result<(), (u8, String)> {
 
     let mut accounts = Vec::new();
     for (key, a) in &config.accounts {
+        if a.provider == familiar_config::Provider::Gmail {
+            // Gmail sync arrives with the Gmail plan's WP G.5.
+            log(&format!("{key}: Gmail accounts don't sync yet; skipped"));
+            continue;
+        }
         let client = GraphClient::new(
             ClientOptions::with_base(graph.clone()),
             Arc::new(AuthTokens::new(auth.clone(), key.clone())),

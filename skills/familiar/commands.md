@@ -44,13 +44,13 @@ Lists writes with their source (cli, gui, mcp or agent:<name>) and outcome: queu
 
 ## auth.login
 
-Sign in to a Microsoft account. Access: `write`.
+Sign in to a Microsoft or Gmail account. Access: `write`.
 
 ```
 fam auth login <ACCOUNT>
 ```
 
-Signs in with the system browser (or a device code with --device-code) and keeps the tokens in the OS keychain, or in an encrypted file where there is none (set FAMILIAR_TOKEN_PASSPHRASE). Signing in again replaces the stored tokens.
+Signs in with the system browser (or a device code with --device-code; Microsoft only) and keeps the tokens in the OS keychain, or in an encrypted file where there is none (set FAMILIAR_TOKEN_PASSPHRASE). Signing in again replaces the stored tokens.
 
 - `ACCOUNT` (required): The account name, for example `hotmail` (lowercase letters, digits, - and _).
 - `--authority <authority>`: Where to sign in: `consumers` for Hotmail and Outlook.com, `organizations` or the tenant ID or domain for a work account, or `common`. Defaults to the account's `tenant` in config.toml.

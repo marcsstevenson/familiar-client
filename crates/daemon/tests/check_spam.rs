@@ -171,6 +171,7 @@ async fn facts_grade_and_saved_result() {
             KEY.into(),
             Account {
                 email: "test.user@example.com".into(),
+                provider: Default::default(),
                 tenant: "consumers".into(),
                 display_name: None,
                 aliases: Vec::new(),

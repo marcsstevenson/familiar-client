@@ -48,6 +48,7 @@ impl Env {
         Endpoints {
             login: self.mock().login_url(),
             graph: self.mock().base_url().to_string(),
+            ..Endpoints::microsoft()
         }
     }
 
@@ -88,6 +89,7 @@ fn request(account: &str, authority: &str, flow: Flow) -> LoginRequest {
         account: account.into(),
         authority: authority.into(),
         client_id: DEFAULT_CLIENT_ID.into(),
+        client_secret: None,
         flow,
         email: None,
         scopes: SCOPES.into(),
@@ -190,6 +192,7 @@ fn work_account_refresh_via_organizations_is_what_failed_in_the_spike() {
         .refresh(
             "organizations",
             DEFAULT_CLIENT_ID,
+            None,
             &rec.refresh_token,
             SCOPES,
         )
@@ -319,6 +322,7 @@ fn offline_is_reported_as_offline() {
         Endpoints {
             login: "http://127.0.0.1:9".into(),
             graph: "http://127.0.0.1:9/v1.0".into(),
+            ..Endpoints::microsoft()
         },
     );
     let e = auth
@@ -328,4 +332,83 @@ fn offline_is_reported_as_offline() {
         )
         .unwrap_err();
     assert_eq!(e.kind, AuthErrorKind::Offline, "{e}");
+}
+
+/// Google's endpoints, played by the mock identity platform's `common` tenant: the flow
+/// differs from Microsoft's only in its URLs and the client secret.
+fn google_auth(env: &Env) -> Auth {
+    let login = env.mock().login_url();
+    let endpoints = Endpoints {
+        google_auth: format!("{login}/common/oauth2/v2.0/authorize"),
+        google_token: format!("{login}/common/oauth2/v2.0/token"),
+        ..env.endpoints()
+    };
+    Auth::new(Box::new(MemoryStore::memory()), endpoints)
+        .with_browser_timeout(Duration::from_secs(20))
+}
+
+fn google_request(flow: Flow) -> LoginRequest {
+    LoginRequest {
+        account: "gmail".into(),
+        authority: familiar_auth::GOOGLE_AUTHORITY.into(),
+        client_id: DEFAULT_CLIENT_ID.into(),
+        client_secret: Some("desktop-secret".into()),
+        flow,
+        email: Some("marc@hotmail.example".into()),
+        // Google gives a refresh token for access_type=offline; the mock wants
+        // Microsoft's offline_access scope for the same thing.
+        scopes: format!("offline_access {}", familiar_auth::GOOGLE_SCOPES),
+    }
+}
+
+#[test]
+fn google_sign_in_keeps_the_secret_and_refreshes_with_it() {
+    let env = Env::start(Duration::from_secs(1));
+    let auth = google_auth(&env);
+    let browser = FakeBrowser::default();
+    let rec = auth
+        .login(&google_request(Flow::Browser), &browser)
+        .unwrap();
+    assert!(rec.is_google());
+    assert_eq!(rec.refresh_authority(), "google");
+    assert_eq!(rec.client_secret.as_deref(), Some("desktop-secret"));
+    let shown = browser.shown.lock().unwrap().join("\n");
+    assert!(
+        shown.contains("access_type=offline&prompt=consent"),
+        "{shown}"
+    );
+    assert!(shown.contains("127.0.0.1%3A"), "{shown}");
+
+    let before = token_paths(env.mock()).len();
+    let fresh = auth.refresh("gmail").unwrap();
+    assert!(fresh.access_token.is_some());
+    assert_eq!(token_paths(env.mock()).len(), before + 1);
+}
+
+#[test]
+fn google_has_no_device_code() {
+    let env = Env::start(Duration::from_secs(60));
+    let e = google_auth(&env)
+        .login(&google_request(Flow::DeviceCode), &FakeBrowser::default())
+        .unwrap_err();
+    assert_eq!(e.kind, AuthErrorKind::Usage, "{e}");
+}
+
+#[test]
+fn google_client_file_reads_the_desktop_client() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("google-client.json");
+    std::fs::write(
+        &path,
+        r#"{"installed":{"client_id":"1-a.apps.googleusercontent.com","client_secret":"s","redirect_uris":["http://localhost"]}}"#,
+    )
+    .unwrap();
+    let c = familiar_auth::GoogleClient::load(&path).unwrap();
+    assert_eq!(c.id, "1-a.apps.googleusercontent.com");
+    assert_eq!(c.secret, "s");
+    assert!(!format!("{c:?}").contains("\"s\""));
+
+    std::fs::write(&path, r#"{"web":{"client_id":"x","client_secret":"y"}}"#).unwrap();
+    let e = familiar_auth::GoogleClient::load(&path).unwrap_err();
+    assert_eq!(e.kind, AuthErrorKind::Config, "{e}");
 }

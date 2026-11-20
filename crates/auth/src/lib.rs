@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-//! Microsoft sign-in for Familiar (WP 1.4).
+//! Microsoft and Google sign-in for Familiar (WP 1.4, Gmail plan WP G.3).
 //!
 //! - **Flows.** Authorisation code with PKCE in the system browser (the default) or device
 //!   code (for machines without a browser), against the account's authority.
@@ -9,8 +9,14 @@
 //!   accounts refresh against `consumers`, work accounts against their own tenant ID
 //!   (never `organizations`, which failed in WP 0.2). Rotated refresh tokens are saved.
 //!
-//! Endpoints default to Microsoft's and can be pointed at the mock with
-//! `FAMILIAR_LOGIN_URL` and `FAMILIAR_GRAPH_URL` (see [`Endpoints::from_env`]).
+//! - **Google.** An account whose authority is [`GOOGLE_AUTHORITY`] signs in to Google
+//!   with PKCE in the browser (Google has no device code for Gmail scopes) using the
+//!   person's own Desktop OAuth client, whose secret is kept in the token record because
+//!   Google wants it on every refresh.
+//!
+//! Endpoints default to Microsoft's and Google's and can be pointed at mocks with
+//! `FAMILIAR_LOGIN_URL`, `FAMILIAR_GRAPH_URL`, `FAMILIAR_GOOGLE_AUTH_URL`,
+//! `FAMILIAR_GOOGLE_TOKEN_URL` and `FAMILIAR_GMAIL_URL` (see [`Endpoints::from_env`]).
 
 pub mod error;
 pub mod oauth;
@@ -33,6 +39,25 @@ pub const DEFAULT_CLIENT_ID: &str = "c6057b6a-a692-47dd-b34e-12629372e32a";
 pub const SCOPES: &str = "openid profile offline_access User.Read Mail.ReadWrite Mail.Send \
                           Calendars.ReadWrite Contacts.Read MailboxSettings.ReadWrite";
 
+/// Scopes Familiar asks Google for: mail now, calendar and contacts later, so nobody has
+/// to consent twice (Gmail plan, WP G.0).
+pub const GOOGLE_SCOPES: &str = "openid email profile \
+    https://www.googleapis.com/auth/gmail.modify \
+    https://www.googleapis.com/auth/gmail.send \
+    https://www.googleapis.com/auth/gmail.settings.basic \
+    https://www.googleapis.com/auth/calendar \
+    https://www.googleapis.com/auth/contacts.readonly \
+    https://www.googleapis.com/auth/contacts.other.readonly";
+
+/// The authority stored for a Google account, in place of a Microsoft tenant.
+pub const GOOGLE_AUTHORITY: &str = "google";
+/// Google's authorisation endpoint.
+pub const GOOGLE_AUTH_URL: &str = "https://accounts.google.com/o/oauth2/v2/auth";
+/// Google's token endpoint.
+pub const GOOGLE_TOKEN_URL: &str = "https://oauth2.googleapis.com/token";
+/// The Gmail API, for the signed-in user.
+pub const GMAIL_URL: &str = "https://gmail.googleapis.com/gmail/v1/users/me";
+
 /// Microsoft's sign-in host.
 pub const LOGIN_URL: &str = "https://login.microsoftonline.com";
 /// Microsoft Graph v1.0.
@@ -45,6 +70,12 @@ pub struct Endpoints {
     pub login: String,
     /// The Graph base URL, ending in `/v1.0`.
     pub graph: String,
+    /// Google's authorisation endpoint.
+    pub google_auth: String,
+    /// Google's token endpoint.
+    pub google_token: String,
+    /// The Gmail API for the signed-in user, ending in `/users/me`.
+    pub gmail: String,
 }
 
 impl Endpoints {
@@ -53,6 +84,9 @@ impl Endpoints {
         Self {
             login: LOGIN_URL.into(),
             graph: GRAPH_URL.into(),
+            google_auth: GOOGLE_AUTH_URL.into(),
+            google_token: GOOGLE_TOKEN_URL.into(),
+            gmail: GMAIL_URL.into(),
         }
     }
 
@@ -70,6 +104,9 @@ impl Endpoints {
         Self {
             login: pick("FAMILIAR_LOGIN_URL", LOGIN_URL),
             graph: pick("FAMILIAR_GRAPH_URL", GRAPH_URL),
+            google_auth: pick("FAMILIAR_GOOGLE_AUTH_URL", GOOGLE_AUTH_URL),
+            google_token: pick("FAMILIAR_GOOGLE_TOKEN_URL", GOOGLE_TOKEN_URL),
+            gmail: pick("FAMILIAR_GMAIL_URL", GMAIL_URL),
         }
     }
 }
@@ -88,10 +125,14 @@ pub enum Flow {
 pub struct LoginRequest {
     /// The account name tokens are stored under.
     pub account: String,
-    /// `consumers` (Hotmail, Outlook.com), `organizations`, `common`, a tenant ID or domain.
+    /// `consumers` (Hotmail, Outlook.com), `organizations`, `common`, a tenant ID or domain,
+    /// or [`GOOGLE_AUTHORITY`].
     pub authority: String,
     /// The app (client) ID.
     pub client_id: String,
+    /// The OAuth client secret, for Google's Desktop clients (Google says it isn't
+    /// treated as secret for installed apps). None for Microsoft.
+    pub client_secret: Option<String>,
     /// Browser or device code.
     pub flow: Flow,
     /// The address the account should sign in as. Sent as `login_hint`; signing in as
@@ -111,7 +152,7 @@ pub trait Prompt {
     }
 }
 
-/// The signed-in user, from Graph `/me`.
+/// The signed-in user, from Graph `/me` or Gmail's profile.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Profile {
     /// Display name.
@@ -134,7 +175,8 @@ pub struct Auth {
 impl Auth {
     /// Uses `store` and `endpoints`.
     pub fn new(store: Box<dyn TokenStore>, endpoints: Endpoints) -> Self {
-        let oauth = OAuthClient::new(endpoints.login.clone());
+        let oauth = OAuthClient::new(endpoints.login.clone())
+            .with_google(&endpoints.google_auth, &endpoints.google_token);
         Self {
             store,
             endpoints,
@@ -181,12 +223,25 @@ impl Auth {
         if req.authority.trim().is_empty() {
             return Err(AuthError::usage("the sign-in authority is empty"));
         }
+        let google = req.authority == GOOGLE_AUTHORITY;
+        if google && req.flow == Flow::DeviceCode {
+            return Err(AuthError::usage(
+                "Google has no device code sign-in for Gmail: sign in with the browser, on \
+                 this machine or on one with a browser and copy the token file across",
+            ));
+        }
+        if google && req.client_secret.is_none() {
+            return Err(AuthError::config(
+                "Google sign-in needs your Google client file (docs/gmail-setup.md)",
+            ));
+        }
         let notify = |m: &str| prompt.show(m);
         let tokens = match req.flow {
             Flow::Browser => self.oauth.pkce(
                 &oauth::PkceRequest {
                     authority: &req.authority,
                     client_id: &req.client_id,
+                    client_secret: req.client_secret.as_deref(),
                     scopes: &req.scopes,
                     login_hint: req.email.as_deref(),
                     timeout: self.browser_timeout,
@@ -207,7 +262,8 @@ impl Auth {
                 .and_then(|c| c[k].as_str())
                 .map(str::to_string)
         };
-        let username = claim("preferred_username");
+        // Google's ID token has `email` where Microsoft's has `preferred_username`.
+        let username = claim("preferred_username").or_else(|| claim("email"));
         if let (Some(want), Some(got)) = (&req.email, &username) {
             if !want.eq_ignore_ascii_case(got) {
                 return Err(AuthError::usage(format!(
@@ -226,6 +282,7 @@ impl Auth {
             version: TokenRecord::VERSION,
             account: req.account.clone(),
             client_id: req.client_id.clone(),
+            client_secret: req.client_secret.clone(),
             authority: req.authority.clone(),
             tenant_id: claim("tid"),
             username,
@@ -262,6 +319,7 @@ impl Auth {
         let answer = self.oauth.refresh(
             &authority,
             &record.client_id,
+            record.client_secret.as_deref(),
             &record.refresh_token,
             &record.requested_scopes,
         )?;
@@ -299,7 +357,7 @@ impl Auth {
         Ok(record)
     }
 
-    /// A Graph access token for the account, refreshed first if it expires within five
+    /// An access token for the account (Graph, or Google for a Google account), refreshed first if it expires within five
     /// minutes.
     pub fn access_token(&self, account: &str) -> Result<String> {
         let record = self.load_required(account)?;
@@ -312,16 +370,26 @@ impl Auth {
             .ok_or_else(|| AuthError::internal("refresh gave no access token"))
     }
 
-    /// Proves the sign-in works: gets a token (refreshing if needed) and calls Graph `/me`.
-    /// A 401 forces one refresh and a retry.
+    /// Proves the sign-in works: gets a token (refreshing if needed) and calls Graph `/me`
+    /// (Gmail's profile for a Google account). A 401 forces one refresh and a retry.
     pub fn check(&self, account: &str) -> Result<Profile> {
+        let google = self
+            .record(account)?
+            .is_some_and(|r| r.authority == GOOGLE_AUTHORITY);
+        let me = |token: &str| {
+            if google {
+                self.gmail_profile(token)
+            } else {
+                self.me(token)
+            }
+        };
         let token = self.access_token(account)?;
-        match self.me(&token)? {
+        match me(&token)? {
             Some(p) => Ok(p),
             None => {
                 let record = self.refresh(account)?;
                 let token = record.access_token.unwrap_or_default();
-                self.me(&token)?.ok_or_else(|| {
+                me(&token)?.ok_or_else(|| {
                     AuthError::auth_required(format!(
                         "Graph refused `{account}`'s fresh token: run `fam auth login {account}`"
                     ))
@@ -364,12 +432,93 @@ impl Auth {
         }))
     }
 
+    /// Gmail's profile. None on 401.
+    fn gmail_profile(&self, token: &str) -> Result<Option<Profile>> {
+        let url = format!("{}/profile", self.endpoints.gmail);
+        let resp = match self
+            .agent
+            .get(&url)
+            .set("Authorization", &format!("Bearer {token}"))
+            .call()
+        {
+            Ok(r) => r,
+            Err(ureq::Error::Status(401, _)) => return Ok(None),
+            Err(ureq::Error::Status(s, r)) => {
+                let body: Value = r.into_json().unwrap_or(Value::Null);
+                let reason = body["error"]["status"].as_str().unwrap_or("-");
+                return Err(AuthError::server(format!(
+                    "Gmail profile answered HTTP {s} {reason}"
+                )));
+            }
+            Err(e) => return Err(oauth::transport("Gmail", &e)),
+        };
+        let body: Value = resp
+            .into_json()
+            .map_err(|e| AuthError::server(format!("Gmail profile: unreadable body: {e}")))?;
+        let mail = body["emailAddress"].as_str().map(str::to_string);
+        Ok(Some(Profile {
+            display_name: None,
+            user_principal_name: mail.clone(),
+            mail,
+        }))
+    }
+
     /// Forgets an account's tokens. False if it was not signed in. Microsoft has no token
     /// revocation for public clients, so this is local: the refresh token simply stops
     /// being used. To revoke on the server, remove the app at myaccount.microsoft.com
     /// (personal) or myapps.microsoft.com (work).
     pub fn logout(&self, account: &str) -> Result<bool> {
         self.store.delete(account)
+    }
+}
+
+/// A Google OAuth client: the ID and the Desktop client's secret.
+#[derive(Clone, PartialEq, Eq)]
+pub struct GoogleClient {
+    /// The client ID, ending in `.apps.googleusercontent.com`.
+    pub id: String,
+    /// The client secret. Google says a Desktop client's secret isn't treated as secret,
+    /// but it is still kept out of logs.
+    pub secret: String,
+}
+
+impl std::fmt::Debug for GoogleClient {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("GoogleClient")
+            .field("id", &self.id)
+            .field("secret", &"<redacted>")
+            .finish()
+    }
+}
+
+impl GoogleClient {
+    /// Reads the client JSON Google Cloud gives you for a Desktop app client.
+    pub fn load(path: &std::path::Path) -> Result<Self> {
+        let text = std::fs::read_to_string(path).map_err(|e| {
+            AuthError::config(format!(
+                "can't read the Google client file {}: {e} (docs/gmail-setup.md says how to \
+                 make one)",
+                path.display()
+            ))
+        })?;
+        let json: Value = serde_json::from_str(&text)
+            .map_err(|e| AuthError::config(format!("{} isn't JSON: {e}", path.display())))?;
+        let installed = json.get("installed").ok_or_else(|| {
+            AuthError::config(format!(
+                "{} is not a Desktop app client: create the client as a Desktop app",
+                path.display()
+            ))
+        })?;
+        let field = |k: &str| {
+            installed[k]
+                .as_str()
+                .map(str::to_string)
+                .ok_or_else(|| AuthError::config(format!("{} has no {k}", path.display())))
+        };
+        Ok(Self {
+            id: field("client_id")?,
+            secret: field("client_secret")?,
+        })
     }
 }
 

@@ -21,6 +21,10 @@ pub struct TokenRecord {
     pub account: String,
     /// The app (client) ID the tokens were issued to.
     pub client_id: String,
+    /// The client secret of a Google Desktop client, needed on every Google refresh.
+    /// None for Microsoft.
+    #[serde(default)]
+    pub client_secret: Option<String>,
     /// The authority used to sign in: `consumers`, `organizations`, `common`, a tenant ID or domain.
     pub authority: String,
     /// The account's tenant ID (`tid` claim of the ID token).
@@ -73,10 +77,18 @@ impl TokenRecord {
             || self.authority.eq_ignore_ascii_case("consumers")
     }
 
-    /// Where refreshes go. Personal accounts use `consumers`. Work accounts use their own
+    /// True for a Google account.
+    pub fn is_google(&self) -> bool {
+        self.authority == crate::GOOGLE_AUTHORITY
+    }
+
+    /// Where refreshes go. Google accounts go to Google. Personal accounts use `consumers`. Work accounts use their own
     /// tenant ID: refreshing a work account against `organizations` failed with AADSTS65001
     /// in WP 0.2, so the multi-tenant aliases are never used for refresh.
     pub fn refresh_authority(&self) -> String {
+        if self.is_google() {
+            return crate::GOOGLE_AUTHORITY.into();
+        }
         if self.is_personal() {
             return "consumers".into();
         }
@@ -126,6 +138,7 @@ pub(crate) fn sample(account: &str) -> TokenRecord {
         version: TokenRecord::VERSION,
         account: account.into(),
         client_id: "client".into(),
+        client_secret: None,
         authority: "organizations".into(),
         tenant_id: Some("tid-1".into()),
         username: Some("a@example.com".into()),
