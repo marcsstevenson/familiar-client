@@ -295,6 +295,8 @@ Measured in the cloud on the synthetic 500k-message store (`seed` and the new `f
 
 The GUI perf job (`scripts/bench-gui.sh`) passed every limit on both builds, with the same numbers within run-to-run noise (list open p95 43 ms on main, 44 to 68 ms over three runs of G.2; `is:unread` 69 ms on both after a rerun). A Gmail-style store (one account with All Mail and a second label on a third of its messages, 797k folder rows) reads as fast; `set_message_folders` costs about 0.3 ms a message, so a first sync of a very large Gmail mailbox spends a little over a minute per 250k messages on it.
 
+Left for later: `move_message` on a multi-label message moves only the primary location (Gmail moves are G.6); the full conversation view (`Reader::conversation`) still marks a message sent only from its primary folder and copies, so a message in Inbox and Sent shows as not sent there although the folder list's `has_sent` is right (G.10); the correspondents triggers read only the primary folder.
+
 ## Phasing
 
 Gmail is on the design doc's "Later" list, and Phase 3's gate (a week of daily mail in the app) is in progress. Starting the provider boundary and the store change while that week runs would mean refactoring the code Marc is testing, so the proposed order is:
