@@ -7,8 +7,9 @@
 //! `SPAM` get the well-known names the rest of Familiar uses, user labels
 //! nest by the `/` in their names, and Gmail's other system labels
 //! (`UNREAD`, `STARRED`, `IMPORTANT`, the categories) are not folders:
-//! `UNREAD` and `STARRED` are the read and flag state. A message without
-//! any folder label (archived) lives in the [`ALL_MAIL`] folder.
+//! `UNREAD` and `STARRED` are the read and flag state. A message is in every
+//! folder it has a label for, and in the store's All Mail folder unless it
+//! is in Trash or Spam, so archived mail with no label is still there.
 //!
 //! # First sync and history
 //!
@@ -39,8 +40,8 @@ pub const LABELS_RESOURCE: &str = "labels";
 pub const HISTORY_RESOURCE: &str = "history";
 /// Sync state of a listing in progress: `<history id> <page token>`.
 pub const LISTING_RESOURCE: &str = "listing";
-/// Remote ID of the folder for mail with no folder label.
-pub const ALL_MAIL: &str = "ALL_MAIL";
+/// Remote ID of the All Mail folder, which has no Gmail label.
+pub const ALL_MAIL: &str = familiar_store::ALL_MAIL_REMOTE_ID;
 
 /// Gmail's system labels that are folders, with their well-known names and
 /// display names.
@@ -73,9 +74,8 @@ pub fn is_folder_label(l: &GmailLabel) -> bool {
     }
 }
 
-/// The one folder a message is stored in: Trash and Spam hide it
-/// everywhere else, then Drafts, Inbox, Sent, its first user label, and
-/// All Mail when it has none of those.
+/// The folder a message shows as being in (the store's primary location):
+/// Trash, Spam, Drafts, Inbox, Sent, its first user label, else All Mail.
 pub fn primary_label<'a>(labels: &'a [String], folders: &HashSet<String>) -> &'a str {
     for want in ["TRASH", "SPAM", "DRAFT", "INBOX", "SENT"] {
         if let Some(l) = labels.iter().find(|l| *l == want) {
@@ -188,13 +188,7 @@ impl GmailSync {
             let busy = tx.open_op_targets(acc)?;
             let mut keep: HashSet<String> = HashSet::new();
             keep.insert(ALL_MAIL.to_string());
-            tx.upsert_folder(&NewFolder {
-                account: acc,
-                remote_id: ALL_MAIL.into(),
-                parent: None,
-                name: "All Mail".into(),
-                well_known: Some("allmail".into()),
-            })?;
+            tx.ensure_all_mail(acc)?;
             for l in &labels {
                 keep.insert(l.id.clone());
                 if let Some(f) = tx.folder_by_remote(acc, &l.id)? {
@@ -375,7 +369,8 @@ impl GmailSync {
                         continue;
                     }
                 }
-                tx.upsert_message(&to_new_message(m, acc, folder))?;
+                let id = tx.upsert_message(&to_new_message(m, acc, folder))?;
+                tx.set_message_folders(id, &label_folders(&m.label_ids, &folders))?;
                 n += 1;
             }
             Ok(())
@@ -388,6 +383,7 @@ impl GmailSync {
         let acc = self.account;
         let reader = Reader::open(&w.paths().root)?;
         let mut gone = Vec::new();
+        let mut checked = HashSet::new();
         for f in reader.folders(acc)? {
             let mut after = None;
             loop {
@@ -398,7 +394,8 @@ impl GmailSync {
                     id: last.id.0,
                 });
                 for m in &rows {
-                    if !seen.contains(&m.remote_id)
+                    if checked.insert(m.id)
+                        && !seen.contains(&m.remote_id)
                         && !m.remote_id.starts_with(familiar_store::LOCAL_REMOTE_PREFIX)
                     {
                         gone.push(m.id);
@@ -469,7 +466,6 @@ impl GmailSync {
             self.sync_labels(w, priority).await?;
             folders = self.folder_ids(w)?;
         }
-        let names: HashSet<String> = folders.keys().cloned().collect();
         let mut fetch: Vec<String> = Vec::new();
         let mut relabelled = 0;
         w.write(|tx| {
@@ -485,10 +481,7 @@ impl GmailSync {
                 if busy.contains(&familiar_store::message_target(local.id)) {
                     continue;
                 }
-                let primary = primary_label(ls, &names);
-                if let Some(&folder) = folders.get(primary).or_else(|| folders.get(ALL_MAIL)) {
-                    tx.move_message(local.id, folder)?;
-                }
+                tx.set_message_folders(local.id, &label_folders(ls, &folders))?;
                 tx.set_read(local.id, !ls.iter().any(|l| l == "UNREAD"))?;
                 tx.set_flagged(local.id, ls.iter().any(|l| l == "STARRED"))?;
                 relabelled += 1;
@@ -562,6 +555,15 @@ impl GmailSync {
         }
         Ok(out)
     }
+}
+
+/// The folders for a message's labels, All Mail left to the store.
+fn label_folders(labels: &[String], folders: &HashMap<String, FolderId>) -> Vec<FolderId> {
+    labels
+        .iter()
+        .filter(|l| l.as_str() != ALL_MAIL)
+        .filter_map(|l| folders.get(l).copied())
+        .collect()
 }
 
 /// Parses `raw` and stores its body for `message`.

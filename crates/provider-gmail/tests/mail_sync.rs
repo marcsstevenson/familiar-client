@@ -75,6 +75,13 @@ impl Env {
         out
     }
 
+    /// Messages in the store, each once.
+    fn total(&self) -> usize {
+        let all: std::collections::HashSet<String> =
+            self.by_folder().into_values().flatten().collect();
+        all.len()
+    }
+
     async fn sync_all(&mut self) -> usize {
         let mut calls = 0;
         loop {
@@ -162,7 +169,17 @@ async fn first_sync_lists_everything_then_history_follows() {
     assert_eq!(f["Trash"], ["msg-trash"]);
     assert_eq!(f["Receipts"], ["msg-receipt"]);
     assert_eq!(f["Old projects"], ["msg-2015"]);
-    assert_eq!(f["All Mail"], ["msg-archived"]);
+    // A message is in every label it has.
+    assert_eq!(f["Clients"], ["msg-acme-1"]);
+    assert_eq!(f["Acme"], ["msg-acme-1", "msg-acme-2", "msg-acme-3"]);
+    // All Mail has everything but Spam and Trash.
+    assert_eq!(f["All Mail"].len(), 10);
+    assert!(f["All Mail"].contains(&"msg-archived".to_string()));
+    assert!(!f["All Mail"].contains(&"msg-spam".to_string()));
+    let r = e.reader();
+    let a1 = e.message("msg-acme-1").unwrap();
+    assert_eq!(r.message_folders(a1.id).unwrap().len(), 4);
+    drop(r);
 
     let dinner = e.message("msg-dinner").unwrap();
     assert!(!dinner.is_read);
@@ -199,6 +216,11 @@ async fn first_sync_lists_everything_then_history_follows() {
     let f = e.by_folder();
     assert!(f["All Mail"].contains(&"msg-dinner".to_string()));
     assert!(!f["Inbox"].contains(&"msg-dinner".to_string()));
+    let archived = e.message("msg-dinner").unwrap();
+    assert_eq!(
+        e.reader().folder(archived.folder).unwrap().unwrap().name,
+        "All Mail"
+    );
     assert!(f["Inbox"].contains(&new));
     assert!(f["Spam"].is_empty());
     assert!(e.message("msg-dinner").unwrap().is_read);
@@ -256,8 +278,7 @@ async fn an_interrupted_first_sync_resumes_at_its_page() {
     let api = e.sync.api().clone();
     e.sync = GmailSync::new(api, e.acc).with_page_size(3);
     assert_eq!(e.sync_all().await, 3);
-    let total: usize = e.by_folder().values().map(Vec::len).sum();
-    assert_eq!(total, 12);
+    assert_eq!(e.total(), 12);
 }
 
 #[tokio::test]
@@ -291,8 +312,7 @@ async fn throttling_waits_and_retries() {
     e.mock
         .push_fault(Fault::user_rate_limited().on_path("/profile").times(1));
     e.sync_all().await;
-    let total: usize = e.by_folder().values().map(Vec::len).sum();
-    assert_eq!(total, 12);
+    assert_eq!(e.total(), 12);
 }
 
 #[tokio::test]
