@@ -222,7 +222,38 @@ impl GmailClient {
         body: Option<&Value>,
         priority: Priority,
     ) -> Result<Value> {
-        let url = format!("{}{}", self.inner.opts.base_url, path);
+        self.request_at(self.base_url(), method, path, body, priority)
+            .await
+    }
+
+    /// Sends a request to a path starting with `/` under Calendar v3.
+    /// Empty responses, including 204, return `Value::Null`.
+    pub async fn calendar_request(
+        &self,
+        method: Method,
+        path: &str,
+        body: Option<&Value>,
+        priority: Priority,
+    ) -> Result<Value> {
+        let base = if self.base_url() == GMAIL_V1 {
+            "https://www.googleapis.com/calendar/v3".to_owned()
+        } else {
+            let base = reqwest::Url::parse(self.base_url())
+                .map_err(|e| Error::Decode(format!("bad Gmail base URL: {e}")))?;
+            format!("{}/calendar/v3", base.origin().ascii_serialization())
+        };
+        self.request_at(&base, method, path, body, priority).await
+    }
+
+    async fn request_at(
+        &self,
+        base: &str,
+        method: Method,
+        path: &str,
+        body: Option<&Value>,
+        priority: Priority,
+    ) -> Result<Value> {
+        let url = format!("{base}{path}");
         let cost = units(&method, path);
         let mut refreshed = false;
         let mut attempt = 0u32;

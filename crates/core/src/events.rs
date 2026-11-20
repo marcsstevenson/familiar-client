@@ -627,7 +627,11 @@ pub fn rows(
         return Ok(Vec::new());
     };
     match series {
-        Some(m) => tx.events_of_series(e.data.account, m),
+        Some(m) => Ok(tx
+            .events_of_series(e.data.account, m)?
+            .into_iter()
+            .filter(|other| other.data.calendar == e.data.calendar)
+            .collect()),
         None => Ok(vec![e]),
     }
 }
@@ -645,9 +649,20 @@ pub fn snapshot(rows: &[familiar_store::Event]) -> Vec<EventSnapshot> {
 /// Puts snapshotted rows back.
 pub fn restore(tx: &WriteTx<'_>, prev: &[EventSnapshot]) -> familiar_store::Result<()> {
     for s in prev {
-        let Ok(d) = serde_json::from_value::<EventData>(s.data.clone()) else {
+        let Ok(mut d) = serde_json::from_value::<EventData>(s.data.clone()) else {
             continue;
         };
+        // The create may have acquired a server ID since this edit was queued.
+        if d.remote_id.starts_with(LOCAL_REMOTE_PREFIX) {
+            if let Some(current) = tx.event(EventId(s.id))? {
+                d.remote_id = current.data.remote_id;
+                d.series_master_id = current.data.series_master_id;
+                d.kind = current.data.kind;
+                d.ical_uid = current.data.ical_uid;
+                d.web_link = current.data.web_link;
+                d.change_key = current.data.change_key;
+            }
+        }
         match tx.replace_event(EventId(s.id), &d) {
             Err(familiar_store::Error::NotFound(_)) => {}
             r => r?,

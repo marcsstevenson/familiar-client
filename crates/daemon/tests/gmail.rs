@@ -180,6 +180,17 @@ impl Env {
 #[tokio::test(flavor = "multi_thread")]
 async fn a_gmail_account_syncs_through_famd() {
     let env = Env::start().await;
+    env.until("the Google calendar and its events", |e| {
+        let r = e.reader();
+        r.account_by_key(KEY).unwrap().is_some_and(|a| {
+            r.calendars(a.id)
+                .unwrap()
+                .iter()
+                .any(|c| c.name == "Kea calendar")
+                && r.event_by_remote(a.id, "event-october").unwrap().is_some()
+        })
+    })
+    .await;
     env.until("the first sync", |e| {
         e.reader()
             .account_by_key(KEY)
@@ -582,5 +593,117 @@ async fn gmail_drafts_and_sending() {
         .await;
     assert!(refused.is_err(), "{refused:?}");
     assert_eq!(env.mock.mailbox("default").sent().len(), 3);
+    env.daemon.stop().await;
+}
+#[tokio::test(flavor = "multi_thread")]
+async fn gmail_event_create_retry_edit_and_delete() {
+    use familiar_core::events::{EventChanges, EventFields};
+    use familiar_store::EventId;
+
+    const EVENTS: &str = "/calendar/v3/calendars/cal-primary/events";
+    let env = Env::start().await;
+    env.first_sync().await;
+    env.until("the calendar fixture", |e| {
+        e.reader()
+            .event_by_remote(e.account(), "event-october")
+            .unwrap()
+            .is_some()
+    })
+    .await;
+
+    env.mock.push_fault(
+        Fault::rate_limited()
+            .on_method("POST")
+            .on_path(EVENTS)
+            .times(1),
+    );
+    let start = Utc.with_ymd_and_hms(2026, 10, 31, 1, 0, 0).unwrap();
+    let out = env
+        .write(WriteRequest::EventCreate {
+            account: Some(KEY.into()),
+            calendar_id: None,
+            calendar: Some("Kea calendar".into()),
+            from_mail: None,
+            event: EventFields {
+                subject: "Site visit".into(),
+                location: "Field station".into(),
+                start_at: start.timestamp(),
+                end_at: start.timestamp() + 3600,
+                time_zone: "Pacific/Auckland".into(),
+                ..Default::default()
+            },
+        })
+        .await
+        .unwrap();
+    assert_eq!(out.ops[0].state, "done", "{out:?}");
+    let item = EventId(out.ops[0].item.unwrap());
+    let remote = env.reader().event(item).unwrap().unwrap().data.remote_id;
+    let requests = env.mock.requests();
+    let posts: Vec<_> = requests
+        .iter()
+        .filter(|r| r.method == "POST" && r.path == EVENTS)
+        .collect();
+    assert_eq!(
+        posts.iter().map(|r| r.status).collect::<Vec<_>>(),
+        [429, 200]
+    );
+    for post in posts {
+        let event: serde_json::Value = serde_json::from_str(&post.body).unwrap();
+        assert_eq!(event["id"], remote);
+        assert_eq!(event["summary"], "Site visit");
+        assert_eq!(event["location"], "Field station");
+        for (field, instant) in [
+            ("start", start.timestamp()),
+            ("end", start.timestamp() + 3600),
+        ] {
+            let time = event[field]["dateTime"].as_str().unwrap();
+            assert_eq!(
+                chrono::DateTime::parse_from_rfc3339(time)
+                    .unwrap()
+                    .timestamp(),
+                instant
+            );
+        }
+    }
+
+    env.write_ok(WriteRequest::EventUpdate {
+        event: item.0,
+        series: false,
+        changes: EventChanges {
+            subject: Some("Revised visit".into()),
+            ..Default::default()
+        },
+    })
+    .await;
+    let path = format!("{EVENTS}/{remote}");
+    let patch = env
+        .mock
+        .requests()
+        .into_iter()
+        .find(|r| r.method == "PATCH" && r.path == path)
+        .unwrap();
+    assert_eq!(patch.status, 200);
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&patch.body).unwrap()["summary"],
+        "Revised visit"
+    );
+    assert_eq!(
+        env.reader().event(item).unwrap().unwrap().data.subject,
+        "Revised visit"
+    );
+
+    env.write_ok(WriteRequest::EventDelete {
+        event: item.0,
+        series: false,
+        comment: None,
+    })
+    .await;
+    assert!(
+        env.mock
+            .requests()
+            .iter()
+            .any(|r| r.method == "DELETE" && r.path == path && r.status == 204)
+    );
+    assert!(env.reader().event(item).unwrap().is_none());
     env.daemon.stop().await;
 }

@@ -25,8 +25,8 @@
 //! 1 and 2 differ: step 1 is the label tree, and step 2 is one
 //! [`GmailSync::sync_mail`] call, every `inbox_interval`. The first sync
 //! lists the mailbox a page per step, newest first, and is recorded in the
-//! store when the listing is done. Gmail calendars and contacts aren't
-//! synced yet.
+//! store when the listing is done. Google Calendar lists expanded events over the same window as Graph.
+//! Gmail contacts are not synced yet.
 //!
 //! **Calendars** run between steps 1 and 2, at start and every
 //! `calendar_interval` (5 min), so a long first mail sync doesn't hold them
@@ -48,7 +48,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use familiar_core::daemon::{AccountLive, FIRST_SYNC_RESOURCE, SyncPhase};
-use familiar_provider_gmail::GmailSync;
+use familiar_provider_gmail::{GmailSync, GoogleCalendarSync};
 use familiar_provider_graph::{
     CalendarSync, ContactSync, Error as GraphError, MailSync, Priority, events_resource,
     messages_resource,
@@ -180,12 +180,20 @@ pub enum MailSource {
     Gmail(GmailSync),
 }
 
+/// Calendar service paired with the account's mail provider.
+pub enum CalendarSource {
+    /// Microsoft Graph calendarView delta.
+    Graph(CalendarSync),
+    /// Google Calendar expanded event windows.
+    Google(GoogleCalendarSync),
+}
+
 /// One account's sync loop.
 pub struct Engine {
     key: String,
     account: AccountId,
     sync: MailSource,
-    calendar: Option<CalendarSync>,
+    calendar: CalendarSource,
     contacts: Option<ContactSync>,
     w: SharedWriter,
     policy: Arc<SyncPolicy>,
@@ -216,7 +224,7 @@ impl Engine {
         key: String,
         account: AccountId,
         sync: MailSource,
-        calendar: Option<CalendarSync>,
+        calendar: CalendarSource,
         contacts: Option<ContactSync>,
         w: SharedWriter,
         policy: Arc<SyncPolicy>,
@@ -377,9 +385,9 @@ impl Engine {
         }
 
         // Calendars, between the tree and the folders.
-        if self.calendar.is_some() && self.calendar_due <= now {
-            self.sync_calendars().await?;
+        if self.calendar_due <= now {
             self.calendar_due = Instant::now() + self.policy.calendar_interval;
+            self.sync_calendars().await?;
             return Ok(Next::Now);
         }
         if self.contacts.is_some() && self.contacts_due <= now {
@@ -435,10 +443,7 @@ impl Engine {
         }
 
         // Idle until the next thing is due.
-        let mut next = self.ageing_due;
-        if self.calendar.is_some() {
-            next = next.min(self.calendar_due);
-        }
+        let mut next = self.ageing_due.min(self.calendar_due);
         if self.contacts.is_some() {
             next = next.min(self.contacts_due);
         }
@@ -727,23 +732,49 @@ impl Engine {
         let prev = self.shared.snapshot().phase;
         self.phase(SyncPhase::Calendar);
         let acc = self.account;
-        let Some(calendar) = &mut self.calendar else {
-            return Ok(());
+        let priority = Priority::Background;
+        let listed = match &self.calendar {
+            CalendarSource::Graph(c) => c.sync_calendars(&mut self.w, priority).await.map(|_| ()),
+            CalendarSource::Google(c) => c.sync_calendars(&mut self.w, priority).await.map(|_| ()),
         };
-        calendar
-            .sync_calendars(&mut self.w, Priority::Background)
-            .await?;
-        let window = self.policy.calendar_window((self.clock)());
-        let calendars = self.w.write(|tx| tx.calendars(acc))?;
+        if let Err(e) = listed {
+            self.w
+                .write(|tx| tx.set_sync_error(acc, "calendars", &e.to_string()))?;
+            return Err(e);
+        }
+        let now = (self.clock)();
+        let window = self.policy.calendar_window(now);
+        let calendars = self.w.write(|tx| {
+            tx.set_sync_state(acc, "calendars", None, None, now)?;
+            tx.calendars(acc)
+        })?;
         let (mut up, mut rm) = (0, 0);
         for cal in calendars {
-            match calendar
-                .sync_events(&mut self.w, &cal.remote_id, window, Priority::Background)
-                .await
-            {
-                Ok(r) => {
-                    up += r.upserted;
-                    rm += r.removed;
+            let result = match &self.calendar {
+                CalendarSource::Graph(c) => c
+                    .sync_events(&mut self.w, &cal.remote_id, window, priority)
+                    .await
+                    .map(|r| (r.upserted, r.removed)),
+                CalendarSource::Google(c) => c
+                    .sync_events(&mut self.w, &cal.remote_id, window, priority)
+                    .await
+                    .map(|r| (r.upserted, r.removed)),
+            };
+            match result {
+                Ok((added, removed)) => {
+                    if matches!(self.calendar, CalendarSource::Google(_)) {
+                        self.w.write(|tx| {
+                            tx.set_sync_state(
+                                acc,
+                                &events_resource(&cal.remote_id),
+                                None,
+                                None,
+                                now,
+                            )
+                        })?;
+                    }
+                    up += added;
+                    rm += removed;
                 }
                 Err(
                     e @ (GraphError::Auth(_)
