@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-//! The OAuth 2.0 flows against the Microsoft identity platform: authorisation code with
+//! The OAuth 2.0 flows against the Microsoft identity platform and Google: authorisation code with
 //! PKCE (system browser, loopback redirect) and device code, plus token refresh.
 //! Production version of the WP 0.2 spike (`spikes/auth`).
 
@@ -79,6 +79,8 @@ pub struct PkceRequest<'a> {
     pub authority: &'a str,
     /// The app (client) ID.
     pub client_id: &'a str,
+    /// The client secret, for Google.
+    pub client_secret: Option<&'a str>,
     /// Space-separated scopes.
     pub scopes: &'a str,
     /// Sent as `login_hint`; without one the page asks which account (`prompt=select_account`).
@@ -90,6 +92,8 @@ pub struct PkceRequest<'a> {
 /// Talks to one identity platform host.
 pub struct OAuthClient {
     login: String,
+    google_auth: String,
+    google_token: String,
     agent: ureq::Agent,
 }
 
@@ -114,11 +118,26 @@ impl OAuthClient {
     pub fn new(login: impl Into<String>) -> Self {
         Self {
             login: login.into().trim_end_matches('/').to_string(),
+            google_auth: crate::GOOGLE_AUTH_URL.into(),
+            google_token: crate::GOOGLE_TOKEN_URL.into(),
             agent: agent(),
         }
     }
 
+    /// Uses these Google endpoints for the [`crate::GOOGLE_AUTHORITY`] authority.
+    pub fn with_google(mut self, auth: &str, token: &str) -> Self {
+        self.google_auth = auth.trim_end_matches('/').to_string();
+        self.google_token = token.trim_end_matches('/').to_string();
+        self
+    }
+
     fn url(&self, authority: &str, op: &str) -> String {
+        if authority == crate::GOOGLE_AUTHORITY {
+            return match op {
+                "authorize" => self.google_auth.clone(),
+                _ => self.google_token.clone(),
+            };
+        }
         format!("{}/{authority}/oauth2/v2.0/{op}", self.login)
     }
 
@@ -126,7 +145,7 @@ impl OAuthClient {
         let resp = match self.agent.post(url).send_form(form) {
             Ok(r) => r,
             Err(ureq::Error::Status(_, r)) => r,
-            Err(e) => return Err(transport("the Microsoft sign-in service", &e)),
+            Err(e) => return Err(transport("the sign-in service", &e)),
         };
         let status = resp.status();
         let body = resp.into_json::<Value>().map_err(|e| {
@@ -144,6 +163,7 @@ impl OAuthClient {
         form: &[(&str, &str)],
     ) -> Result<std::result::Result<TokenResponse, OAuthError>> {
         let (status, body) = self.post_form(&self.url(authority, "token"), form)?;
+        // Google's errors carry no AADSTS code; `error_description` reads the same way.
         if status != 200 {
             return Ok(Err(OAuthError::from_body(status, &body)));
         }
@@ -160,23 +180,26 @@ impl OAuthClient {
         }))
     }
 
-    /// Refreshes with a refresh token.
+    /// Refreshes with a refresh token. Google wants the client secret and no scopes
+    /// (it keeps what was granted); Microsoft wants the scopes again.
     pub fn refresh(
         &self,
         authority: &str,
         client_id: &str,
+        client_secret: Option<&str>,
         refresh_token: &str,
         scopes: &str,
     ) -> Result<std::result::Result<TokenResponse, OAuthError>> {
-        self.token(
-            authority,
-            &[
-                ("client_id", client_id),
-                ("grant_type", "refresh_token"),
-                ("refresh_token", refresh_token),
-                ("scope", scopes),
-            ],
-        )
+        let mut form = vec![
+            ("client_id", client_id),
+            ("grant_type", "refresh_token"),
+            ("refresh_token", refresh_token),
+        ];
+        match client_secret {
+            Some(secret) => form.push(("client_secret", secret)),
+            None => form.push(("scope", scopes)),
+        }
+        self.token(authority, &form)
     }
 
     /// Device code sign-in. Shows the code through `notify` and polls until the person
@@ -252,10 +275,12 @@ impl OAuthClient {
         let PkceRequest {
             authority,
             client_id,
+            client_secret,
             scopes,
             login_hint,
             timeout,
         } = *req;
+        let google = authority == crate::GOOGLE_AUTHORITY;
         // The app registers `http://localhost`; Entra accepts any port on a loopback
         // redirect. Listen on IPv4 and, where possible, IPv6 so `localhost` works whichever
         // the browser picks.
@@ -270,21 +295,33 @@ impl OAuthClient {
         for l in &listeners {
             l.set_nonblocking(true).map_err(local)?;
         }
-        let redirect_uri = format!("http://localhost:{port}");
+        // Google's Desktop clients expect the IPv4 loopback address.
+        let redirect_uri = if google {
+            format!("http://127.0.0.1:{port}")
+        } else {
+            format!("http://localhost:{port}")
+        };
         let verifier = URL_SAFE_NO_PAD.encode(random::<48>()?);
         let challenge = URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()));
         let state = URL_SAFE_NO_PAD.encode(random::<16>()?);
         let mut url = format!(
-            "{}?client_id={}&response_type=code&redirect_uri={}&response_mode=query\
+            "{}?client_id={}&response_type=code&redirect_uri={}\
              &scope={}&state={state}&code_challenge={challenge}&code_challenge_method=S256",
             self.url(authority, "authorize"),
             encode(client_id),
             encode(&redirect_uri),
             encode(scopes),
         );
+        if google {
+            // A refresh token every time, even when the person has consented before.
+            url.push_str("&access_type=offline&prompt=consent");
+        } else {
+            url.push_str("&response_mode=query");
+        }
         match login_hint {
             Some(h) => url.push_str(&format!("&login_hint={}", encode(h))),
-            None => url.push_str("&prompt=select_account"),
+            None if !google => url.push_str("&prompt=select_account"),
+            None => {}
         }
         if open_browser(&url) {
             notify(
@@ -306,14 +343,17 @@ impl OAuthClient {
             )));
         }
         let code = get("code").ok_or_else(|| AuthError::server("the redirect had no code"))?;
-        let form = [
+        let mut form = vec![
             ("client_id", client_id),
             ("grant_type", "authorization_code"),
             ("code", code),
             ("redirect_uri", redirect_uri.as_str()),
             ("code_verifier", verifier.as_str()),
-            ("scope", scopes),
         ];
+        match client_secret {
+            Some(secret) => form.push(("client_secret", secret)),
+            None => form.push(("scope", scopes)),
+        }
         self.token(authority, &form)?
             .map_err(|e| sign_in_failed(&e))
     }

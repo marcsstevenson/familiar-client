@@ -14,7 +14,7 @@ pub mod paths;
 pub mod validate;
 
 pub use edit::{ConfigDocument, SignatureKind};
-pub use model::{Account, Config, Hook, Signature};
+pub use model::{Account, Config, GoogleApp, Hook, Provider, Signature};
 pub use validate::{Problem, Severity};
 
 use std::ops::Range;

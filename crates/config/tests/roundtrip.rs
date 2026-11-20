@@ -385,3 +385,32 @@ timeout_seconds = 0
     assert!(c.hooks[0].enabled);
     assert_eq!(c.hooks[0].timeout_seconds, 60);
 }
+
+#[test]
+fn gmail_accounts_have_no_tenant() {
+    let r = check(
+        "version = 1\n[app.google]\nclient_file = \"g.json\"\n[accounts.gmail]\nemail = \"me@gmail.com\"\nprovider = \"gmail\"\n",
+    );
+    assert!(r.problems.is_empty(), "{:#?}", r.problems);
+    let c = r.config.unwrap();
+    assert_eq!(
+        c.accounts["gmail"].provider,
+        familiar_config::Provider::Gmail
+    );
+    assert_eq!(c.app.google.unwrap().client_file.as_deref(), Some("g.json"));
+
+    let r = check(
+        "version = 1\n[accounts.gmail]\nemail = \"me@gmail.com\"\nprovider = \"gmail\"\ntenant = \"consumers\"\n",
+    );
+    assert!(
+        r.problems.iter().any(|p| p.path == "accounts.gmail.tenant"),
+        "{:#?}",
+        r.problems
+    );
+    let r = check("version = 1\n[accounts.home]\nemail = \"me@example.com\"\n");
+    assert!(
+        r.problems.iter().any(|p| p.path == "accounts.home.tenant"),
+        "{:#?}",
+        r.problems
+    );
+}

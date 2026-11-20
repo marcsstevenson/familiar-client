@@ -58,6 +58,17 @@ pub struct App {
     /// How long a sent message waits in the outbox so it can be undone.
     #[serde(default = "default_send_delay")]
     pub send_delay_seconds: u32,
+    /// `[app.google]`: your own Google OAuth client, for Gmail accounts.
+    pub google: Option<GoogleApp>,
+}
+
+/// `[app.google]`.
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct GoogleApp {
+    /// The client JSON downloaded from Google Cloud for a Desktop app client.
+    /// Defaults to `google-client.json` in the data directory.
+    pub client_file: Option<String>,
 }
 
 impl Default for App {
@@ -66,6 +77,7 @@ impl Default for App {
             client_id: None,
             theme: Theme::default(),
             send_delay_seconds: default_send_delay(),
+            google: None,
         }
     }
 }
@@ -90,14 +102,29 @@ pub enum Theme {
     Dark,
 }
 
+/// Which service an account's mail is at.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Provider {
+    /// Microsoft: Outlook.com, Hotmail and Microsoft 365, through Microsoft Graph.
+    #[default]
+    Graph,
+    /// Gmail, through the Gmail API.
+    Gmail,
+}
+
 /// `[accounts.<name>]`.
 #[derive(Debug, Clone, PartialEq, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct Account {
     /// The mailbox address.
     pub email: String,
+    /// `graph` (the default) or `gmail`.
+    #[serde(default)]
+    pub provider: Provider,
     /// Where to sign in: `consumers` for Outlook.com and Hotmail, otherwise
-    /// the organisation's tenant ID or domain.
+    /// the organisation's tenant ID or domain. Empty (left out) for Gmail.
+    #[serde(default)]
     pub tenant: String,
     /// The name shown on sent mail. Defaults to the name on the account.
     pub display_name: Option<String>,

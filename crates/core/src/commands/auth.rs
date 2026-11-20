@@ -29,6 +29,31 @@ impl From<AuthError> for CommandError {
     }
 }
 
+/// The Google client file: `[app.google] client_file`, else `google-client.json` next to
+/// config.toml.
+pub(crate) fn google_client_file(
+    config: &familiar_config::Config,
+) -> Result<std::path::PathBuf, CommandError> {
+    if let Some(f) = config
+        .app
+        .google
+        .as_ref()
+        .and_then(|g| g.client_file.as_ref())
+    {
+        return Ok(std::path::PathBuf::from(f));
+    }
+    let (path, _) = familiar_config::paths::resolve(None).ok_or_else(|| {
+        CommandError::new(
+            ErrorKind::Config,
+            "no config.toml, so no Google client file",
+        )
+    })?;
+    Ok(path
+        .parent()
+        .unwrap_or(std::path::Path::new("."))
+        .join("google-client.json"))
+}
+
 fn open() -> Result<Auth, CommandError> {
     Ok(Auth::from_env()?)
 }
@@ -226,8 +251,8 @@ impl Command for AuthLogin {
     type Output = AccountSignIn;
     const SPEC: CommandSpec = CommandSpec {
         path: &["auth", "login"],
-        summary: "Sign in to a Microsoft account",
-        description: "Signs in with the system browser (or a device code with --device-code) and keeps the tokens in the OS keychain, or in an encrypted file where there is none (set FAMILIAR_TOKEN_PASSPHRASE). Signing in again replaces the stored tokens.",
+        summary: "Sign in to a Microsoft or Gmail account",
+        description: "Signs in with the system browser (or a device code with --device-code; Microsoft only) and keeps the tokens in the OS keychain, or in an encrypted file where there is none (set FAMILIAR_TOKEN_PASSPHRASE). Signing in again replaces the stored tokens.",
         access: Access::Write,
         errors: &[
             ErrorKind::AuthRequired,
@@ -243,6 +268,25 @@ impl Command for AuthLogin {
         let configured = config.as_ref().and_then(|c| c.accounts.get(&input.account));
         let auth = open()?;
         let earlier = auth.record(&input.account)?;
+        if let Some(a) = configured.filter(|a| a.provider == familiar_config::Provider::Gmail) {
+            let config = config.as_ref().expect("configured implies a config");
+            let client = familiar_auth::GoogleClient::load(&google_client_file(config)?)?;
+            let req = LoginRequest {
+                account: input.account,
+                authority: familiar_auth::GOOGLE_AUTHORITY.into(),
+                client_id: client.id,
+                client_secret: Some(client.secret),
+                flow: if input.device_code {
+                    Flow::DeviceCode
+                } else {
+                    Flow::Browser
+                },
+                email: input.email.or_else(|| Some(a.email.clone())),
+                scopes: familiar_auth::GOOGLE_SCOPES.to_string(),
+            };
+            let record = auth.login(&req, &NotifyPrompt(ctx.notify))?;
+            return Ok(AccountSignIn::from_record(&record, SignInState::SignedIn));
+        }
         let authority = input
             .authority
             .or_else(|| configured.map(|a| a.tenant.clone()))
@@ -269,6 +313,7 @@ impl Command for AuthLogin {
             account: input.account,
             authority,
             client_id,
+            client_secret: None,
             flow: if input.device_code {
                 Flow::DeviceCode
             } else {

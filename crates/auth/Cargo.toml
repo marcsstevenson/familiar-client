@@ -23,6 +23,7 @@ webbrowser = "1"
 
 [dev-dependencies]
 familiar-mock-graph.workspace = true
+tempfile = "3"
 tokio = { version = "1", features = ["rt-multi-thread"] }
 
 [lints]
