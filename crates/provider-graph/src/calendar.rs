@@ -37,9 +37,9 @@ use familiar_store::{AccountId, Address, Attendee, Calendar, EventData, NewCalen
 use serde::Deserialize;
 
 use crate::client::GraphClient;
-use crate::error::{Error, Result};
 use crate::model::{DeltaItem, GraphRecipient, Page, decode_delta_page, decode_page};
-use crate::scheduler::Priority;
+use familiar_provider::Priority;
+use familiar_provider::{Error, Result};
 
 /// Events per calendarView delta page.
 pub const EVENT_PAGE_SIZE: usize = 100;

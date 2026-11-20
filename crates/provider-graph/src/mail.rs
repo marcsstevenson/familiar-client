@@ -7,12 +7,12 @@
 use serde_json::Value;
 
 use crate::client::GraphClient;
-use crate::error::{Error, Result};
 use crate::model::{
     DeltaItem, FOLDER_FIELDS, GraphBody, GraphFolder, GraphMessage, HEADER_FIELDS, Page,
     decode_delta_page, decode_page,
 };
-use crate::scheduler::Priority;
+use familiar_provider::Priority;
+use familiar_provider::{Error, Result};
 
 /// The fields [`MailApi::message_states_page`] asks for.
 pub const STATE_FIELDS: &str = "id,parentFolderId,receivedDateTime,isRead,flag";

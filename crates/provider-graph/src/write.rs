@@ -8,10 +8,10 @@
 
 use serde_json::{Value, json};
 
-use crate::error::{Error, Result};
 use crate::mail::MailApi;
 use crate::model::{FOLDER_FIELDS, GraphFolder, GraphMessage};
-use crate::scheduler::Priority;
+use familiar_provider::Priority;
+use familiar_provider::{Error, Result};
 
 /// Encodes a value for a `$filter` string literal.
 fn odata_string(s: &str) -> String {

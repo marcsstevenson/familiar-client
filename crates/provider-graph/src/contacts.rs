@@ -10,9 +10,9 @@ use familiar_store::{AccountId, Address, NewContact, StoreWriter};
 use serde::Deserialize;
 
 use crate::client::GraphClient;
-use crate::error::Result;
 use crate::model::{Page, decode_page};
-use crate::scheduler::Priority;
+use familiar_provider::Priority;
+use familiar_provider::Result;
 
 /// Fields asked for.
 pub const CONTACT_FIELDS: &str =

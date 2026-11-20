@@ -40,10 +40,10 @@ use familiar_store::{
     AccountId, BodyRef, Folder, FolderId, MessageId, NewFolder, Reader, StoreWriter, WriteTx,
 };
 
-use crate::error::{Error, Result};
 use crate::mail::{DELTA_PAGE_SIZE, MailApi};
 use crate::model::{DeltaItem, GraphFolder, GraphMessage, WELL_KNOWN_FOLDERS};
-use crate::scheduler::Priority;
+use familiar_provider::Priority;
+use familiar_provider::{Error, Result};
 
 /// Sync bookmark for the folder tree.
 pub const FOLDERS_RESOURCE: &str = "folders";

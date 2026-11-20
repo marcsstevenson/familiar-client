@@ -6,7 +6,7 @@ use serde_json::Value;
 
 use familiar_store::{AccountId, Address, FolderId, NewMessage};
 
-use crate::error::{Error, Result};
+use familiar_provider::{Error, Result};
 
 /// The message fields fetched for headers. Bodies are fetched separately.
 pub const HEADER_FIELDS: &str = "id,parentFolderId,conversationId,internetMessageId,subject,from,\

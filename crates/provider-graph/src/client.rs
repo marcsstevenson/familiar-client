@@ -7,8 +7,7 @@ use std::time::Duration;
 use reqwest::{Method, StatusCode};
 use serde_json::Value;
 
-use crate::error::{Error, Result};
-use crate::scheduler::{Priority, Scheduler};
+use familiar_provider::{Error, Priority, Result, Scheduler, TokenSource};
 
 /// Graph's production endpoint.
 pub const GRAPH_V1: &str = "https://graph.microsoft.com/v1.0";
@@ -16,58 +15,6 @@ pub const GRAPH_V1: &str = "https://graph.microsoft.com/v1.0";
 /// Every request asks for immutable IDs, so a message keeps its ID when it
 /// moves between folders. The store keys messages by them.
 const PREFER_IMMUTABLE: &str = "IdType=\"ImmutableId\"";
-
-/// Gives the client access tokens for one account.
-///
-/// Both calls may block (they can talk to the identity platform), so the
-/// client runs them on Tokio's blocking pool.
-pub trait TokenSource: Send + Sync + 'static {
-    /// A token that is valid now, refreshed first if it is about to expire.
-    fn access_token(&self) -> Result<String>;
-    /// A new token, even if the current one looks valid. Called once after a 401.
-    fn refresh(&self) -> Result<String>;
-}
-
-/// A fixed token, for tests and the mock.
-#[derive(Clone, Debug)]
-pub struct StaticToken(pub String);
-
-impl TokenSource for StaticToken {
-    fn access_token(&self) -> Result<String> {
-        Ok(self.0.clone())
-    }
-    fn refresh(&self) -> Result<String> {
-        Ok(self.0.clone())
-    }
-}
-
-/// Tokens from the WP 1.4 sign-in store for one account.
-pub struct AuthTokens {
-    auth: Arc<familiar_auth::Auth>,
-    account: String,
-}
-
-impl AuthTokens {
-    /// Tokens for `account` (its key in config.toml).
-    pub fn new(auth: Arc<familiar_auth::Auth>, account: impl Into<String>) -> Self {
-        Self {
-            auth,
-            account: account.into(),
-        }
-    }
-}
-
-impl TokenSource for AuthTokens {
-    fn access_token(&self) -> Result<String> {
-        self.auth.access_token(&self.account).map_err(Error::from)
-    }
-    fn refresh(&self) -> Result<String> {
-        let record = self.auth.refresh(&self.account)?;
-        record
-            .access_token
-            .ok_or_else(|| Error::Auth("refresh gave no access token".into()))
-    }
-}
 
 /// Client settings.
 #[derive(Clone, Debug)]
@@ -384,6 +331,7 @@ fn graph_error(body: &[u8]) -> (String, String) {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use familiar_provider::StaticToken;
 
     #[test]
     fn origins() {
