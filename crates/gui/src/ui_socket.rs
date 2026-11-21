@@ -7,7 +7,7 @@ use std::path::Path;
 use std::sync::Arc;
 
 use familiar_core::commands::ui::{
-    METHOD_UI_FOLDER, METHOD_UI_OPEN, UiDone, UiFolderInput, UiOpenInput,
+    METHOD_UI_EVENT, METHOD_UI_FOLDER, METHOD_UI_OPEN, UiDone, UiFolderInput, UiOpenInput,
 };
 use familiar_core::daemon::{DaemonPaths, Request, Response, ui_socket_for};
 use familiar_core::registry::Registry;
@@ -22,6 +22,13 @@ use tokio::io::{AsyncBufReadExt, AsyncRead, AsyncWrite, AsyncWriteExt, BufReader
 #[derive(Debug, Clone, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case")]
 pub enum UiCommand {
+    /// Open this event in its calendar on the displayed day.
+    Event {
+        event: i64,
+        calendar: i64,
+        start_at: i64,
+        all_day: bool,
+    },
     /// Show the message's `folder` and select `message`.
     Open { folder: i64, message: i64 },
     /// Show `folder` (None: all inboxes).
@@ -86,6 +93,30 @@ fn handle(
 ) -> Result<UiDone, CommandError> {
     let bad = |e: serde_json::Error| CommandError::usage(format!("bad input: {e}"));
     let (cmd, shown) = match method {
+        METHOD_UI_EVENT => {
+            let input: familiar_core::commands::cal::CalShowInput =
+                serde_json::from_value(params).map_err(bad)?;
+            let reader = Reader::open(&DaemonPaths::resolve()?.store)
+                .map_err(|e| CommandError::internal(e.to_string()))?;
+            let e = reader
+                .event(familiar_store::EventId(input.event))
+                .map_err(|e| CommandError::internal(e.to_string()))?
+                .ok_or_else(|| {
+                    CommandError::new(
+                        ErrorKind::NotFound,
+                        format!("event {} not found", input.event),
+                    )
+                })?;
+            (
+                UiCommand::Event {
+                    event: e.id.0,
+                    calendar: e.data.calendar.0,
+                    start_at: e.data.start_at,
+                    all_day: e.data.is_all_day,
+                },
+                format!("Opened event {}: {}", e.id.0, e.data.subject),
+            )
+        }
         METHOD_UI_OPEN => {
             let input: UiOpenInput = serde_json::from_value(params).map_err(bad)?;
             let store = DaemonPaths::resolve()?.store;

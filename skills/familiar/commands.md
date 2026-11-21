@@ -660,6 +660,18 @@ Moves messages to their account's Deleted Items folder, on this device at once a
 - `--wait-secs <wait-secs>`: Seconds --wait waits at most (default 60).
 - `--yes`: Confirm a permanent delete when not interactive.
 
+## mail.events
+
+List calendar events created from a message. Access: `read`.
+
+```
+fam mail events <MESSAGE>
+```
+
+Shows one link per event or series available on this device.
+
+- `MESSAGE` (required): Local message ID.
+
 ## mail.fetch
 
 Show a message with its text. Access: `read`.
@@ -975,6 +987,18 @@ fam sync status
 Shows, per account, what famd is doing (first sync, bodies, idle), how many headers and bodies are on this device, what is still to fetch for the sync window, pinned and cached bodies, and any folder errors. Counts are read from the store, so they show even when famd is not running.
 
 - `--account <account>`: Only this account (its name in config.toml).
+
+## ui.event
+
+Open an event in the calendar. Access: `read`.
+
+```
+fam ui event <EVENT>
+```
+
+Shows the event's day and opens its details in the running desktop app.
+
+- `EVENT` (required): Local event ID from cal list.
 
 ## ui.folder
 

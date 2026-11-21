@@ -159,6 +159,8 @@ export type ApiInput = {
   path: string;
 };
 
+export type Array_of_LinkedEvent = Array<LinkedEvent>;
+
 export type AttachmentInfo = {
   /** MIME type, such as `application/pdf`. */
   content_type: string;
@@ -549,6 +551,8 @@ export type CalShowOutput = {
   display_zone: string;
   /** Event summary, including its calendar ID. */
   event: CalEvent;
+  /** Local ID of the email from which this event or series was created. */
+  from_mail?: number | null;
   /** The account organised the event. */
   is_organizer: boolean;
   /** Locally cached plain-text excerpt of the notes. */
@@ -1111,6 +1115,15 @@ export type Invitation = {
   when?: string | null;
 };
 
+export type LinkedEvent = {
+  /** Local event ID. */
+  id: number;
+  /** Local date and time, or just the date for an all-day event. */
+  start: string;
+  /** Current subject. */
+  subject: string;
+};
+
 export type ListedFolder = {
   /** Account name. */
   account: string;
@@ -1173,6 +1186,11 @@ export type MailDeleteInput = {
   wait_secs?: number | null;
   /** Confirm a permanent delete when not interactive. */
   yes?: boolean;
+};
+
+export type MailEventsInput = {
+  /** Local message ID. */
+  message: number;
 };
 
 export type MailFetchInput = {
@@ -2025,6 +2043,8 @@ export interface Commands {
   "mail.check-spam": { input: CheckSpamInput; output: CheckSpamOutput };
   /** Move messages to Deleted Items */
   "mail.delete": { input: MailDeleteInput; output: WriteOutput };
+  /** List calendar events created from a message */
+  "mail.events": { input: MailEventsInput; output: Array_of_LinkedEvent };
   /** Show a message with its text */
   "mail.fetch": { input: MailFetchInput; output: MailFetchOutput };
   /** Flag messages for follow-up, or clear the flag */
@@ -2067,6 +2087,8 @@ export interface Commands {
   "sync.check": { input: SyncCheckInput; output: CheckReport };
   /** Show how far each account's sync has got */
   "sync.status": { input: SyncStatusInput; output: SyncStatusOutput };
+  /** Open an event in the calendar */
+  "ui.event": { input: CalShowInput; output: UiDone };
   /** Show a folder in the app */
   "ui.folder": { input: UiFolderInput; output: UiDone };
   /** Open a message in the app */
@@ -2121,6 +2143,7 @@ export const COMMAND_NAMES = [
   "mail.attachments",
   "mail.check-spam",
   "mail.delete",
+  "mail.events",
   "mail.fetch",
   "mail.flag",
   "mail.list",
@@ -2142,6 +2165,7 @@ export const COMMAND_NAMES = [
   "schema",
   "sync.check",
   "sync.status",
+  "ui.event",
   "ui.folder",
   "ui.open",
   "version",

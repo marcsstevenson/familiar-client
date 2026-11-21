@@ -83,6 +83,10 @@ export function EventDetails(props: {
           <h2>{e().subject || "(No subject)"}</h2>
           <p>{times(detail())}</p>
           <p class="muted">{e().account} · {e().calendar}{detail().can_edit ? "" : " · Read-only"}</p>
+          <Show when={mode() === "view" && detail().from_mail}>{message =>
+            <button onClick={() => void run("ui.open", { message: message() })
+              .catch(err => setError(isCommandError(err) ? err.message : String(err)))}>Open source email</button>
+          }</Show>
           <Show when={mode() !== "edit" || !writable()}>
             <Show when={e().location}><p>{e().location}</p></Show>
             <Show when={e().organizer}><p>Organiser · {e().organizer}</p></Show>
