@@ -6,7 +6,9 @@
 // shown in a frame where nothing can run. Remote images stay blocked unless
 // allowed for this message or always for the sender. Opening a message
 // marks it read.
-import { For, Show, createEffect, createSignal, on } from "solid-js";
+import { For, Show, createEffect, createResource, createSignal, on, onCleanup } from "solid-js";
+import { onStoreChanged } from "../list/api";
+import { dateWords } from "../calendar/proposals";
 import { run } from "../api";
 import { openCompose } from "../compose/spec";
 import { type SpamResult, multiPicked, rememberSpam, selectedMessage, setReadingFrom, setSpamDialog, spamResults, spamSettings } from "../state";
@@ -38,6 +40,11 @@ export function ReadingPane(props: { standalone?: boolean }) {
   const [loading, setLoading] = createSignal(false);
   const [hover, setHover] = createSignal<HoverLink>(null);
   const [status, setStatus] = createSignal<string | null>(null);
+  const [links, { refetch: refreshLinks }] = createResource(selectedMessage, async message => ({
+    message, events: await run("mail.events", { message }),
+  }));
+  const stopLinks = onStoreChanged(() => { if (selectedMessage() !== null) void refreshLinks(); });
+  onCleanup(() => void stopLinks.then(stop => stop()));
   // In the dark theme, messages show dark unless switched to light, one at a time.
   const [light, setLight] = createSignal(false);
   const dark = () => resolvedTheme() === "dark" && !light();
@@ -201,6 +208,12 @@ export function ReadingPane(props: { standalone?: boolean }) {
                   <span class="muted">{when(m().received_at)}</span>
                   <span class="muted">{m().account} / {m().folder}</span>
                 </div>
+                <Show when={!links.error && links()?.message === m().id && links()?.events.length}>
+                  <div class="reading-events"><span>Calendar</span><For each={links()?.events}>{event =>
+                    <button onClick={() => void run("ui.event", { event: event.id }).catch(err => setStatus(errorText(err)))}>
+                      {event.subject || "(No subject)"} · {dateWords(event.start.slice(0, 10))}{event.start.length > 10 && " · " + event.start.slice(11, 16)}
+                    </button>}</For></div>
+                </Show>
                 {/* Shown only while the pointer is over the header (or it has
                     focus), so it takes no room otherwise. */}
                 <Show when={spam() && !spamStandsOut(spam()!) ? spam() : null}>

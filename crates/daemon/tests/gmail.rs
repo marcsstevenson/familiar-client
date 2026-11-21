@@ -623,7 +623,7 @@ async fn gmail_event_create_retry_edit_and_delete() {
             account: Some(KEY.into()),
             calendar_id: None,
             calendar: Some("Kea calendar".into()),
-            from_mail: None,
+            from_mail: Some(env.id("msg-acme-1")),
             event: EventFields {
                 subject: "Site visit".into(),
                 location: "Field station".into(),
@@ -637,7 +637,15 @@ async fn gmail_event_create_retry_edit_and_delete() {
         .unwrap();
     assert_eq!(out.ops[0].state, "done", "{out:?}");
     let item = EventId(out.ops[0].item.unwrap());
-    let remote = env.reader().event(item).unwrap().unwrap().data.remote_id;
+    let source = env.message("msg-acme-1").unwrap().id;
+    let linked = env.reader().mail_events(source).unwrap();
+    assert_eq!(linked.len(), 1);
+    assert_eq!(linked[0].id, item);
+    assert_eq!(
+        env.reader().event_mail(&linked[0].data).unwrap(),
+        Some(source)
+    );
+    let remote = linked[0].data.remote_id.clone();
     let requests = env.mock.requests();
     let posts: Vec<_> = requests
         .iter()

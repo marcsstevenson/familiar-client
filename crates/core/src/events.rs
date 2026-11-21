@@ -607,6 +607,9 @@ pub fn apply_create(tx: &WriteTx<'_>, op: &mut EventOp) -> familiar_store::Resul
         crate::ops::placeholder_remote_id(),
     );
     op.event = tx.upsert_event(&d, round)?.0;
+    if let Some(message) = op.from_mail {
+        tx.link_event_mail(cal, &d.remote_id, familiar_store::MessageId(message))?;
+    }
     Ok(())
 }
 

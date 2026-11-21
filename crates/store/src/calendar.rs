@@ -8,7 +8,7 @@
 //! incremental round (from a saved delta link) stamps what it sees with the
 //! same number and removes nothing.
 
-use crate::model::{AccountId, Address, CalendarId, EventId};
+use crate::model::{AccountId, Address, CalendarId, EventId, MessageId};
 use crate::writer::WriteTx;
 use crate::{Reader, Result};
 use rusqlite::{Connection, OptionalExtension, Row, params};
@@ -307,6 +307,33 @@ fn event_count(c: &Connection, calendar: CalendarId) -> Result<i64> {
 }
 
 impl WriteTx<'_> {
+    /// Records the email used to create an event, alongside its optimistic row.
+    pub fn link_event_mail(
+        &self,
+        calendar: CalendarId,
+        remote: &str,
+        message: MessageId,
+    ) -> Result<()> {
+        self.tx.execute(
+            "INSERT INTO event_mail (calendar_id, remote_id, message_id) VALUES (?1, ?2, ?3)",
+            params![calendar, remote, message],
+        )?;
+        Ok(())
+    }
+
+    /// Keeps the link when Graph replaces a queued series with its occurrences.
+    pub fn confirm_series_mail(
+        &self,
+        calendar: CalendarId,
+        placeholder: EventId,
+        master: &str,
+    ) -> Result<()> {
+        self.tx.execute("UPDATE event_mail SET remote_id = ?3 WHERE calendar_id = ?1 AND remote_id =
+            (SELECT remote_id FROM events WHERE id = ?2 AND calendar_id = ?1 AND remote_id LIKE 'local:%')",
+            params![calendar, placeholder, master])?;
+        Ok(())
+    }
+
     /// Adds a calendar, or updates the one with the same account and server ID.
     pub fn upsert_calendar(&self, c: &NewCalendar) -> Result<CalendarId> {
         Ok(self.tx.query_row(
@@ -555,6 +582,37 @@ impl WriteTx<'_> {
 }
 
 impl Reader {
+    /// The source email for this event or its recurring series.
+    pub fn event_mail(&self, event: &EventData) -> Result<Option<MessageId>> {
+        Ok(self
+            .conn
+            .query_row(
+                "SELECT message_id FROM event_mail WHERE calendar_id = ?1 AND remote_id = ?2",
+                params![
+                    event.calendar,
+                    event.series_master_id.as_ref().unwrap_or(&event.remote_id)
+                ],
+                |r| r.get(0),
+            )
+            .optional()?)
+    }
+
+    /// Events created from a message, represented by their first available occurrence.
+    pub fn mail_events(&self, message: MessageId) -> Result<Vec<Event>> {
+        let mut query = self.conn.prepare_cached(&format!(
+            "SELECT {EVENT_COLS} FROM events WHERE id IN (
+                SELECT (SELECT e.id FROM events e WHERE e.calendar_id = link.calendar_id
+                    AND coalesce(e.series_master_id, e.remote_id) = link.remote_id AND NOT e.is_cancelled
+                    AND NOT EXISTS (SELECT 1 FROM ops WHERE account_id = e.account_id AND kind = 'delete_event' AND state IN ('pending','in_flight')
+                        AND target IN ('e:' || e.id, 'es:' || e.series_master_id))
+                    ORDER BY e.start_at, e.id LIMIT 1)
+                FROM event_mail link WHERE link.message_id = ?1) ORDER BY start_at, id"
+        ))?;
+        Ok(query
+            .query_map([message], event)?
+            .collect::<rusqlite::Result<_>>()?)
+    }
+
     /// An account's calendars, the default first.
     pub fn calendars(&self, account: AccountId) -> Result<Vec<Calendar>> {
         calendars_of(&self.conn, account)

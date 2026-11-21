@@ -311,6 +311,8 @@ async fn events_added_changed_answered_and_deleted() {
     assert_eq!(server.end.timestamp(), at(d5, 20, 0));
     let local = env.reader().event(prize.id).unwrap().unwrap();
     assert_eq!(local.data.start_at, at(d5, 19, 0));
+    assert_eq!(env.reader().event_mail(&local.data).unwrap(), Some(msg.id));
+    assert_eq!(env.reader().mail_events(msg.id).unwrap(), vec![local]);
 
     // Recurring: the server expands it and its occurrences replace the
     // placeholder.
@@ -320,6 +322,7 @@ async fn events_added_changed_answered_and_deleted() {
         CalAddInput {
             repeat: Some("weekly".into()),
             count: Some(4),
+            from_mail: Some(msg.id.0),
             ..base("Swim", format!("{} 17:00", d6.format("%Y-%m-%d")))
         },
         waiting(),
@@ -334,6 +337,16 @@ async fn events_added_changed_answered_and_deleted() {
     let swims = local_named(&env, "Swim");
     assert_eq!(swims.len(), 4, "{swims:?}");
     assert!(swims.iter().all(|s| s.data.series_master_id.is_some()));
+    assert!(
+        swims
+            .iter()
+            .all(|s| env.reader().event_mail(&s.data).unwrap() == Some(msg.id))
+    );
+    let linked = env.reader().mail_events(msg.id).unwrap();
+    assert_eq!(
+        linked.iter().map(|e| e.id).collect::<Vec<_>>(),
+        [prize.id, swims[0].id]
+    );
     assert_eq!(
         swims[3].data.start_at,
         at(d6 + chrono::Duration::days(21), 17, 0)
@@ -434,6 +447,7 @@ async fn events_added_changed_answered_and_deleted() {
     .unwrap();
     submit(&env, req, WriteFlags::default()).await.unwrap();
     assert_eq!(local_named(&env, "Swim").len(), 3);
+    assert_eq!(env.reader().mail_events(msg.id).unwrap()[1].id, swims[1].id);
     env.start(policy());
     env.until("one swim gone", LIMIT, |e| mock_named(e, "Swim").len() == 3)
         .await;
@@ -451,6 +465,7 @@ async fn events_added_changed_answered_and_deleted() {
     submit(&env, req, waiting()).await.unwrap();
     assert!(local_named(&env, "Swim").is_empty());
     assert!(mock_named(&env, "Swim").is_empty());
+    assert_eq!(env.reader().mail_events(msg.id).unwrap().len(), 1);
 
     // Answer the invitation; declining takes it off the calendar.
     let agm = local_named(&env, "Club AGM").remove(0);

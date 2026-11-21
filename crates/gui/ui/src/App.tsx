@@ -7,6 +7,7 @@ import { registerBuiltinActions } from "./actions/builtin";
 import { onGlobalKey, setKeyOverrides } from "./actions/registry";
 import { type DaemonState, type UiInfo, watchDaemon } from "./api";
 import { DayPanel } from "./calendar/DayPanel";
+import { localDate } from "./calendar/timeline";
 import { ReadingPane } from "./reading/ReadingPane";
 import { Palette } from "./palette/Palette";
 import { EventDialog } from "./calendar/EventDialog";
@@ -25,6 +26,7 @@ import { flushEditorWrites, readSession, writeSession } from "./session";
 
 /** What `fam ui` asks the window to show (crates/gui/src/ui_socket.rs). */
 type UiCommand =
+  | { kind: "event"; calendar: number; event: number; start_at: number; all_day: boolean }
   | { kind: "open"; folder: number; message: number }
   | { kind: "folder"; folder: number | null };
 
@@ -37,6 +39,7 @@ export function App(props: { info: UiInfo }) {
   setFollowUpView(saved?.followUp ?? false);
   const [calendarOpen, setCalendarOpen] = createSignal(saved?.calendar === "panel" || saved?.calendar === "full");
   const [fullCalendar, setFullCalendar] = createSignal(saved?.calendar === "full");
+  const [eventTarget, setEventTarget] = createSignal<{ calendar: number; event: number; date: string }>();
   createEffect(() => writeSession("navigation", {
     folder: selectedFolder(), message: selectedMessage(), query: searchQuery(), followUp: followUpView(),
     calendar: fullCalendar() ? "full" : calendarOpen() ? "panel" : "mail",
@@ -67,12 +70,19 @@ export function App(props: { info: UiInfo }) {
     const stopDaemon = await watchDaemon(setDaemon);
     const stopUi = await listen<UiCommand>("ui_command", (e) => {
       const c = e.payload;
-      setCalendarOpen(false);
-      setFullCalendar(false);
       setPalette(null);
       setEventDialog(null);
       setSpamDialog(null);
       setConfirmDialog(null);
+      if (c.kind === "event") {
+        const start = new Date(c.start_at * 1000);
+        setEventTarget({ calendar: c.calendar, event: c.event, date: c.all_day ? start.toISOString().slice(0, 10) : localDate(start) });
+        setCalendarOpen(true);
+        setFullCalendar(true);
+        return;
+      }
+      setCalendarOpen(false);
+      setFullCalendar(false);
       setSearchQuery(null);
       setFollowUpView(false);
       setSelectedFolder(c.folder);
@@ -107,7 +117,8 @@ export function App(props: { info: UiInfo }) {
         </section>
         <div class="reader-calendar">
           <ReadingPane />
-          <Show when={calendarOpen() && !eventDialog()}><DayPanel full={fullCalendar()} expand={() => setFullCalendar(true)} onClose={toggleCalendar} /></Show>
+          <Show when={calendarOpen() && !eventDialog()}><DayPanel full={fullCalendar()} expand={() => setFullCalendar(true)} onClose={toggleCalendar}
+            target={eventTarget()} onTargetOpened={() => setEventTarget(undefined)} /></Show>
           <Show when={eventDialog()} keyed>
             {d => <EventDialog message={d.message} from={d.from} onClose={() => setEventDialog(null)} />}
           </Show>

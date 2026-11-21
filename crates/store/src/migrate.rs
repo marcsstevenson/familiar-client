@@ -62,6 +62,11 @@ pub const MIGRATIONS: &[Migration] = &[
         name: "messages in many folders",
         sql: include_str!("../migrations/0008_message_folders.sql"),
     },
+    Migration {
+        version: 9,
+        name: "links between events and their source email",
+        sql: include_str!("../migrations/0009_event_mail.sql"),
+    },
 ];
 
 /// The schema version this build reads and writes.
@@ -127,7 +132,7 @@ mod tests {
         let mut c = mem();
         assert_eq!(
             migrate(&mut c, MIGRATIONS).unwrap(),
-            vec![1, 2, 3, 4, 5, 6, 7, 8]
+            vec![1, 2, 3, 4, 5, 6, 7, 8, 9]
         );
         assert_eq!(version(&c).unwrap(), SCHEMA_VERSION);
         assert_eq!(
@@ -140,6 +145,7 @@ mod tests {
                 "contact_addresses",
                 "contacts",
                 "correspondents",
+                "event_mail",
                 "events",
                 "folder_threads",
                 "folders",
@@ -160,7 +166,7 @@ mod tests {
                 |r| r.get(0),
             )
             .unwrap();
-        assert_eq!(triggers, 13);
+        assert_eq!(triggers, 15);
     }
 
     #[test]
@@ -210,7 +216,7 @@ mod tests {
              VALUES (1, 1, 1, 'm1', 10, 0), (1, 1, 1, 'm2', 20, 1), (1, 2, 1, 'm3', 30, 0);",
         )
         .unwrap();
-        assert_eq!(migrate(&mut c, MIGRATIONS).unwrap(), vec![8]);
+        assert_eq!(migrate(&mut c, &MIGRATIONS[..8]).unwrap(), vec![8]);
         let rows: i64 = c
             .query_row(
                 "SELECT count(*) FROM message_folders mf JOIN messages m

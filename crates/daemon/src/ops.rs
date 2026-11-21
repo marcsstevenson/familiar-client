@@ -574,6 +574,7 @@ impl OpRunner {
             .collect();
         self.w.write(|tx| {
             if let Some(p) = placeholder {
+                tx.confirm_series_mail(cal.id, p, master)?;
                 tx.delete_event(p)?;
             }
             let keep: std::collections::HashSet<&str> =

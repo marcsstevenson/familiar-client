@@ -185,6 +185,7 @@ impl Registry {
         r.register(crate::commands::mail::MailList);
         r.register(crate::commands::mail::MailThread);
         r.register(crate::commands::mail::MailFetch);
+        r.register(crate::commands::cal::MailEvents);
         r.register(crate::commands::attachments::MailAttachments);
         r.register(crate::commands::folder::FolderList);
         r.register(crate::commands::folder::FolderColor);
@@ -234,6 +235,7 @@ impl Registry {
         r.register(crate::commands::followup::FollowUpAdd);
         r.register(crate::commands::followup::FollowUpCancel);
         r.register(crate::commands::ui::UiOpen);
+        r.register(crate::commands::ui::UiEvent);
         r.register(crate::commands::ui::UiFolder);
         r.register(crate::commands::watch::Watch);
         r

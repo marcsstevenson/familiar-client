@@ -13,6 +13,8 @@ use serde::{Deserialize, Serialize};
 
 /// Method names on the app's socket.
 pub const METHOD_UI_OPEN: &str = "ui.open";
+/// Open event details in the main calendar window.
+pub const METHOD_UI_EVENT: &str = "ui.event";
 /// See [`METHOD_UI_OPEN`].
 pub const METHOD_UI_FOLDER: &str = "ui.folder";
 
@@ -67,6 +69,29 @@ impl Command for UiOpen {
 
     fn run(&self, _ctx: &Context<'_>, input: UiOpenInput) -> Result<UiDone, CommandError> {
         send(METHOD_UI_OPEN, &input)
+    }
+
+    fn render_text(&self, o: &UiDone) -> String {
+        o.shown.clone()
+    }
+}
+
+/// Opens an event in the desktop calendar.
+pub struct UiEvent;
+
+impl Command for UiEvent {
+    type Input = crate::commands::cal::CalShowInput;
+    type Output = UiDone;
+    const SPEC: CommandSpec = CommandSpec {
+        path: &["ui", "event"],
+        summary: "Open an event in the calendar",
+        description: "Shows the event's day and opens its details in the running desktop app.",
+        access: Access::Read,
+        errors: ERRORS,
+    };
+
+    fn run(&self, _ctx: &Context<'_>, input: Self::Input) -> Result<UiDone, CommandError> {
+        send(METHOD_UI_EVENT, &input)
     }
 
     fn render_text(&self, o: &UiDone) -> String {

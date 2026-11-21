@@ -48,6 +48,7 @@ export const COMMAND_SURFACE = {
   "mail.attachments": "palette",
   "mail.check-spam": "palette",
   "mail.delete": "palette",
+  "mail.events": "palette",
   "mail.fetch": "palette",
   "mail.flag": "palette",
   "mail.list": "palette",
@@ -68,6 +69,7 @@ export const COMMAND_SURFACE = {
   "sync.check": "palette",
   "sync.status": "palette",
   "ui.folder": "palette",
+  "ui.event": "palette",
   "ui.open": "palette",
   version: "palette",
   watch: "terminal", // streams events until stopped

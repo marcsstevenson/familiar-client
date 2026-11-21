@@ -350,12 +350,65 @@ fn event_summary(e: familiar_store::Event, a: &Account, c: &Calendar, zone: Tz) 
 pub struct CalShow;
 
 /// Input for reading one local event.
-#[derive(Debug, Deserialize, JsonSchema)]
+#[derive(Debug, Serialize, Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct CalShowInput {
     /// Local event ID from cal list.
     #[schemars(extend("x-positional" = 0))]
     pub event: i64,
+}
+
+/// Calendar events originating from a particular email.
+pub struct MailEvents;
+
+/// Message whose events to look up.
+#[derive(Debug, Deserialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct MailEventsInput {
+    /// Local message ID.
+    #[schemars(extend("x-positional" = 0))]
+    pub message: i64,
+}
+
+/// An event the user can open from a message.
+#[derive(Debug, Serialize, JsonSchema)]
+pub struct LinkedEvent {
+    /// Local event ID.
+    pub id: i64,
+    /// Current subject.
+    pub subject: String,
+    /// Local date and time, or just the date for an all-day event.
+    pub start: String,
+}
+
+impl Command for MailEvents {
+    type Input = MailEventsInput;
+    type Output = Vec<LinkedEvent>;
+    const SPEC: CommandSpec = CommandSpec {
+        path: &["mail", "events"],
+        summary: "List calendar events created from a message",
+        description: "Shows one link per event or series available on this device.",
+        access: Access::Read,
+        errors: &[ErrorKind::NotFound],
+    };
+
+    fn run(&self, _ctx: &Context<'_>, input: Self::Input) -> Result<Self::Output, CommandError> {
+        let reader = open(&DaemonPaths::resolve()?)?;
+        Ok(reader
+            .mail_events(familiar_store::MessageId(input.message))
+            .map_err(store_err)?
+            .into_iter()
+            .map(|e| LinkedEvent {
+                id: e.id.0,
+                start: if e.data.is_all_day {
+                    date(e.data.start_at)
+                } else {
+                    in_zone(e.data.start_at, tz::local_zone())
+                },
+                subject: e.data.subject,
+            })
+            .collect())
+    }
 }
 
 /// A guest, their role, and their answer as last synced.
@@ -374,6 +427,8 @@ pub struct CalGuest {
 /// Details for a single event. Timed values use the returned display zone.
 #[derive(Debug, Serialize, JsonSchema)]
 pub struct CalShowOutput {
+    /// Local ID of the email from which this event or series was created.
+    pub from_mail: Option<i64>,
     /// Event summary, including its calendar ID.
     pub event: CalEvent,
     /// Zone in which the start and end are returned.
@@ -416,6 +471,7 @@ impl Command for CalShow {
                 let Some(account) = r.accounts()?.into_iter().find(|a| a.id == cal.account) else {
                     return Ok(None);
                 };
+                let from_mail = r.event_mail(&event.data)?.map(|id| id.0);
                 let d = &mut event.data;
                 let zone = d
                     .start_tz
@@ -423,6 +479,7 @@ impl Command for CalShow {
                     .and_then(tz::parse_zone)
                     .unwrap_or_else(tz::local_zone);
                 Ok(Some(CalShowOutput {
+                    from_mail,
                     display_zone: zone.name().to_owned(),
                     can_edit: cal.can_edit,
                     is_organizer: d.is_organizer,

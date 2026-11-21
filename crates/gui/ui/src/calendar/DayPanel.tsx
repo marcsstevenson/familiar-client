@@ -26,7 +26,8 @@ function errorText(error: unknown) {
   return isCommandError(cause) ? cause.message : String(error);
 }
 
-export function DayPanel(props: { full: boolean; expand: () => void; onClose: () => void }) {
+export function DayPanel(props: { full: boolean; expand: () => void; onClose: () => void;
+  target?: { calendar: number; event: number; date: string }; onTargetOpened: () => void }) {
   const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const [now, setNow] = createSignal(Date.now());
   const location = readSession<{ date: string; event?: number }>("calendar");
@@ -52,6 +53,15 @@ export function DayPanel(props: { full: boolean; expand: () => void; onClose: ()
   function chooseView(v: CalendarView) { setFullView(v); remember(); }
   const [slot, setSlot] = createSignal<{ date: string; endDate?: string; time: string; zone: string }>();
   const [selected, select] = createSignal<number | undefined>(location?.event);
+  createEffect(() => {
+    const target = props.target;
+    if (!target) return;
+    setSlot(undefined);
+    setDate(target.date);
+    setHidden(ids => ids.filter(id => id !== target.calendar));
+    select(target.event);
+    props.onTargetOpened();
+  });
   createEffect(() => writeSession("calendar", { date: date(), event: selected() }));
   const writable = createMemo(() => calendars().filter(c => c.can_edit));
   const visible = createMemo(() => (result()?.events ?? [])
@@ -156,7 +166,7 @@ export function DayPanel(props: { full: boolean; expand: () => void; onClose: ()
         </Switch>
         <footer>{zone.replaceAll("_", " ")}</footer>
       </div>
-      <Show when={selected()}>{id => <EventDetails id={id()} revision={revision()} expand={props.full ? undefined : props.expand}
+      <Show when={selected()} keyed>{id => <EventDetails id={id} revision={revision()} expand={props.full ? undefined : props.expand}
         onClose={() => { select(undefined); heading.focus(); }} onChanged={() => void refreshDay()} />}</Show>
       <Show when={slot()}>{t => <NewEvent date={t().date} endDate={t().endDate} time={t().time} zone={t().zone} calendars={writable()} onClose={() => setSlot(undefined)}
         onSaved={(c, day, time, savedZone) => {
