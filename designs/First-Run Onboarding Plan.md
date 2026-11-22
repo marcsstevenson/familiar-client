@@ -252,7 +252,9 @@ Answered by Marc on 23 Nov 2026:
 5. **Keyboard tips:** on by default, with a "Don't show tips" switch.
 6. **Gmail in onboarding** (Marc, 23 Nov): the first run offers Gmail beside Microsoft so the person chooses. See Gmail above.
 
-Still open: whether Familiar ships Marc's Google client so Gmail needs no setup (recommended above) or Gmail users bring their own project, and whether importing server rules and folder favourites (the rest of WP 4.6) also becomes Get started items once WP 4.3 is done.
+7. **Google client:** Familiar ships Marc's Google client built in, so Gmail needs no setup. `google-client.json` or `[app.google] client_file` still overrides it.
+
+Still open: whether importing server rules and folder favourites (the rest of WP 4.6) also becomes Get started items once WP 4.3 is done.
 
 ## Sources
 
