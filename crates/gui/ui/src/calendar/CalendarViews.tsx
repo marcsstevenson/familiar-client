@@ -6,9 +6,10 @@ import { readSession, writeSession } from "../session";
 
 function calendarScroller(el: HTMLElement, defaultTop = 0) {
   const view = el.className;
-  const saved = readSession<{ view: string; top: number }>("calendarScroll");
+  const key = el.closest(".full-calendar") ? "calendarScroll" : "dayPanelScroll";
+  const saved = readSession<{ view: string; top: number }>(key);
   el.scrollTop = saved?.view === view ? saved.top : defaultTop;
-  el.addEventListener("scroll", () => writeSession("calendarScroll", { view, top: el.scrollTop }));
+  el.addEventListener("scroll", () => writeSession(key, { view, top: el.scrollTop }));
 }
 
 type ViewProps = {

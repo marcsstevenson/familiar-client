@@ -2,11 +2,11 @@
 // Each pane is its own component folder; they share selection through state.ts.
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
-import { Show, createEffect, createSignal, onCleanup, onMount } from "solid-js";
+import { For, Show, batch, createEffect, createSignal, onCleanup, onMount } from "solid-js";
 import { registerBuiltinActions } from "./actions/builtin";
 import { onGlobalKey, setKeyOverrides } from "./actions/registry";
 import { type DaemonState, type UiInfo, watchDaemon } from "./api";
-import { DayPanel } from "./calendar/DayPanel";
+import { DayPanel, type CalendarLocation } from "./calendar/DayPanel";
 import { localDate } from "./calendar/timeline";
 import { ReadingPane } from "./reading/ReadingPane";
 import { Palette } from "./palette/Palette";
@@ -30,29 +30,62 @@ type UiCommand =
   | { kind: "open"; folder: number; message: number }
   | { kind: "folder"; folder: number | null };
 
+const mainViews = ["Mail", "Calendar"] as const;
+type MainView = typeof mainViews[number];
+
 export function App(props: { info: UiInfo }) {
   const saved = readSession<{ folder: number | null; message: number | null; query: string | null;
-    followUp: boolean; calendar: "mail" | "panel" | "full" }>("navigation");
+    followUp: boolean; view?: MainView; dayPanelOpen?: boolean; calendar?: "mail" | "panel" | "full" }>("navigation");
   setSelectedFolder(saved?.folder ?? null);
   setSelectedMessage(saved?.message ?? null);
   setSearchQuery(saved?.query ?? null);
   setFollowUpView(saved?.followUp ?? false);
-  const [calendarOpen, setCalendarOpen] = createSignal(saved?.calendar === "panel" || saved?.calendar === "full");
-  const [fullCalendar, setFullCalendar] = createSignal(saved?.calendar === "full");
+  const [view, setView] = createSignal<MainView>(saved?.view ?? (saved?.calendar === "full" ? "Calendar" : "Mail"));
+  const [dayPanelOpen, setDayPanelOpen] = createSignal(saved?.dayPanelOpen ?? saved?.calendar === "panel");
+  const calendarMode = (): keyof typeof locations | undefined =>
+    view() === "Calendar" ? "calendar" : dayPanelOpen() && !eventDialog() ? "dayPanel" : undefined;
+  const locations = {
+    calendar: readSession<CalendarLocation>("calendar"),
+    dayPanel: readSession<CalendarLocation>(saved?.calendar === "panel" ? "calendar" : "dayPanel"),
+  };
   const [eventTarget, setEventTarget] = createSignal<{ calendar: number; event: number; date: string }>();
   createEffect(() => writeSession("navigation", {
     folder: selectedFolder(), message: selectedMessage(), query: searchQuery(), followUp: followUpView(),
-    calendar: fullCalendar() ? "full" : calendarOpen() ? "panel" : "mail",
+    view: view(), dayPanelOpen: dayPanelOpen(),
   }));
-  let calendarToggle!: HTMLButtonElement;
-  function toggleCalendar() {
-    setFullCalendar(false);
-    setCalendarOpen(!calendarOpen());
-    if (!calendarOpen()) {
-      writeSession("calendar", undefined);
-      writeSession("calendarScroll", undefined);
-      calendarToggle.focus();
+  let dayPanelToggle!: HTMLButtonElement;
+  let viewTabs!: HTMLDivElement;
+  function expandDayPanel() {
+    locations.calendar = locations.dayPanel;
+    if (locations.dayPanel?.event !== undefined) {
+      locations.dayPanel = { date: locations.dayPanel.date };
+      writeSession("dayPanel", locations.dayPanel);
     }
+    setView("Calendar");
+  }
+  function toggleDayPanel() {
+    setDayPanelOpen(open => !open);
+    if (!dayPanelOpen()) {
+      locations.dayPanel = undefined;
+      writeSession("dayPanel", undefined);
+      writeSession("dayPanelScroll", undefined);
+      dayPanelToggle.focus();
+    }
+  }
+  function onTabKey(event: KeyboardEvent) {
+    const tabs = Array.from(viewTabs.querySelectorAll<HTMLButtonElement>("button:enabled"));
+    const index = tabs.indexOf(event.target as HTMLButtonElement);
+    let next;
+    switch (event.key) {
+      case "ArrowLeft": next = (index + tabs.length - 1) % tabs.length; break;
+      case "ArrowRight": next = (index + 1) % tabs.length; break;
+      case "Home": next = 0; break;
+      case "End": next = tabs.length - 1; break;
+      default: return;
+    }
+    event.preventDefault();
+    tabs[next]?.focus();
+    tabs[next]?.click();
   }
   const [daemon, setDaemon] = createSignal<DaemonState>({ state: "starting" });
   // The palette: closed, open on the list, or open on one command's form.
@@ -64,7 +97,7 @@ export function App(props: { info: UiInfo }) {
   aiSettings.tool = props.info.ai_tool;
   aiSettings.accounts = props.info.ai_accounts;
   spamSettings.accounts = props.info.spam_accounts;
-  registerBuiltinActions((initial) => setPalette({ initial }), toggleCalendar);
+  registerBuiltinActions((initial) => setPalette({ initial }), toggleDayPanel);
   onMount(async () => {
     window.addEventListener("keydown", onGlobalKey);
     const stopDaemon = await watchDaemon(setDaemon);
@@ -76,13 +109,14 @@ export function App(props: { info: UiInfo }) {
       setConfirmDialog(null);
       if (c.kind === "event") {
         const start = new Date(c.start_at * 1000);
-        setEventTarget({ calendar: c.calendar, event: c.event, date: c.all_day ? start.toISOString().slice(0, 10) : localDate(start) });
-        setCalendarOpen(true);
-        setFullCalendar(true);
+        batch(() => {
+          setView("Calendar");
+          setEventTarget({ calendar: c.calendar, event: c.event, date: c.all_day ? start.toISOString().slice(0, 10) : localDate(start) });
+        });
         return;
       }
-      setCalendarOpen(false);
-      setFullCalendar(false);
+      setDayPanelOpen(false);
+      setView("Mail");
       setSearchQuery(null);
       setFollowUpView(false);
       setSelectedFolder(c.folder);
@@ -98,16 +132,26 @@ export function App(props: { info: UiInfo }) {
   });
   return (
     <div class="app">
-      <TitleBar platform={props.info.platform}>
-        <button ref={calendarToggle} class="titlebar-tool calendar-toggle" title="Calendar" aria-label="Calendar"
-          aria-expanded={calendarOpen()} onClick={toggleCalendar}>
+      <TitleBar platform={props.info.platform} navigation={
+        <div ref={viewTabs} class="view-tabs" role="tablist" aria-label="Main view" onKeyDown={onTabKey}>
+          <For each={mainViews}>{name =>
+            <button id={"tab-" + name} role="tab" aria-selected={view() === name} aria-controls="main-view"
+              tabIndex={view() === name ? 0 : -1} disabled={name !== view() && !!eventDialog()}
+              onClick={() => setView(name)}>{name}</button>
+          }</For>
+        </div>
+      }>
+        <Show when={view() === "Mail"}><button ref={dayPanelToggle} class="titlebar-tool calendar-toggle"
+          title={dayPanelOpen() ? "Hide day panel" : "Show day panel"}
+          aria-expanded={dayPanelOpen() && !eventDialog()} disabled={!!eventDialog()} onClick={toggleDayPanel}>
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true">
             <rect x="3.5" y="5.5" width="17" height="15.5" rx="2.5" />
-            <path d="M7.5 3v5m9-5v5m-13 2.5h17" />
+            <path d="M14.5 5.5v15.5" />
           </svg>
-        </button>
+        </button></Show>
       </TitleBar>
-      <main class="panes" classList={{ "reviewing-proposal": !!eventDialog(), "calendar-expanded": fullCalendar() }} style={{ "grid-template-columns": paneColumns() }}>
+      <main class="main-view"><div class="panes" id="main-view" role="tabpanel" aria-labelledby={"tab-" + view()}
+        classList={{ "reviewing-proposal": !!eventDialog(), "calendar-expanded": view() === "Calendar" }} style={{ "grid-template-columns": paneColumns() }}>
         <Splitters />
         <nav class="pane folders" aria-label="Folders">
           <FolderTree views={props.info.views} />
@@ -117,13 +161,19 @@ export function App(props: { info: UiInfo }) {
         </section>
         <div class="reader-calendar">
           <ReadingPane />
-          <Show when={calendarOpen() && !eventDialog()}><DayPanel full={fullCalendar()} expand={() => setFullCalendar(true)} onClose={toggleCalendar}
-            target={eventTarget()} onTargetOpened={() => setEventTarget(undefined)} /></Show>
+          <Show when={calendarMode()} keyed>{mode => <DayPanel full={mode === "calendar"} location={locations[mode]}
+            remember={location => { locations[mode] = location; writeSession(mode, location); }}
+            expand={expandDayPanel}
+            onClose={() => {
+              if (mode === "dayPanel") toggleDayPanel();
+              else { setView("Mail"); viewTabs.querySelector<HTMLButtonElement>("#tab-Mail")?.focus(); }
+            }}
+            target={mode === "calendar" ? eventTarget() : undefined} onTargetOpened={() => setEventTarget(undefined)} />}</Show>
           <Show when={eventDialog()} keyed>
             {d => <EventDialog message={d.message} from={d.from} onClose={() => setEventDialog(null)} />}
           </Show>
         </div>
-      </main>
+      </div></main>
       <footer class="statusbar" role="status">
         <SyncStatus daemon={daemon()} />
         <Show when={props.info.config_error}>

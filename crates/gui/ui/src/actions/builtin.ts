@@ -51,8 +51,8 @@ export function pickMoveTarget(): void {
   if (id !== null && r !== null && r.id === id) setMovePicker({ ids: [id], accounts: [r.account] });
 }
 
-export function registerBuiltinActions(openPalette: (prefill?: string) => void, toggleCalendar: () => void): void {
-  registerAction({ id: "toggle_calendar", title: "Show or hide calendar", key: "Ctrl+Shift+L", run: toggleCalendar });
+export function registerBuiltinActions(openPalette: (prefill?: string) => void, toggleDayPanel: () => void): void {
+  registerAction({ id: "toggle_calendar", title: "Show or hide day panel", key: "Ctrl+Shift+L", run: toggleDayPanel });
   registerAction({ id: "palette", title: "Show all commands", key: "Ctrl+K", run: () => openPalette() });
   registerAction({ id: "next", title: "Next message", key: "j", run: () => listNav.move(1) });
   registerAction({ id: "previous", title: "Previous message", key: "k", run: () => listNav.move(-1) });

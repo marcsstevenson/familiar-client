@@ -1,5 +1,4 @@
 import { For, Match, Show, Switch, batch, createEffect, createMemo, createResource, createSignal, onCleanup, onMount } from "solid-js";
-import { readSession, writeSession } from "../session";
 import type { CalEvent } from "../../../../../bindings/commands";
 import { isCommandError, run } from "../api";
 import { onStoreChanged } from "../list/api";
@@ -26,11 +25,14 @@ function errorText(error: unknown) {
   return isCommandError(cause) ? cause.message : String(error);
 }
 
-export function DayPanel(props: { full: boolean; expand: () => void; onClose: () => void;
+export type CalendarLocation = { date: string; event?: number };
+
+export function DayPanel(props: { full: boolean; location?: CalendarLocation; remember: (location: CalendarLocation) => void;
+  expand: () => void; onClose: () => void;
   target?: { calendar: number; event: number; date: string }; onTargetOpened: () => void }) {
   const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const [now, setNow] = createSignal(Date.now());
-  const location = readSession<{ date: string; event?: number }>("calendar");
+  const location = props.location;
   const [date, setDate] = createSignal(location?.date ?? localDate(new Date()));
   const [catalogue, { refetch: refreshCalendars }] = createResource(() => run("cal.calendars", {}));
   const saved = preferences();
@@ -62,7 +64,7 @@ export function DayPanel(props: { full: boolean; expand: () => void; onClose: ()
     select(target.event);
     props.onTargetOpened();
   });
-  createEffect(() => writeSession("calendar", { date: date(), event: selected() }));
+  createEffect(() => props.remember({ date: date(), event: selected() }));
   const writable = createMemo(() => calendars().filter(c => c.can_edit));
   const visible = createMemo(() => (result()?.events ?? [])
     .filter(e => !e.cancelled && !hidden().includes(e.calendar_id)));
@@ -74,7 +76,7 @@ export function DayPanel(props: { full: boolean; expand: () => void; onClose: ()
   };
   let heading!: HTMLHeadingElement;
   onMount(() => {
-    heading.focus();
+    if (!document.activeElement?.closest('[role="tablist"]')) heading.focus();
     const timer = setInterval(() => setNow(Date.now()), 60_000);
     const stop = onStoreChanged(() => { void refreshDay(); void refreshCalendars(); if (selected() !== undefined) setRevision(n => n + 1); });
     onCleanup(() => { clearInterval(timer); void stop.then(f => f()); });
@@ -125,9 +127,9 @@ export function DayPanel(props: { full: boolean; expand: () => void; onClose: ()
     <aside class="day-panel" classList={{ "full-calendar": props.full }} aria-label={props.full ? "Full calendar" : "Day calendar"} onKeyDown={e => {
       if (e.key === "Escape" && !slot() && selected() === undefined) { e.preventDefault(); props.onClose(); }
     }}>
-      <header><h2 ref={heading} tabindex="-1">Calendar</h2>
-        <Show when={!props.full}><button onClick={() => { props.expand(); heading.focus(); }}>Open full calendar</button></Show>
-        <button aria-label={props.full ? "Back to Mail" : "Close calendar"} onClick={props.onClose}>{props.full ? "Back to Mail" : "×"}</button>
+      <header><h2 ref={heading} tabindex="-1">{props.full ? "Calendar" : "Day panel"}</h2>
+        <Show when={!props.full}><button onClick={props.expand}>Open full calendar</button>
+          <button aria-label="Close day panel" onClick={props.onClose}>×</button></Show>
       </header>
       <Show when={props.full}><div class="calendar-sidebar">
         <MiniMonth date={date()} navigate={navigate} />

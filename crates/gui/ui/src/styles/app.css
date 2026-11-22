@@ -83,6 +83,25 @@ button {
   flex: 1;
   align-self: stretch;
 }
+.view-tabs {
+  display: flex;
+  align-self: stretch;
+  margin-inline: var(--space-2) var(--space-4);
+}
+.view-tabs button {
+  padding-inline: var(--space-4);
+  background: transparent;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  font-size: var(--text-sm);
+  cursor: pointer;
+}
+.view-tabs button:hover:enabled { background: var(--bg-hover); }
+.view-tabs button[aria-selected="true"] {
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+.view-tabs button:disabled { opacity: .55; cursor: default; }
 .titlebar-tool,
 .window-buttons button {
   height: var(--titlebar-h);
@@ -116,6 +135,7 @@ button {
 }
 
 /* Panes */
+.main-view { display: grid; min-height: 0; min-width: 0; }
 .panes {
   display: grid;
   grid-template-columns: var(--folders-w) var(--list-w) 1fr;
