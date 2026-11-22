@@ -216,14 +216,19 @@ When Phase G ships, a **Gmail** button appears on the Welcome screen. Gmail need
 
 OB.1 to OB.3 are the core. They are worth doing before the open-source release (Phase 5) and right before the WP 5.3 reinstall drill. OB.4 to OB.7 can run in parallel threads once OB.3 is in.
 
-## Open questions for Marc
+## Decisions
 
-1. **Who is this for, and when?** Is it for Marc's reinstall and a few people he hands it to soon, or mainly for the public release? That sets how much polish OB.4 to OB.7 need now.
-2. **Shipping your client ID to other people.** Strangers would consent to an unverified app registered in your personal Azure directory. Work tenants will often block that, as iM3 did. Is that acceptable until publisher verification (WP 5.2), or should the docs point other people at registering their own app?
-3. **Restart famd, or live reload?** The plan restarts famd after an account change, because it's simpler. Is a few seconds of sync pause on account add acceptable?
-4. **Signature in the first run?** The plan keeps it out, in the checklist. Some people would rather paste it before writing their first mail. Is it worth a skippable step after sign-in?
-5. **Tips on by default?** One-time keyboard tips help Outlook users. Would you rather they were off until turned on?
-6. **Folding in WP 4.6.** OB.7 takes the signature part of WP 4.6 "first-run migration". Should importing server rules and folder favourites also become Get started items once 4.3 is done?
+Answered by Marc on 23 Nov 2026:
+
+1. **Audience:** build for new people who want to use Familiar now, not only Marc's reinstall. OB.1 to OB.7 get built, starting with the core (OB.1 to OB.3).
+2. **Client ID:** shipping Familiar's own Microsoft client ID to other people is fine until publisher verification (WP 5.2). Work tenants that block consent get the "ask your IT admin" path.
+3. **famd restart:** restarting famd after an account change is accepted. No live config reload.
+4. **Signatures:** they stay in the Get started checklist, not in the first run.
+5. **Keyboard tips:** on by default, with a "Don't show tips" switch.
+
+Still open: whether importing server rules and folder favourites (the rest of WP 4.6) also becomes Get started items once WP 4.3 is done.
+
+**Since the plan was written:** Gmail accounts now sync (Phase G, `provider = "gmail"`, Google client in `google-client.json` beside the config). The Gmail button can come in with OB.3 rather than waiting.
 
 ## Sources
 
