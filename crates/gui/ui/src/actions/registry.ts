@@ -86,7 +86,7 @@ export function onGlobalKey(e: KeyboardEvent): void {
   }
   const a = bound.get(normalise(name));
   if (!a || (a.enabled && !a.enabled())) return;
-  if (document.querySelector(".calendar-expanded") && a.id !== "toggle_calendar") return;
+  if (document.querySelector(".calendar-expanded")) return;
   if (e.target instanceof Element && e.target.closest(".day-panel") && a.id !== "toggle_calendar" && a.id !== "palette") return;
   e.preventDefault();
   void a.run();

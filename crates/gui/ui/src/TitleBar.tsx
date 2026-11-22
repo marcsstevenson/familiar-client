@@ -17,7 +17,7 @@ function openConfig() {
 }
 
 /** `title` names a compose window; without it this is the main window's bar. */
-export function TitleBar(props: { platform: string; title?: string; children?: JSX.Element }) {
+export function TitleBar(props: { platform: string; title?: string; navigation?: JSX.Element; children?: JSX.Element }) {
   const win = getCurrentWindow();
   const mac = () => props.platform === "macos";
   return (
@@ -26,6 +26,7 @@ export function TitleBar(props: { platform: string; title?: string; children?: J
       <span class="titlebar-name" data-tauri-drag-region>
         {props.title ?? "Familiar"}
       </span>
+      {props.navigation}
       <Show when={props.title === undefined}>
         <button class="titlebar-tool" title="New message (Ctrl+N)" aria-label="New message" onClick={() => void openCompose({ kind: "new" })}>
           ✎

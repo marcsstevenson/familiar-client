@@ -139,8 +139,9 @@ out on its own.
 
 ### Full calendar in the app
 
-Choose **Open full calendar** from the day panel or an event's details. The date,
-calendar filters and open event carry over. Use the mini month to pick a date,
+Select **Calendar** beside Familiar in the title bar to return to your last
+calendar date and view. To carry a date or open event over from the day panel,
+choose **Open full calendar** there or in the event's details. Use the mini month to pick a date,
 or step through Day, Week, Month and the 30-day Agenda with the arrow buttons.
 In Month, double-click empty space in a day to create an event, or drag across
 days in either direction to include them in one event. The height of the first
@@ -149,19 +150,19 @@ down gives 3 pm. The suggested end is an hour later on the last selected day.
 Click a date number or **more** to open its day. In Day and Week, select a half-hour
 to start an event. Calendar visibility and the last full view are saved on this device.
 
-**Back to Mail** returns to the open message and list. A `fam ui open` or
+The **Mail** tab returns to the open message and list. A `fam ui open` or
 `fam ui folder` request also returns to Mail and selects its requested item.
 
 ### Day calendar in the app
 
-Open Calendar at the right of the title bar (Ctrl+Shift+L) to see the local day
+In Mail, choose **Show day panel** at the right of the title bar (Ctrl+Shift+L) to see the local day
 beside the message you're reading. Use Today, the arrows or the date picker to
 navigate. Calendars lists the visible calendars across accounts, including
 read-only ones. Expand an appointment to see its time, location and calendar.
 Click a half-hour slot or New event to add an appointment to a writable
 calendar. Offline saves queue on this device and sync when famd can connect.
-The panel overlays the reader in narrow windows. Escape or Close calendar
-returns to Mail.
+The panel overlays the reader in narrow windows. Escape or **Close day panel**
+closes it. Switching tabs remembers whether the panel was open in Mail.
 
 ### Open and change an event
 
