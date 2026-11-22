@@ -12,7 +12,7 @@ fam mail search 'from:club has:attachment'   # see docs/search.md
 fam sync check       # compare the store with the server, report drift
 ```
 
-`famd` reads `config.toml` (`FAMILIAR_CONFIG` or the default path from `fam config path`) and takes tokens from the sign-in store (`fam auth login`). An account that isn't signed in shows `auth_required` in `fam sync status` and is retried every few minutes. A second `famd` on the same data directory refuses to start.
+`famd` reads `config.toml` (`FAMILIAR_CONFIG` or the default path from `fam config path`) and takes tokens from the sign-in store (`fam auth login`). An account that isn't signed in shows `auth_required` in `fam sync status` and is retried every few minutes. A second `famd` on the same data directory refuses to start. With no config file yet, or a config with no accounts, famd still starts and answers on its socket but syncs nothing, so the desktop app has a daemon while the first account is added; restart famd once the config names an account. An invalid config still stops it with exit code 3.
 
 | Variable | Meaning |
 | --- | --- |
