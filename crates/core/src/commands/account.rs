@@ -168,7 +168,10 @@ pub(crate) fn suggest_name(email: &str, provider: AddProvider, taken: &[&str]) -
                 .filter(|c| c.is_ascii_alphanumeric() || *c == '-' || *c == '_')
                 .take(40)
                 .collect();
-            if !cleaned.is_empty() {
+            if cleaned.starts_with(|c: char| c.is_ascii_digit()) {
+                // Account names must start with a letter.
+                format!("mail{cleaned}")
+            } else if !cleaned.is_empty() {
                 cleaned
             } else if provider == AddProvider::Gmail {
                 "gmail".into()
@@ -235,6 +238,11 @@ impl Command for AccountAdd {
             .unwrap_or_default();
         if let Some(n) = &input.name {
             familiar_auth::validate_account(n).map_err(CommandError::usage)?;
+            if !n.starts_with(|c: char| c.is_ascii_lowercase()) {
+                return Err(CommandError::usage(format!(
+                    "account name `{n}` must start with a letter"
+                )));
+            }
             if taken.contains(n) {
                 return Err(CommandError::usage(format!(
                     "there is already an account called `{n}`; choose another --name"
@@ -285,7 +293,18 @@ impl Command for AccountAdd {
                 "the sign-in didn't say which address signed in",
             )
         })?;
-        if let Some((name, _)) = existing.as_ref().and_then(|c| {
+        // The sign-in can take minutes, so check against the config as it is now.
+        let current = config()?;
+        let taken: Vec<String> = current
+            .as_ref()
+            .map(|c| c.accounts.keys().cloned().collect())
+            .unwrap_or_default();
+        if let Some(n) = input.name.as_ref().filter(|n| taken.contains(n)) {
+            return Err(CommandError::usage(format!(
+                "there is already an account called `{n}`; choose another --name"
+            )));
+        }
+        if let Some((name, _)) = current.as_ref().and_then(|c| {
             c.accounts
                 .iter()
                 .find(|(_, a)| a.email.eq_ignore_ascii_case(&email))
@@ -391,7 +410,14 @@ mod tests {
         );
         assert_eq!(suggest_name("a@Ex.Ample.com", m, &[]), "ex");
         assert_eq!(suggest_name("odd", m, &[]), "mail");
-        for n in ["hotmail", "parklandscricket", "gmail2", "mail"] {
+        assert_eq!(suggest_name("a@123example.com", m, &[]), "mail123example");
+        for n in [
+            "hotmail",
+            "parklandscricket",
+            "gmail2",
+            "mail",
+            "mail123example",
+        ] {
             familiar_auth::validate_account(n).unwrap();
         }
     }
