@@ -32,13 +32,15 @@ use std::collections::HashMap;
 use std::sync::Arc;
 
 use familiar_core::daemon::DaemonPaths;
-use familiar_provider_gmail::{GmailApi, GmailClient, GmailSync, GoogleCalendarSync};
+use familiar_provider_gmail::{
+    GmailApi, GmailClient, GmailSync, GoogleCalendarSync, GoogleContactSync,
+};
 use familiar_provider_graph::{CalendarApi, CalendarSync, GraphClient, MailApi, MailSync};
 use familiar_store::{NewAccount, SharedWriter, Writer};
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
 
-use crate::engine::{AccountShared, CalendarSource, Engine, MailSource};
+use crate::engine::{AccountShared, CalendarSource, ContactSource, Engine, MailSource};
 use crate::policy::{Clock, SyncPolicy, system_clock};
 use crate::service::{AccountHandle, Service};
 
@@ -259,7 +261,7 @@ impl Daemon {
                         id,
                         MailSource::Graph(sync),
                         CalendarSource::Graph(calendar),
-                        Some(contacts),
+                        Some(ContactSource::Graph(contacts)),
                         w.clone(),
                         policy.clone(),
                         opts.clock.clone(),
@@ -291,7 +293,10 @@ impl Daemon {
                         id,
                         MailSource::Gmail(sync),
                         CalendarSource::Google(GoogleCalendarSync::new(api.clone(), id)),
-                        None,
+                        Some(ContactSource::Google(GoogleContactSync::new(
+                            api.clone(),
+                            id,
+                        ))),
                         w.clone(),
                         policy.clone(),
                         opts.clock.clone(),

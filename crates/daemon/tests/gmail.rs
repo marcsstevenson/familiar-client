@@ -56,6 +56,7 @@ impl Env {
             ageing_interval: Duration::from_millis(300),
             backoff_min: Duration::from_millis(100),
             backoff_max: Duration::from_millis(500),
+            contacts_interval: Duration::from_millis(300),
             ..SyncPolicy::default()
         };
         // The fixture's mail is from October 2026.
@@ -713,5 +714,46 @@ async fn gmail_event_create_retry_edit_and_delete() {
             .any(|r| r.method == "DELETE" && r.path == path && r.status == 204)
     );
     assert!(env.reader().event(item).unwrap().is_none());
+    env.daemon.stop().await;
+}
+
+/// WP G.9: saved Google contacts are searchable, and ones removed in Google go.
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn gmail_contacts_are_searchable() {
+    use familiar_core::commands::contacts::{ContactsSearchInput, search_at};
+    let env = Env::start().await;
+    let search = |e: &Env, q: &str| {
+        search_at(
+            &e.paths,
+            &ContactsSearchInput {
+                query: q.into(),
+                ..ContactsSearchInput::default()
+            },
+        )
+        .map(|o| o.people)
+        .unwrap_or_default()
+    };
+    env.until("the Google contacts", |e| {
+        search(e, "builder").iter().any(|p| p.contact)
+    })
+    .await;
+    let bob = search(&env, "builder");
+    assert_eq!(bob[0].address, "bob@builder.example");
+    assert_eq!(bob[0].name, "Bob");
+    let ann = search(&env, "acme");
+    let ann = ann.iter().find(|p| p.contact).unwrap();
+    assert_eq!(ann.company, "Acme");
+    assert_eq!(ann.accounts, vec![KEY.to_string()]);
+
+    // Removed in Google: gone on the next round.
+    env.mock
+        .mailbox("default")
+        .set_contacts(vec![serde_json::json!({
+            "resourceName": "people/c1",
+            "names": [{"displayName": "Ann Acme"}],
+            "emailAddresses": [{"value": "ann@acme.example"}],
+        })]);
+    env.until("Bob to go", |e| search(e, "builder").is_empty())
+        .await;
     env.daemon.stop().await;
 }

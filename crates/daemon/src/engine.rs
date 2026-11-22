@@ -25,8 +25,7 @@
 //! 1 and 2 differ: step 1 is the label tree, and step 2 is one
 //! [`GmailSync::sync_mail`] call, every `inbox_interval`. The first sync
 //! lists the mailbox a page per step, newest first, and is recorded in the
-//! store when the listing is done. Google Calendar lists expanded events over the same window as Graph.
-//! Gmail contacts are not synced yet.
+//! store when the listing is done. Google Calendar lists expanded events over the same window as Graph, and Google contacts are listed in full like Outlook's.
 //!
 //! **Calendars** run between steps 1 and 2, at start and every
 //! `calendar_interval` (5 min), so a long first mail sync doesn't hold them
@@ -48,7 +47,7 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use familiar_core::daemon::{AccountLive, FIRST_SYNC_RESOURCE, SyncPhase};
-use familiar_provider_gmail::{GmailSync, GoogleCalendarSync};
+use familiar_provider_gmail::{GmailSync, GoogleCalendarSync, GoogleContactSync};
 use familiar_provider_graph::{
     CalendarSync, ContactSync, Error as GraphError, MailSync, Priority, events_resource,
     messages_resource,
@@ -188,13 +187,34 @@ pub enum CalendarSource {
     Google(GoogleCalendarSync),
 }
 
+/// Where an account's contacts come from.
+pub enum ContactSource {
+    /// Outlook contacts through Graph.
+    Graph(ContactSync),
+    /// Google contacts through the People API.
+    Google(GoogleContactSync),
+}
+
+impl ContactSource {
+    async fn sync(
+        &self,
+        w: &mut SharedWriter,
+        priority: Priority,
+    ) -> Result<(usize, usize), GraphError> {
+        match self {
+            Self::Graph(c) => c.sync(w, priority).await,
+            Self::Google(c) => c.sync(w, priority).await,
+        }
+    }
+}
+
 /// One account's sync loop.
 pub struct Engine {
     key: String,
     account: AccountId,
     sync: MailSource,
     calendar: CalendarSource,
-    contacts: Option<ContactSync>,
+    contacts: Option<ContactSource>,
     w: SharedWriter,
     policy: Arc<SyncPolicy>,
     clock: Clock,
@@ -225,7 +245,7 @@ impl Engine {
         account: AccountId,
         sync: MailSource,
         calendar: CalendarSource,
-        contacts: Option<ContactSync>,
+        contacts: Option<ContactSource>,
         w: SharedWriter,
         policy: Arc<SyncPolicy>,
         clock: Clock,
@@ -805,7 +825,7 @@ impl Engine {
     /// contacts, say) is logged and left until next time.
     async fn sync_contacts(&mut self) -> Result<(), GraphError> {
         let acc = self.account;
-        let Some(contacts) = &mut self.contacts else {
+        let Some(contacts) = &self.contacts else {
             return Ok(());
         };
         match contacts.sync(&mut self.w, Priority::Background).await {

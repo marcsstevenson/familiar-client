@@ -44,6 +44,8 @@ Paths are under `/gmail/v1/users/{userId}`, where `userId` is `me` or the accoun
 | Drafts | `GET /drafts`, `GET /drafts/{id}`, `POST /drafts`, `PUT /drafts/{id}`, `POST /drafts/send`, `DELETE /drafts/{id}`, also through `/upload` |
 | History | `GET /history` with `startHistoryId`, `labelId`, `historyTypes`, `maxResults`, `pageToken` |
 | Send-as | `GET /settings/sendAs`, `GET /settings/sendAs/{email}` |
+| Calendar | `/calendar/v3`: `GET /users/me/calendarList`, events on `cal-primary` (list, get, insert, patch, delete) |
+| People | `GET /people/v1/people/me/connections` (`personFields` required, `pageSize`, `pageToken`); two fixture contacts until `MailboxHandle::set_contacts` |
 | Batch | `POST /batch/gmail/v1`: `multipart/mixed` of `application/http` parts (relative paths or full URLs), at most 100; answers `multipart/mixed` with `Content-ID: <response-…>` in the same order |
 
 `q` understands `from:`, `to:`, `cc:`, `bcc:`, `subject:`, `label:` (ID, or name with `-` for
@@ -136,7 +138,7 @@ Options: `--synthetic N --seed N`, `--token TOKEN`, `--latency-ms N`.
 
 ## Not yet
 
-- Calendar API and People API (for G.8 and G.9, after the Phase G gate).
+- People `otherContacts`, contact groups and contact writes.
 - `threads.list`, `messages.insert`/`import`, resumable uploads, filters and other settings.
 - Gmail's own subject matching for threads; the mock threads by `References` or `threadId`
   only. Label colours are not checked against Gmail's palette.

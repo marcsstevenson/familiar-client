@@ -53,6 +53,8 @@ struct Budget {
 
 struct State {
     calendar_events: HashMap<String, Vec<Value>>,
+    /// People API connections per mailbox; a two-contact fixture until set.
+    people: HashMap<String, Vec<Value>>,
     mailboxes: HashMap<String, MailboxState>,
     auth: Auth,
     faults: Vec<Fault>,
@@ -154,6 +156,7 @@ impl Builder {
         }
         let state = State {
             calendar_events: HashMap::new(),
+            people: HashMap::new(),
             mailboxes: self
                 .mailboxes
                 .into_iter()
@@ -356,6 +359,12 @@ impl MailboxHandle<'_> {
     fn with<R>(&self, f: impl FnOnce(&mut MailboxState) -> R) -> R {
         let mut st = self.shared.lock();
         f(st.mailboxes.get_mut(&self.key).expect("mailbox exists"))
+    }
+
+    /// Replaces the mailbox's People API contacts (`people.connections`
+    /// entries as JSON: `resourceName`, `names`, `emailAddresses`, ...).
+    pub fn set_contacts(&self, contacts: Vec<Value>) {
+        self.shared.lock().people.insert(self.key.clone(), contacts);
     }
 
     /// Delivers a message and returns its ID.
@@ -759,6 +768,54 @@ fn split_api_path(path: &str) -> Option<(bool, &str, &str)> {
     Some((upload, user, rest))
 }
 
+fn fixture_people() -> Vec<Value> {
+    vec![
+        json!({"resourceName":"people/c1","names":[{"displayName":"Ann Acme"}],
+               "emailAddresses":[{"value":"ann@acme.example"}],
+               "organizations":[{"name":"Acme"}],
+               "phoneNumbers":[{"value":"+64 21 555 0101"}]}),
+        json!({"resourceName":"people/c2","names":[{"displayName":"Bob Builder"}],
+               "emailAddresses":[{"value":"Bob@Builder.example","displayName":"Bob"}]}),
+    ]
+}
+
+/// `GET /people/v1/people/me/connections`, paged by `pageSize` and an offset token.
+fn people_route(
+    all: &[Value],
+    method: &str,
+    route: &str,
+    p: &[(String, String)],
+) -> Result<Reply, ApiError> {
+    if (method, route) != ("GET", "/people/me/connections") {
+        return Err(ApiError::new(
+            404,
+            "notFound",
+            format!("Unknown mock People resource {route}"),
+        ));
+    }
+    let get = |k: &str| p.iter().find(|(n, _)| n == k).map(|(_, v)| v.as_str());
+    if !get("personFields").is_some_and(|f| !f.is_empty()) {
+        return Err(ApiError::new(
+            400,
+            "invalidArgument",
+            "personFields mask is required",
+        ));
+    }
+    let size = get("pageSize")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(100usize)
+        .max(1);
+    let start = get("pageToken")
+        .and_then(|v| v.parse().ok())
+        .unwrap_or(0usize);
+    let page: Vec<Value> = all.iter().skip(start).take(size).cloned().collect();
+    let mut out = json!({"connections": page, "totalItems": all.len()});
+    if start + size < all.len() {
+        out["nextPageToken"] = json!((start + size).to_string());
+    }
+    Ok(Reply::Json(out))
+}
+
 fn calendar_route(
     events: &mut Vec<Value>,
     method: &str,
@@ -847,7 +904,9 @@ async fn serve(
     in_batch: bool,
 ) -> (Out, Option<String>) {
     let calendar = path.strip_prefix("/calendar/v3");
+    let people = path.strip_prefix("/people/v1");
     let Some((upload, user, rest)) = calendar
+        .or(people)
         .map(|rest| (false, "me", rest))
         .or_else(|| split_api_path(path))
     else {
@@ -870,7 +929,13 @@ async fn serve(
     let p = params(query);
     let result = {
         let mut st = shared.lock();
-        if let Some(route) = calendar {
+        if let Some(route) = people {
+            let all = st
+                .people
+                .entry(mailbox.clone())
+                .or_insert_with(fixture_people);
+            people_route(all, method, route, &p)
+        } else if let Some(route) = calendar {
             let events = st
                 .calendar_events
                 .entry(mailbox.clone())

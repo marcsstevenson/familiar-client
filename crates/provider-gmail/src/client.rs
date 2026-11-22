@@ -245,6 +245,24 @@ impl GmailClient {
         self.request_at(&base, method, path, body, priority).await
     }
 
+    /// Sends a request to a path starting with `/` under People v1.
+    pub async fn people_request(
+        &self,
+        method: Method,
+        path: &str,
+        body: Option<&Value>,
+        priority: Priority,
+    ) -> Result<Value> {
+        let base = if self.base_url() == GMAIL_V1 {
+            "https://people.googleapis.com/v1".to_owned()
+        } else {
+            let base = reqwest::Url::parse(self.base_url())
+                .map_err(|e| Error::Decode(format!("bad Gmail base URL: {e}")))?;
+            format!("{}/people/v1", base.origin().ascii_serialization())
+        };
+        self.request_at(&base, method, path, body, priority).await
+    }
+
     async fn request_at(
         &self,
         base: &str,
