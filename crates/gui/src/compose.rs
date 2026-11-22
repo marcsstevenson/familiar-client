@@ -22,8 +22,7 @@ pub struct Identity {
     email: String,
     /// Other addresses it can send from.
     aliases: Vec<String>,
-    /// `microsoft` or `gmail`. A Gmail account's verified send-as addresses
-    /// are added to `aliases` by the window, from Gmail.
+    /// `microsoft` or `gmail`.
     provider: &'static str,
     display_name: Option<String>,
     /// Signature HTML for new messages, with its images as `data:` URIs so the
