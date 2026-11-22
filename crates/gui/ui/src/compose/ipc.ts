@@ -7,6 +7,7 @@ export type Identity = {
   email: string;
   /** Other addresses it can send from. */
   aliases: string[];
+  provider: "microsoft" | "gmail";
   display_name: string | null;
   signature_new: string | null;
   signature_reply: string | null;

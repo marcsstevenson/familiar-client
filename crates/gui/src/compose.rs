@@ -22,6 +22,9 @@ pub struct Identity {
     email: String,
     /// Other addresses it can send from.
     aliases: Vec<String>,
+    /// `microsoft` or `gmail`. A Gmail account's verified send-as addresses
+    /// are added to `aliases` by the window, from Gmail.
+    provider: &'static str,
     display_name: Option<String>,
     /// Signature HTML for new messages, with its images as `data:` URIs so the
     /// window can show them.
@@ -67,6 +70,10 @@ pub fn compose_info() -> ComposeInfo {
             key,
             email: a.email,
             aliases: a.aliases,
+            provider: match a.provider {
+                familiar_config::Provider::Graph => "microsoft",
+                familiar_config::Provider::Gmail => "gmail",
+            },
             display_name: a.display_name,
             signature_new: sig.new.as_deref().map(showable),
             signature_reply: sig.reply.as_deref().map(showable),

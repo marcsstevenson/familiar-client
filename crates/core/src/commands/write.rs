@@ -367,7 +367,7 @@ impl Command for MailArchive {
     const SPEC: CommandSpec = CommandSpec {
         path: &["mail", "archive"],
         summary: "Move messages to Archive",
-        description: "Moves messages to their account's Archive folder, on this device at once and queued for the server.",
+        description: "Moves messages to their account's Archive folder (on Gmail, out of the Inbox into All Mail), on this device at once and queued for the server.",
         access: Access::Write,
         errors: WRITE_ERRORS,
     };

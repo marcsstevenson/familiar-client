@@ -632,7 +632,7 @@ Move messages to Archive. Access: `write`.
 fam mail archive <MESSAGES>...
 ```
 
-Moves messages to their account's Archive folder, on this device at once and queued for the server.
+Moves messages to their account's Archive folder (on Gmail, out of the Inbox into All Mail), on this device at once and queued for the server.
 
 - `--dry-run`: Only show what would change.
 - `MESSAGES` (required, repeatable): Local message IDs.

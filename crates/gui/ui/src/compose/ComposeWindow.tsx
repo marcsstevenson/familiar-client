@@ -226,6 +226,7 @@ export function ComposeWindow(props: { info: UiInfo; spec: ComposeSpec; editorId
     try {
       const info = await composeInfo();
       setSettings(info);
+      void addGmailSendAs(info);
       const spec = props.spec;
       const copy = props.recovered;
       if (copy) {
@@ -311,6 +312,30 @@ export function ComposeWindow(props: { info: UiInfo; spec: ComposeSpec; editorId
   }
 
   // --- identity and signature ---------------------------------------------
+
+  /** Adds each Gmail account's verified send-as addresses to its aliases.
+   * Gmail sends from no other address, so the rest aren't offered. */
+  async function addGmailSendAs(info: ComposeInfo) {
+    for (const i of info.identities.filter((x) => x.provider === "gmail")) {
+      try {
+        const got = (await run("api", { path: "/settings/sendAs", account: i.key })) as {
+          sendAs?: { sendAsEmail: string; isPrimary?: boolean; verificationStatus?: string }[];
+        };
+        const seen = new Set([i.email, ...i.aliases].map((a) => a.toLowerCase()));
+        const more = (got.sendAs ?? [])
+          .filter((s) => s.isPrimary || s.verificationStatus === "accepted")
+          .map((s) => s.sendAsEmail)
+          .filter((a) => !seen.has(a.toLowerCase()));
+        if (more.length)
+          setSettings((s) => ({
+            ...s,
+            identities: s.identities.map((x) => (x.key === i.key ? { ...x, aliases: [...x.aliases, ...more] } : x)),
+          }));
+      } catch {
+        // famd not running or offline: the aliases in config.toml still show.
+      }
+    }
+  }
 
   /** A From choice: `<account key>\n<address>`. */
   const fromValue = (key: string, addr: string) => `${key}\n${addr}`;

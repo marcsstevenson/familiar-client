@@ -3,6 +3,7 @@ import { For, Show, createSignal, onMount } from "solid-js";
 import { isCommandError, run } from "../api";
 import type { FolderRow } from "../../../../../bindings/commands";
 import { notify } from "../state";
+import { isGmail } from "./providers";
 
 /** The colours `fam folder color` takes; each has a token in styles/tokens.css. */
 export const FOLDER_COLOURS = ["red", "orange", "yellow", "green", "teal", "blue", "purple", "pink", "grey"];
@@ -65,8 +66,11 @@ export function FolderMenu(props: { folder: FolderRow; x: number; y: number; onC
     if (!n || n === folder.name) return props.onClose();
     void act(`Renamed ${folder.name} to ${n}`, () => run("folder.rename", { ...target(), name: n }));
   };
+  const gmail = isGmail(folder.account);
   const remove = () =>
-    act(`Moved ${folder.name} to Deleted Items`, () => run("folder.delete", target()));
+    act(gmail ? `Deleted the label ${folder.name}` : `Moved ${folder.name} to Deleted Items`, () =>
+      run("folder.delete", target()),
+    );
 
   const onKeyDown = (e: KeyboardEvent) => {
     if (e.key === "Escape") {
@@ -155,10 +159,21 @@ export function FolderMenu(props: { folder: FolderRow; x: number; y: number; onC
       </Show>
       <Show when={mode() === "delete"}>
         <div class="folder-dialog" role="alertdialog" aria-label="Delete folder" ref={(el) => (box = el)}>
-          <p>
-            Delete <strong>{folder.name}</strong> from {folder.account}? It moves to Deleted Items with
-            everything in it{folder.total > 0 ? ` (${folder.total.toLocaleString()} messages here)` : ""}.
-          </p>
+          <Show
+            when={gmail}
+            fallback={
+              <p>
+                Delete <strong>{folder.name}</strong> from {folder.account}? It moves to Deleted Items with
+                everything in it{folder.total > 0 ? ` (${folder.total.toLocaleString()} messages here)` : ""}.
+              </p>
+            }
+          >
+            <p>
+              Delete the Gmail label <strong>{folder.name}</strong>? Gmail deletes it for good and can't undo
+              it. Its mail{folder.total > 0 ? ` (${folder.total.toLocaleString()} messages)` : ""} stays in All
+              Mail and any other labels it has.
+            </p>
+          </Show>
           <div class="folder-dialog-buttons">
             <button type="button" onClick={props.onClose} ref={(el) => setTimeout(() => el.focus())}>
               Cancel
