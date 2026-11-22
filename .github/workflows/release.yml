@@ -1,0 +1,108 @@
+name: Release
+
+# Builds Familiar (the desktop app, famd and fam) for Windows, macOS and Linux
+# and publishes them as a GitHub release. Run it by pushing a tag such as
+# v0.2.0, or from the Actions tab with a tag name (the tag is then created on
+# the commit you run it from).
+#
+# Familiar's own Google client is compiled in from two repository settings, so
+# Gmail needs no setup in these builds (see docs/releasing.md):
+#   secret   FAMILIAR_GOOGLE_CLIENT_SECRET
+#   variable FAMILIAR_GOOGLE_CLIENT_ID (or a secret of the same name)
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag, for example v0.2.0"
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.event.inputs.tag || github.ref_name }}
+
+env:
+  CARGO_TERM_COLOR: always
+  TAG: ${{ github.event.inputs.tag || github.ref_name }}
+
+jobs:
+  build:
+    name: Build (${{ matrix.target }})
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - os: windows-latest
+            target: windows-x64
+          - os: macos-latest
+            target: macos-arm64
+          - os: ubuntu-latest
+            target: linux-x64
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 45
+    env:
+      FAMILIAR_GOOGLE_CLIENT_ID: ${{ vars.FAMILIAR_GOOGLE_CLIENT_ID || secrets.FAMILIAR_GOOGLE_CLIENT_ID }}
+      FAMILIAR_GOOGLE_CLIENT_SECRET: ${{ secrets.FAMILIAR_GOOGLE_CLIENT_SECRET }}
+    steps:
+      - name: Check the Google client is set
+        shell: bash
+        run: |
+          if [ -z "$FAMILIAR_GOOGLE_CLIENT_ID" ] || [ -z "$FAMILIAR_GOOGLE_CLIENT_SECRET" ]; then
+            echo "::error::Set FAMILIAR_GOOGLE_CLIENT_ID and FAMILIAR_GOOGLE_CLIENT_SECRET in the repository's Actions settings (see docs/releasing.md)."
+            exit 1
+          fi
+      - uses: actions/checkout@v5
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Install webview libraries (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libgtk-3-dev librsvg2-dev
+      - name: Build the front end
+        working-directory: crates/gui/ui
+        run: |
+          npm ci
+          npm run build
+      - name: Build
+        run: cargo build --release --locked -p familiar-gui -p familiar-daemon -p familiar-cli
+      - name: Package
+        shell: bash
+        run: |
+          name="familiar-$TAG-${{ matrix.target }}"
+          mkdir -p "dist/$name"
+          ext=""; [ "$RUNNER_OS" = "Windows" ] && ext=".exe"
+          for bin in familiar famd fam; do cp "target/release/$bin$ext" "dist/$name/"; done
+          cp README.md LICENSE-MIT LICENSE-APACHE config.example.toml "dist/$name/"
+          cd dist
+          if [ "$RUNNER_OS" = "Windows" ]; then 7z a -tzip "$name.zip" "$name" >/dev/null; else tar czf "$name.tar.gz" "$name"; fi
+          rm -rf "$name"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: dist/*
+
+  release:
+    name: Publish the release
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - name: Create the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          (cd dist && sha256sum * > SHA256SUMS.txt)
+          gh release create "$TAG" dist/* \
+            --repo "$GITHUB_REPOSITORY" \
+            --target "$GITHUB_SHA" \
+            --title "Familiar $TAG" \
+            --generate-notes
