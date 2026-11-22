@@ -87,7 +87,13 @@ impl MailApi {
     /// Items). Graph has this only on beta, so it goes to the beta endpoint.
     /// The answer isn't a whole message (it has no `id`), so it is ignored;
     /// sync picks up where the message went.
-    pub async fn report_message(&self, id: &str, action: &str, priority: Priority) -> Result<()> {
+    pub async fn report_message(
+        &self,
+        id: &str,
+        action: &str,
+        request_move: bool,
+        priority: Priority,
+    ) -> Result<()> {
         let base = self.client().base_url();
         let beta = match base.strip_suffix("/v1.0") {
             Some(root) => format!("{root}/beta"),
@@ -100,7 +106,7 @@ impl MailApi {
         self.client()
             .post(
                 &url,
-                &json!({ "IsMessageMoveRequested": true, "ReportAction": action }),
+                &json!({ "IsMessageMoveRequested": request_move, "ReportAction": action }),
                 priority,
             )
             .await

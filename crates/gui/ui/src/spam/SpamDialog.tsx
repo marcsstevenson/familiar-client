@@ -137,17 +137,13 @@ export function SpamDialog(props: { message: number; saved?: SpamResult; onClose
                     <button onClick={() => setRound(1)}>Check again</button>
                   </Show>
                   <span class="spacer" />
-                  <Show
-                    when={r().folder === "junkemail"}
-                    fallback={
-                      <button
-                        title="Tell your mail provider this is spam, and move it to Junk Email"
-                        onClick={() => report("Reported as junk", {})}
-                      >
-                        Report junk
-                      </button>
-                    }
+                  <button
+                    title="Report as spam. Messages already in Junk are marked read and moved to Trash."
+                    onClick={() => report("Reported as junk", {})}
                   >
+                    Report junk
+                  </button>
+                  <Show when={r().folder === "junkemail"}>
                     <button
                       title="Tell your mail provider this isn't spam, and move it to the Inbox"
                       onClick={() => report("Reported as not junk", { not_junk: true })}
@@ -157,7 +153,7 @@ export function SpamDialog(props: { message: number; saved?: SpamResult; onClose
                   </Show>
                   <button
                     class="danger"
-                    title="Tell your mail provider this is a scam, and move it out of the way"
+                    title="Report as phishing. Messages already in Junk are marked read and moved to Trash."
                     onClick={() => report("Reported as phishing", { phishing: true })}
                   >
                     Report phishing

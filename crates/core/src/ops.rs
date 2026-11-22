@@ -74,6 +74,9 @@ pub enum OpPayload {
         message: i64,
         /// What it is reported as.
         report: Report,
+        /// Report without a provider-selected move, then move to Deleted Items.
+        #[serde(default)]
+        trash_after_report: bool,
         /// Local folder ID it is expected to land in.
         to: i64,
         /// Local folder ID it came from.
@@ -989,8 +992,27 @@ pub fn plan(tx: &WriteTx<'_>, req: &WriteRequest) -> Result<Vec<Planned>, Comman
                 })?;
                 let in_junk = m.folder == junk.id;
                 let to = match report {
-                    // Already there: nothing to tell the server.
-                    Report::Junk if in_junk => continue,
+                    Report::Junk | Report::Phishing if in_junk => {
+                        if !m.is_read {
+                            out.push(Planned {
+                                delay_secs: 0,
+                                account: m.account,
+                                account_key: key.clone(),
+                                summary: format!("mark read {:?}", short(&m.subject)),
+                                payload: OpPayload::SetRead {
+                                    message: m.id.0,
+                                    read: true,
+                                    prev: false,
+                                },
+                            });
+                        }
+                        well_known(&folders, "deleteditems").ok_or_else(|| {
+                            CommandError::new(
+                                ErrorKind::NotFound,
+                                format!("{key} has no Deleted Items folder"),
+                            )
+                        })?
+                    }
                     Report::Junk | Report::Phishing => junk,
                     Report::NotJunk if !in_junk => {
                         return Err(CommandError::usage(format!(
@@ -1010,6 +1032,7 @@ pub fn plan(tx: &WriteTx<'_>, req: &WriteRequest) -> Result<Vec<Planned>, Comman
                     payload: OpPayload::ReportMessage {
                         message: m.id.0,
                         report: *report,
+                        trash_after_report: in_junk && *report != Report::NotJunk,
                         to: to.id.0,
                         from: m.folder.0,
                         prev_folders: Vec::new(),

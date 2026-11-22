@@ -66,9 +66,12 @@ provider's own report process, so its filter learns from it:
   2026-11-09). Locally it moves to Junk Email (Inbox for not junk) at once,
   and the next sync shows where the server put it. Graph's answer is not a
   whole message, so it is not read. Not junk is only for messages in Junk
-  Email; junk on a message already there does nothing.
+  Email. When reporting junk or phishing from Junk Email, Familiar marks the
+  message read, requests the report without a Graph-selected move, and moves
+  the message to Deleted Items.
 - **Gmail.** Gmail has no report API beyond its labels: junk and phishing
-  move the message to Spam, not junk moves it back to the Inbox.
+  move the message to Spam, not junk moves it back to the Inbox. Reporting
+  a message already in Spam marks it read and moves it to Trash.
 
 ## Gmail accounts
 

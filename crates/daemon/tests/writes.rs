@@ -571,12 +571,6 @@ async fn report_moves_to_junk_and_back_through_beta_report_message() {
         assert!(sent.body.contains(action), "{}", sent.body);
     }
 
-    // Junk again: already there, nothing to send.
-    let out = submit(&env, report(msgs[0].id.0, Report::Junk), waiting())
-        .await
-        .unwrap();
-    assert!(out.ops.is_empty(), "{out:?}");
-
     // Not junk goes back to the Inbox.
     let out = submit(&env, report(msgs[0].id.0, Report::NotJunk), waiting())
         .await
@@ -586,6 +580,51 @@ async fn report_moves_to_junk_and_back_through_beta_report_message() {
         env.reader().message(msgs[0].id).unwrap().unwrap().folder,
         msgs[0].folder
     );
+
+    submit(&env, report(msgs[0].id.0, Report::Junk), waiting())
+        .await
+        .unwrap();
+    let trash = env
+        .reader()
+        .folders(env.account())
+        .unwrap()
+        .into_iter()
+        .find(|f| f.well_known.as_deref() == Some("deleteditems"))
+        .unwrap();
+    for (m, r, read) in [
+        (&msgs[0], Report::Junk, false),
+        (&msgs[1], Report::Phishing, true),
+    ] {
+        submit(
+            &env,
+            WriteRequest::MarkRead {
+                messages: vec![m.id.0],
+                read,
+            },
+            waiting(),
+        )
+        .await
+        .unwrap();
+        let out = submit(&env, report(m.id.0, r), waiting()).await.unwrap();
+        assert_eq!(out.ops.len(), if read { 1 } else { 2 });
+        assert!(out.ops.iter().all(|op| op.state == "done"), "{out:?}");
+        let local = env.reader().message(m.id).unwrap().unwrap();
+        let server = mbox().message(&m.remote_id).unwrap();
+        assert_eq!((local.folder, local.is_read), (trash.id, true));
+        assert_eq!(
+            (server.folder_id.as_str(), server.is_read),
+            (trash.remote_id.as_str(), true)
+        );
+        let sent = env
+            .mock
+            .requests()
+            .into_iter()
+            .rfind(|q| q.path.ends_with("/reportMessage"))
+            .unwrap();
+        let body: serde_json::Value = serde_json::from_str(&sent.body).unwrap();
+        assert_eq!(body["ReportAction"], r.graph_action());
+        assert_eq!(body["IsMessageMoveRequested"], false);
+    }
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 4)]

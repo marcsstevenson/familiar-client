@@ -812,7 +812,7 @@ Report messages as junk, phishing or not junk. Access: `write`.
 fam mail report <MESSAGES>...
 ```
 
-Reports messages to the mail provider as junk (the default), phishing (--phishing) or not junk (--not-junk), which trains its filter. Junk and phishing go to Junk Email; not junk goes back to the Inbox. The move shows on this device at once and the report is queued for the server.
+Reports messages to the mail provider as junk (the default), phishing (--phishing) or not junk (--not-junk), which trains its filter. Messages already in Junk Email are marked read and moved to Trash when reported as junk or phishing. Other junk and phishing reports move to Junk Email. Not junk returns to the Inbox. The move shows on this device at once and the report is queued for the server.
 
 - `--dry-run`: Only show what would change.
 - `MESSAGES` (required, repeatable): Local message IDs.
