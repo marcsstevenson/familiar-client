@@ -80,7 +80,7 @@ pub(crate) fn config() -> Result<Option<familiar_config::Config>, CommandError> 
 }
 
 /// An RFC 3339 UTC time from Unix seconds.
-pub(crate) fn rfc3339(secs: u64) -> String {
+pub fn rfc3339(secs: u64) -> String {
     let days = (secs / 86_400) as i64;
     let rem = secs % 86_400;
     // Howard Hinnant's civil_from_days.
