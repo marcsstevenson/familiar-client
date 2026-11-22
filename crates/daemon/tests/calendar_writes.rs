@@ -517,7 +517,12 @@ async fn events_added_changed_answered_and_deleted() {
     .await
     .unwrap();
     assert!(env.mock.mailbox(KEY).event(&invite_id).is_none());
-    assert!(local_named(&env, "Club AGM").is_empty());
+    // A calendar round that read the server just before the decline can put
+    // the event back for a moment; the next round removes it.
+    env.until("the declined event gone", LIMIT, |e| {
+        local_named(e, "Club AGM").is_empty()
+    })
+    .await;
 
     // Your own meeting: no invitation to answer, and cancelling needs --yes.
     let err = submit(
