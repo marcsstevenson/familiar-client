@@ -594,6 +594,29 @@ async fn gmail_drafts_and_sending() {
         .await;
     assert!(refused.is_err(), "{refused:?}");
     assert_eq!(env.mock.mailbox("default").sent().len(), 3);
+
+    // A verified alias with no name of its own goes out with the account's.
+    env.write_ok(compose(
+        ComposeRequest {
+            from: Some(Recipient {
+                name: String::new(),
+                address: "kea@familiarclient.com".into(),
+            }),
+            subject: Some("From the alias".into()),
+            html: "<p>hi</p>".into(),
+            to: to("ann@acme.example"),
+            ..ComposeRequest::default()
+        },
+        true,
+    ))
+    .await;
+    let sent = env.mock.mailbox("default").sent();
+    let raw = String::from_utf8_lossy(&sent.last().unwrap().raw).into_owned();
+    let from = raw.lines().find(|l| l.starts_with("From:")).unwrap();
+    assert!(
+        from.contains("Kea") && from.contains("<kea@familiarclient.com>"),
+        "{from}"
+    );
     env.daemon.stop().await;
 }
 #[tokio::test(flavor = "multi_thread")]

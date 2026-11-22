@@ -336,6 +336,17 @@ impl GmailOps {
         }
     }
 
+    /// The From mailbox: the account's own, or an alias, which takes the
+    /// account's display name when it has none of its own.
+    fn sender(&self, from: Option<&Recipient>) -> Result<Mailbox, Error> {
+        let own = self.own_address()?;
+        Ok(match from {
+            None => own,
+            Some(r) if r.name.trim().is_empty() => (own.0, r.address.clone()),
+            Some(r) => (r.name.clone(), r.address.clone()),
+        })
+    }
+
     /// Points the local draft at its new Gmail message.
     fn set_remote(&self, local: i64, remote: &str) {
         let r = self
@@ -352,10 +363,7 @@ impl GmailOps {
     async fn create_draft(&self, d: &DraftOp) -> Result<OpResult, Error> {
         let pr = Priority::User;
         let mut o = Outgoing {
-            from: d.from.as_ref().map_or_else(
-                || self.own_address(),
-                |r| Ok((r.name.clone(), r.address.clone())),
-            )?,
+            from: self.sender(d.from.as_ref())?,
             to: mailboxes(&d.to),
             cc: mailboxes(&d.cc),
             bcc: mailboxes(&d.bcc),
@@ -416,8 +424,8 @@ impl GmailOps {
             return Err(Error::NotFound("the draft was never saved to Gmail".into()));
         }
         let mut o = Outgoing::from_raw(&self.api.raw(&m.remote_id, pr).await?);
-        if let Some(f) = &u.from {
-            o.from = (f.name.clone(), f.address.clone());
+        if u.from.is_some() {
+            o.from = self.sender(u.from.as_ref())?;
         }
         if let Some(s) = &u.subject {
             o.subject = s.clone();
