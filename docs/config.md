@@ -1,6 +1,6 @@
 # config.toml
 
-Everything a person sets in Familiar lives in one TOML file: accounts, signatures, calendar purposes, sync settings, views, rules, keys and agent permissions. It never holds passwords, tokens or mail; tokens are in the OS keychain. Start from [`config.example.toml`](../config.example.toml).
+Everything a person sets in Familiar lives in one TOML file: accounts, signatures, calendar purposes, sync settings, views, rules, keys and agent permissions. It never holds passwords, tokens or mail; tokens are in the OS keychain. A new install doesn't need to write it by hand: `fam account add` (or the desktop app's Welcome screen) creates it and adds each account from its sign-in, and `fam init` creates just the commented starting file. For a full example, see [`config.example.toml`](../config.example.toml).
 
 Your own config has your signatures in it, so keep it in a private repo, not in the public Familiar repo.
 

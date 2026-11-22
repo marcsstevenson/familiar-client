@@ -219,6 +219,21 @@ impl Auth {
 
     /// Signs in and saves the tokens. Replaces any earlier sign-in for the account.
     pub fn login(&self, req: &LoginRequest, prompt: &dyn Prompt) -> Result<TokenRecord> {
+        let record = self.sign_in(req, prompt)?;
+        self.save(&record)?;
+        Ok(record)
+    }
+
+    /// Saves a sign-in from [`Auth::sign_in`] under `record.account`, replacing any
+    /// earlier one.
+    pub fn save(&self, record: &TokenRecord) -> Result<()> {
+        validate_account(&record.account).map_err(AuthError::usage)?;
+        self.store.save(record)
+    }
+
+    /// Signs in without saving, for a new account whose name is chosen from who signed
+    /// in (`fam account add`). `req.account` is only a placeholder for messages.
+    pub fn sign_in(&self, req: &LoginRequest, prompt: &dyn Prompt) -> Result<TokenRecord> {
         validate_account(&req.account).map_err(AuthError::usage)?;
         if req.authority.trim().is_empty() {
             return Err(AuthError::usage("the sign-in authority is empty"));
@@ -295,7 +310,6 @@ impl Auth {
             signed_in_at: now,
             refreshed_at: None,
         };
-        self.store.save(&record)?;
         Ok(record)
     }
 
@@ -491,7 +505,30 @@ impl std::fmt::Debug for GoogleClient {
     }
 }
 
+/// Familiar's own Google client (a Desktop app in Marc's unverified production project),
+/// used when there is no `google-client.json` and no `[app.google] client_file`. It is
+/// built in from `FAMILIAR_GOOGLE_CLIENT_ID` and `FAMILIAR_GOOGLE_CLIENT_SECRET` at
+/// compile time, so it never sits in the repo; a build without them has none. The
+/// project is capped at 100 users over its lifetime, and people see Google's "hasn't
+/// verified this app" page once when they sign in.
+const BUILTIN_GOOGLE_CLIENT: Option<(&str, &str)> = match (
+    option_env!("FAMILIAR_GOOGLE_CLIENT_ID"),
+    option_env!("FAMILIAR_GOOGLE_CLIENT_SECRET"),
+) {
+    (Some(id), Some(secret)) if !id.is_empty() && !secret.is_empty() => Some((id, secret)),
+    _ => None,
+};
+
 impl GoogleClient {
+    /// Familiar's own Google client, when this build has one; see
+    /// [`BUILTIN_GOOGLE_CLIENT`].
+    pub fn builtin() -> Option<Self> {
+        BUILTIN_GOOGLE_CLIENT.map(|(id, secret)| Self {
+            id: id.into(),
+            secret: secret.into(),
+        })
+    }
+
     /// Reads the client JSON Google Cloud gives you for a Desktop app client.
     pub fn load(path: &std::path::Path) -> Result<Self> {
         let text = std::fs::read_to_string(path).map_err(|e| {

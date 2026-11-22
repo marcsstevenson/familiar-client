@@ -11,6 +11,7 @@ mod compose;
 mod config_watch;
 mod daemon;
 mod list;
+mod onboarding;
 mod reading;
 mod ui_socket;
 
@@ -234,18 +235,17 @@ fn daemon_state(state: tauri::State<'_, daemon::Shared>) -> daemon::DaemonState 
     state.get()
 }
 
-/// Opens config.toml in the system's default app for `.toml` files. Windows
+/// Opens config.toml in the system's default app for `.toml` files, creating it from
+/// the starting template first if there is none. Windows
 /// often has none, so it falls back to Notepad there. Returns the path.
 #[tauri::command]
 fn open_config() -> Result<String, CommandError> {
     let (path, _) = familiar_config::paths::resolve(None)
         .ok_or_else(|| CommandError::internal("no home folder to look for config.toml in"))?;
-    if !path.exists() {
-        return Err(CommandError::usage(format!(
-            "there is no config file at {}",
-            path.display()
-        )));
-    }
+    // No config yet: start one from the commented template, so the cog always
+    // opens something to edit.
+    familiar_config::template::create(&path)
+        .map_err(|e| CommandError::internal(format!("couldn't create {}: {e}", path.display())))?;
     let opened = open::that_detached(&path);
     #[cfg(windows)]
     let opened = opened.or_else(|_| open::with_detached(&path, "notepad"));
@@ -345,6 +345,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             ui_info,
             open_config,
+            onboarding::onboarding_state,
             config_watch::restart_app,
             run,
             daemon_state,

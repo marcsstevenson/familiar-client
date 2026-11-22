@@ -41,6 +41,36 @@ export type CommandError = {
 
 export type Access = "read" | "draft" | "write" | "send" | "delete" | "rules";
 
+export type AccountAddInput = {
+  /** Use a device code (enter it at microsoft.com/devicelogin on any device) instead of opening a browser here. Microsoft only. */
+  device_code?: boolean;
+  /** The address to sign in as, sent as a hint to the sign-in page. A sign-in as anyone else is refused. */
+  email?: string | null;
+  /** The account's name in Familiar, used with `--account` and in searches (`account:hotmail`). Defaults to one made from the address, such as `hotmail`, `gmail` or the first part of a work domain. */
+  name?: string | null;
+  /** `microsoft` (the default) or `gmail`. */
+  provider?: AddProvider;
+};
+
+export type AccountAdded = {
+  /** The account's name in Familiar. */
+  account: string;
+  /** The config file the account was written to. */
+  config: string;
+  /** True when this command created the config file. */
+  created_config: boolean;
+  /** The name on the account, if the sign-in gave one. */
+  display_name?: string | null;
+  /** The address that signed in. */
+  email: string;
+  /** True when a running famd was asked to stop so it restarts with the new account (the desktop app starts it again by itself). */
+  famd_restarted: boolean;
+  /** `microsoft` or `gmail`. */
+  provider: AddProvider;
+  /** The sign-in tenant written to config.toml: `consumers` or a tenant ID. Microsoft only. */
+  tenant?: string | null;
+};
+
 export type AccountCheck = {
   /** The account's key in `config.toml`. */
   account: string;
@@ -134,6 +164,8 @@ export type AccountSyncStatus = {
   /** Unread messages. */
   unread: number;
 };
+
+export type AddProvider = "microsoft" | "gmail";
 
 export type AgentStatusInput = Record<string, never>;
 
@@ -1100,6 +1132,15 @@ export type HitSource = "local" | "online";
 
 export type Importance = "low" | "normal" | "high";
 
+export type InitInput = Record<string, never>;
+
+export type InitOutput = {
+  /** The config file. */
+  config: string;
+  /** True when this run created it; false when it was already there. */
+  created: boolean;
+};
+
 export type Invitation = {
   /** The calendar it is in, when synced. */
   calendar?: string | null;
@@ -1965,6 +2006,8 @@ export type WriteOutput = {
 
 /** Every command, by dotted name, with its input and output types. */
 export interface Commands {
+  /** Add a Microsoft or Gmail account */
+  "account.add": { input: AccountAddInput; output: AccountAdded };
   /** Show what agents may do */
   "agent.status": { input: AgentStatusInput; output: AgentStatusOutput };
   /** Call Microsoft Graph directly (GET only) */
@@ -2035,6 +2078,8 @@ export interface Commands {
   "followup.cancel": { input: FollowUpCancelInput; output: FollowUpListOutput };
   /** List follow-up reminders for mail nobody has replied to */
   "followup.list": { input: FollowUpListInput; output: FollowUpListOutput };
+  /** Create config.toml for a new install */
+  "init": { input: InitInput; output: InitOutput };
   /** Move messages to Archive */
   "mail.archive": { input: MailArchiveInput; output: WriteOutput };
   /** List or save a message's attachments */
@@ -2104,6 +2149,7 @@ export type CommandName = keyof Commands;
 
 /** Every command name, in order. */
 export const COMMAND_NAMES = [
+  "account.add",
   "agent.status",
   "api",
   "audit.list",
@@ -2139,6 +2185,7 @@ export const COMMAND_NAMES = [
   "followup.add",
   "followup.cancel",
   "followup.list",
+  "init",
   "mail.archive",
   "mail.attachments",
   "mail.check-spam",
