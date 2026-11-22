@@ -23,6 +23,12 @@ most.
   (`SyncPolicy::contacts_interval`), replacing the store's copy, so a
   contact deleted in Outlook goes too. Uses `Contacts.Read`, consented at
   sign-in. A mailbox that refuses is logged and tried again next hour.
+- **Google contacts.** For a Gmail account, famd lists the saved contacts
+  (People API `people.connections`) on the same hourly schedule and
+  replaces the store's copy the same way. Uses `contacts.readonly`, asked
+  for at Google sign-in. Gmail's automatic "other contacts" aren't read:
+  they are people the account has mailed, which past correspondents
+  already cover.
 - **Past correspondents.** Everyone mail came from (outside Sent Items,
   Drafts and Outbox, and not the account itself) and everyone mail in Sent
   Items went to (To and Cc), per account, with counts and the last date.
