@@ -8,7 +8,7 @@ Today a new person who opens Familiar gets an empty window and an error. Nothing
 
 The key decisions proposed are:
 
-- **Sign in is the whole wizard.** The first screen has one main button, "Add a Microsoft account". Familiar signs in through the system browser and works out the email, display name and tenant from the sign-in itself. Then it writes `config.toml` for the person. No forms come first.
+- **Sign in is the whole wizard.** The first screen offers a choice of two equal buttons: **Microsoft** (Outlook.com, Hotmail, work or school) and **Gmail**. Familiar signs in through the system browser and works out the email, display name and, for Microsoft, the tenant from the sign-in itself. Then it writes `config.toml` for the person. No forms come first.
 - **Config stays the source of truth.** The GUI writes the same `config.toml` a person would write by hand, through the existing comment-preserving `ConfigDocument`. A restored config skips the wizard and goes to "Welcome back", which only asks for sign-ins.
 - **Every step is a registry command.** The new commands are `fam init` and `fam account add`, so the CLI, agents and the GUI share one path. This is the project's parity rule applied to onboarding.
 - **Land in the inbox in seconds, not after the sync.** famd already stores the newest Inbox page first. The app opens on the inbox while the first sync carries on, with progress shown per account in the status bar.
@@ -76,15 +76,17 @@ The same check runs again when the window gets focus. A person who fixes the con
 One screen, shown inside the main window rather than a separate one:
 
 - The kea icon, "Familiar", and one line: "Fast, local-first mail and calendar. Your mail stays on this computer and goes straight to Microsoft, with no server in between."
-- Main button: **Add a Microsoft account** (Outlook.com, Hotmail, or a work or school account).
-- Gmail is shown as "Gmail: coming later" until Phase G ships, then becomes a second button (see Gmail below).
+- "Add your first account", with two buttons of equal weight side by side:
+  - **Microsoft**: Outlook.com, Hotmail, Live, or a work or school account.
+  - **Gmail**: a personal Google account (see Gmail below).
+- Under them, one line helps anyone unsure which to pick: "Your address ends in @gmail.com? Choose Gmail. Hotmail, Outlook or a work address? Choose Microsoft." When the person has typed nothing, Familiar can't guess, so it doesn't preselect.
 - Smaller links: **I already have a config.toml** (choose a file to copy into place, or show where Familiar looks), and **Set up from the terminal**, which shows `fam init` and `fam account add`.
 
 There is no theme picker, no feature tour and no marketing. The theme follows the system and can be changed later.
 
 ### 2. Sign in
 
-When **Add a Microsoft account** is pressed:
+When **Microsoft** is pressed:
 
 1. Familiar starts the existing PKCE flow in the system browser with authority `common` and `prompt=select_account`. That way one button works for both personal and work accounts, and anyone signed in to several accounts can pick one.
 2. The window shows "Finish signing in in your browser…" with **Cancel** and **Use a code instead**. The second option is the device-code flow, which helps when the browser won't hand back to the loopback port.
@@ -185,14 +187,37 @@ All copy goes through one pass with the project's UX-copy style (plain, sentence
 Two new registry commands, so the GUI, `fam`, MCP and the palette all get them:
 
 - **`fam init`** creates the data folder and the template config if neither exists, prints the path, and suggests `fam account add` next. If a config exists it says so and changes nothing. It is idempotent.
-- **`fam account add [--name <n>] [--device-code] [--email <hint>]`** runs the sign-in described above, writes the account to the config, saves the tokens, and asks a running famd to restart. With `--json` it returns the account it added. An agent session can't run it, because it needs a person in a browser, so agent sources get a clear refusal.
+- **`fam account add [--provider microsoft|gmail] [--name <n>] [--device-code] [--email <hint>]`** (provider defaults to `microsoft`; `--device-code` is Microsoft only, because Google's device flow doesn't allow Gmail scopes) runs the sign-in described above, writes the account to the config, saves the tokens, and asks a running famd to restart. With `--json` it returns the account it added. An agent session can't run it, because it needs a person in a browser, so agent sources get a clear refusal.
 - **`fam account remove <name>`** is a later item. It signs out and removes the table from the config. Deleting that account's local mail is a separate, confirmed step, because it is destructive.
 
 `docs/sign-in.md` and `docs/config.md` change their first steps to `fam init`, then `fam account add`. Hand-writing the config stays documented for people who prefer it.
 
 ## Gmail
 
-When Phase G ships, a **Gmail** button appears on the Welcome screen. Gmail needs the person's own Google Cloud project (Gmail Plan, route B), which is a ten-minute job in Google's console and the hardest step in the whole first run. The button therefore opens a short guided page: what's needed, a link to `docs/gmail-setup.md`, and two fields for the client ID and secret, which go into `[app.google]`. The Google sign-in follows. If Marc's own project is ever shared with friends, this page can be skipped for them, but the 100-user lifetime cap argues against that for anyone else.
+Gmail sits beside Microsoft on the Welcome screen, and in **Add another account**, so the person chooses. Gmail accounts already sync (Phase G: `provider = "gmail"`, Google client from `google-client.json` beside the config, or `[app.google] client_file`).
+
+When **Gmail** is pressed:
+
+1. Familiar finds a Google client (see the choice below). Then it opens Google's sign-in in the system browser: PKCE, a loopback redirect, `prompt=select_account consent`, and every Gmail, Calendar and People scope at once, as `familiar-auth` already does.
+2. The waiting screen warns about the one surprise first: "Google will say it hasn't verified Familiar. Choose **Advanced**, then **Go to Familiar**. Familiar is open source and talks only to Google, from this computer." Without that line people stop at Google's warning page.
+3. On return, the ID token's `email` and `name` become `email` and `display_name`. The account is written with `provider = "gmail"` and no tenant. The suggested name is `gmail` (`gmail2` and so on if it's taken), or the first label of the domain for a Google Workspace address. Send-as aliases come from Gmail itself, so the alias checklist item is ticked already for Gmail accounts.
+4. Then famd restarts and the inbox opens, as for Microsoft.
+
+Gmail's failures:
+
+| What went wrong | What Familiar says and offers |
+| --- | --- |
+| Person stopped at "Google hasn't verified this app" | "Sign-in didn't finish." Offers **Try again**, with the Advanced, then Go to Familiar steps shown again |
+| Some permission boxes left unticked on Google's consent page | "Familiar needs every box ticked to read and send your mail." Offers **Try again** (Google shows the boxes again because of `prompt=consent`) |
+| Workspace admin blocks the app | "Your organisation's Google admin needs to allow Familiar." Offers **Copy a request for your admin**, with the client ID to allow |
+| No Google client available | The bring-your-own page: what's needed, a link to `docs/gmail-setup.md`, and **Choose google-client.json**, which copies the file beside the config |
+
+**Whose Google client.** Microsoft needs no setup because Familiar ships its client ID. Gmail can't offer a real choice unless it does the same. The Gmail Plan recommended against shipping one, but that was before new users were in scope. Now there are two ways:
+
+- **Ship Familiar's own Google client** (Marc's unverified production project) built in, with `google-client.json` or `client_file` as an override. Gmail then needs no setup. The costs: the unverified warning on every sign-in, a cap of 100 users over the project's lifetime, and new users see Marc's project name on the consent screen. Google treats a desktop app's client secret as not secret, so shipping it is allowed. Verification with a CASA assessment lifts the cap and the warning if Familiar ever grows past that.
+- **Bring your own project** for everyone except Marc. Every new Gmail user spends ten minutes in Google Cloud console first, so Gmail is a real choice only for technical people.
+
+This plan recommends shipping the client for now, since the audience is a small group of new users, and counting sign-ins against the cap in the release notes. The bring-your-own page stays for anyone who wants their own.
 
 ## Testing
 
@@ -206,8 +231,8 @@ When Phase G ships, a **Gmail** button appears on the Welcome screen. Gmail need
 | WP | Work | Depends on | Route | Done when |
 | --- | --- | --- | --- | --- |
 | OB.1 | **famd with no accounts, restart on account change.** famd idles instead of exiting; GUI and CLI restart it after an account change | — | PR (daemon) | Fresh install: GUI starts famd with no config, adds an account, sync begins with no manual step |
-| OB.2 | **`fam init` and `fam account add`.** Template config; `common` sign-in; `tid` mapped to `tenant`; name suggestion; config write; mock `common` support | OB.1 | PR (auth and config writes) | Both mock users get valid configs; a live Hotmail add matches Marc's config |
-| OB.3 | **Welcome, sign-in and Welcome back screens.** State detection; error table; settings cog creates the config | OB.2 | PR (touches sign-in) | A new Windows profile goes from first launch to inbox with no terminal |
+| OB.2 | **`fam init` and `fam account add`.** Template config; `--provider microsoft\|gmail`; Microsoft `common` sign-in with `tid` mapped to `tenant`; Gmail sign-in writing `provider = "gmail"`; the built-in Google client if Marc agrees; name suggestion; config write; mock `common` support | OB.1 | PR (auth and config writes) | Mock Microsoft and Gmail users get valid configs; live Hotmail and Gmail adds match Marc's config |
+| OB.3 | **Welcome, sign-in and Welcome back screens.** State detection; Microsoft and Gmail side by side; both error tables; bring-your-own Google client page; settings cog creates the config | OB.2 | PR (touches sign-in) | A new Windows profile goes from first launch to inbox with no terminal, for a Microsoft account and for a Gmail one |
 | OB.4 | **First-sync progress.** Folder totals kept; status bar estimate; first-sync copy in list, search and calendar | OB.3 | Direct to main if no schema change, otherwise PR | Progress counts move during a mock first sync and disappear after it |
 | OB.5 | **Empty states.** Every row in the empty-states table | OB.3 | Direct to main (UI copy) | Each state checked in the browser harness |
 | OB.6 | **Get started checklist and keyboard teaching.** Panel, `onboarding.json`, `?` sheet, one-time tips, context-menu keys | OB.3 | Direct to main (UI) | Items tick from config edits; tips stop after three showings and when turned off |
@@ -225,10 +250,9 @@ Answered by Marc on 23 Nov 2026:
 3. **famd restart:** restarting famd after an account change is accepted. No live config reload.
 4. **Signatures:** they stay in the Get started checklist, not in the first run.
 5. **Keyboard tips:** on by default, with a "Don't show tips" switch.
+6. **Gmail in onboarding** (Marc, 23 Nov): the first run offers Gmail beside Microsoft so the person chooses. See Gmail above.
 
-Still open: whether importing server rules and folder favourites (the rest of WP 4.6) also becomes Get started items once WP 4.3 is done.
-
-**Since the plan was written:** Gmail accounts now sync (Phase G, `provider = "gmail"`, Google client in `google-client.json` beside the config). The Gmail button can come in with OB.3 rather than waiting.
+Still open: whether Familiar ships Marc's Google client so Gmail needs no setup (recommended above) or Gmail users bring their own project, and whether importing server rules and folder favourites (the rest of WP 4.6) also becomes Get started items once WP 4.3 is done.
 
 ## Sources
 
