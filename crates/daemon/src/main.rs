@@ -56,13 +56,19 @@ fn run() -> Result<(), (u8, String)> {
     let config_err = |m: String| (3u8, m);
     let (path, _) = familiar_config::paths::resolve(None)
         .ok_or_else(|| config_err("no config path; set FAMILIAR_CONFIG".into()))?;
-    let config =
-        familiar_config::load(&path).map_err(|e| config_err(format!("{}: {e}", path.display())))?;
+    // A new install has no config yet. famd still starts, so the desktop app
+    // has a daemon to talk to while the person adds their first account; the
+    // app restarts famd once the config names one.
+    let config = if path.exists() {
+        familiar_config::load(&path).map_err(|e| config_err(format!("{}: {e}", path.display())))?
+    } else {
+        familiar_config::Config::default()
+    };
     if config.accounts.is_empty() {
-        return Err(config_err(format!(
-            "{} has no [accounts]; add one and sign in with `fam auth login`",
+        log(&format!(
+            "no accounts in {} yet; add one and restart famd to start syncing",
             path.display()
-        )));
+        ));
     }
     let policy = SyncPolicy::from_config(&config.sync)
         .and_then(|p| p.with_calendar(&config.calendar))
