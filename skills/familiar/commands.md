@@ -3,6 +3,21 @@
 
 Every command takes `--json`. Access is what `[agent]` must allow (see SKILL.md). `fam schema --json` has the full input and output schemas.
 
+## account.add
+
+Add a Microsoft or Gmail account. Access: `write`.
+
+```
+fam account add
+```
+
+Signs in with the system browser (or a device code with --device-code; Microsoft only), then writes the account to config.toml from who signed in: email, display name and, for Microsoft, the tenant. Creates config.toml if there is none, and restarts a running famd so it starts syncing the account. Needs a person: agents can't add accounts.
+
+- `--device-code`: Use a device code (enter it at microsoft.com/devicelogin on any device) instead of opening a browser here. Microsoft only.
+- `--email <email>`: The address to sign in as, sent as a hint to the sign-in page. A sign-in as anyone else is refused.
+- `--name <name>`: The account's name in Familiar, used with `--account` and in searches (`account:hotmail`). Defaults to one made from the address, such as `hotmail`, `gmail` or the first part of a work domain.
+- `--provider <microsoft|gmail>`: Which kind of account to add.
+
 ## agent.status
 
 Show what agents may do. Access: `read`.
@@ -598,6 +613,16 @@ Lists the reminders set with fam followup add or fam draft send --remind-days, s
 
 - `--account <account>`: Only this account (its name in config.toml).
 - `--due`: Only reminders that are due (no reply, and the time is up).
+
+## init
+
+Create config.toml for a new install. Access: `write`.
+
+```
+fam init
+```
+
+Creates the config folder and a short, commented config.toml if there is none. An existing file is never changed. Add accounts with `fam account add`.
 
 ## mail.archive
 

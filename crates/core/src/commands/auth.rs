@@ -29,29 +29,33 @@ impl From<AuthError> for CommandError {
     }
 }
 
-/// The Google client file: `[app.google] client_file`, else `google-client.json` next to
-/// config.toml.
-pub(crate) fn google_client_file(
-    config: &familiar_config::Config,
-) -> Result<std::path::PathBuf, CommandError> {
+/// The Google client to sign in with: the file named by `[app.google] client_file`, else
+/// `google-client.json` next to config.toml if it exists, else Familiar's own.
+pub(crate) fn google_client(
+    config: Option<&familiar_config::Config>,
+) -> Result<familiar_auth::GoogleClient, CommandError> {
     if let Some(f) = config
-        .app
-        .google
-        .as_ref()
+        .and_then(|c| c.app.google.as_ref())
         .and_then(|g| g.client_file.as_ref())
     {
-        return Ok(std::path::PathBuf::from(f));
+        return Ok(familiar_auth::GoogleClient::load(std::path::Path::new(f))?);
     }
-    let (path, _) = familiar_config::paths::resolve(None).ok_or_else(|| {
+    if let Some((path, _)) = familiar_config::paths::resolve(None) {
+        let file = path
+            .parent()
+            .unwrap_or(std::path::Path::new("."))
+            .join("google-client.json");
+        if file.exists() {
+            return Ok(familiar_auth::GoogleClient::load(&file)?);
+        }
+    }
+    familiar_auth::GoogleClient::builtin().ok_or_else(|| {
         CommandError::new(
             ErrorKind::Config,
-            "no config.toml, so no Google client file",
+            "this build of Familiar has no Google client: put your own google-client.json \
+             next to config.toml (docs/gmail-setup.md says how to make one)",
         )
-    })?;
-    Ok(path
-        .parent()
-        .unwrap_or(std::path::Path::new("."))
-        .join("google-client.json"))
+    })
 }
 
 fn open() -> Result<Auth, CommandError> {
@@ -238,7 +242,7 @@ pub struct AuthLoginInput {
     pub client_id: Option<String>,
 }
 
-struct NotifyPrompt<'a>(&'a dyn Fn(&str));
+pub(crate) struct NotifyPrompt<'a>(pub(crate) &'a dyn Fn(&str));
 
 impl Prompt for NotifyPrompt<'_> {
     fn show(&self, message: &str) {
@@ -269,8 +273,7 @@ impl Command for AuthLogin {
         let auth = open()?;
         let earlier = auth.record(&input.account)?;
         if let Some(a) = configured.filter(|a| a.provider == familiar_config::Provider::Gmail) {
-            let config = config.as_ref().expect("configured implies a config");
-            let client = familiar_auth::GoogleClient::load(&google_client_file(config)?)?;
+            let client = google_client(config.as_ref())?;
             let req = LoginRequest {
                 account: input.account,
                 authority: familiar_auth::GOOGLE_AUTHORITY.into(),

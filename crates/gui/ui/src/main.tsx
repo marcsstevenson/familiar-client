@@ -4,6 +4,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { uiInfo } from "./api";
 import { App } from "./App";
+import { Welcome, onboardingState } from "./onboarding/Welcome";
 import { ComposeWindow, composeSpec, installComposeKeys } from "./compose";
 import { initTheme } from "./theme";
 import { ReadingPane } from "./reading/ReadingPane";
@@ -24,6 +25,11 @@ const editorId = request?.kind === "resume" ? request.editor : request ? crypto.
 const recovered = request?.kind === "resume" ? await readEditor(request.editor) : undefined;
 const spec = request?.kind === "resume" ? recovered?.spec : request;
 const mainWindow = !request && !reader;
+// First run: until an account is signed in, the main window shows Welcome.
+const onboarding = mainWindow && !info.bench
+  ? await onboardingState().catch((e) => { notify("Couldn't check the setup: " + e, true); return null; })
+  : null;
+const welcome = onboarding && onboarding.stage !== "ready" ? onboarding : null;
 const active = readSession<string>("active");
 const windowKey = editorId ?? (reader ? "reader/" + reader[1] : "main");
 const rememberFocus = () => writeSession("active", windowKey);
@@ -55,7 +61,7 @@ render(
         {(d) => <SpamDialog message={d().message} saved={d().saved} onClose={() => setSpamDialog(null)} />}
       </Show>
     </main>
-  ) : mainWindow ? <App info={info} /> : <p>This editor's working copy is unavailable.</p>,
+  ) : welcome ? <Welcome platform={info.platform} state={welcome} /> : mainWindow ? <App info={info} /> : <p>This editor's working copy is unavailable.</p>,
   document.getElementById("root")!,
 );
 async function reopenWindows() {
@@ -67,7 +73,7 @@ async function reopenWindows() {
     await invoke("open_compose", { spec: { kind: "resume", editor }, focus: active === editor });
   }
 }
-if (mainWindow && !info.bench) void reopenWindows().catch(e => notify("Couldn't reopen a window: " + e, true));
+if (mainWindow && !info.bench && !welcome) void reopenWindows().catch(e => notify("Couldn't reopen a window: " + e, true));
 if (mainWindow && info.bench) {
   // A bench that fails still reports, so the harness shows why.
   void import("./bench")

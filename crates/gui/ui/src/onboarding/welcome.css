@@ -1,0 +1,109 @@
+/* First run: Welcome, Welcome back and a config with problems. */
+.welcome-app {
+  grid-template-rows: var(--titlebar-h) 1fr;
+  background: var(--bg);
+}
+.welcome {
+  max-width: 560px;
+  width: 100%;
+  margin: 0 auto;
+  padding: var(--space-6) var(--space-5);
+  overflow: auto;
+  color: var(--text);
+}
+.welcome-icon {
+  width: 56px;
+  height: 56px;
+}
+.welcome h1 {
+  font-size: var(--text-xl);
+  margin: var(--space-4) 0 var(--space-3);
+}
+.welcome h2 {
+  font-size: var(--text-lg);
+  margin: var(--space-6) 0 var(--space-3);
+}
+.welcome p {
+  line-height: 1.5;
+}
+.welcome button {
+  border: 1px solid var(--border);
+  background: var(--bg);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-4);
+  cursor: pointer;
+}
+.welcome button:hover:not(:disabled) {
+  background: var(--bg-hover);
+}
+.welcome button:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.welcome button.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--text-on-accent);
+  font-weight: 600;
+}
+.welcome-choices {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-4);
+}
+.welcome .welcome-choice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+  padding: var(--space-5);
+  text-align: left;
+  border-radius: var(--radius-md);
+}
+.welcome-choice-title {
+  font-size: var(--text-lg);
+  font-weight: 600;
+}
+.welcome-choice-hint,
+.welcome-note,
+.welcome-small {
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+}
+.welcome-small {
+  margin-top: var(--space-6);
+}
+.welcome-wait {
+  border-left: 3px solid var(--accent);
+  padding-left: var(--space-4);
+}
+.welcome-error {
+  margin-top: var(--space-5);
+  border-left: 3px solid var(--danger);
+  padding-left: var(--space-4);
+}
+.welcome-errors,
+.welcome-accounts {
+  list-style: none;
+  padding: 0;
+}
+.welcome-accounts li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--border);
+}
+.welcome-actions {
+  display: flex;
+  gap: var(--space-3);
+}
+.welcome code {
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  overflow-wrap: anywhere;
+}
+@media (max-width: 520px) {
+  .welcome-choices { grid-template-columns: 1fr; }
+}

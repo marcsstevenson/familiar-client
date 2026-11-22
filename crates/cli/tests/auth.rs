@@ -10,6 +10,8 @@ use std::process::Command;
 fn fam(mock: &MockGraph, data: &Path, args: &[&str]) -> (i32, String, String) {
     let out = Command::new(env!("CARGO_BIN_EXE_fam"))
         .args(args)
+        // Run as a person even when the tests themselves run under an agent.
+        .env_remove("CLAUDECODE")
         .env("FAMILIAR_LOGIN_URL", mock.login_url())
         .env("FAMILIAR_GRAPH_URL", mock.base_url())
         .env("FAMILIAR_TOKEN_STORE", "file")
@@ -210,6 +212,111 @@ fn accounts_come_from_config() {
     // A signed-out configured account checked by name needs sign-in (exit 4).
     let (code, _, _) = fam(&mock, &data, &["auth", "status", "parklands", "--check"]);
     assert_eq!(code, 4);
+
+    let _ = std::fs::remove_dir_all(&data);
+    let _g = rt.enter();
+    drop(mock);
+}
+
+/// Onboarding (WP OB.2): `fam account add` writes the account from who signed in, so a
+/// new install needs no hand-written config.
+#[test]
+fn account_add_writes_config_from_the_sign_in() {
+    let rt = tokio::runtime::Runtime::new().unwrap();
+    let mut hotmail = Mailbox::small();
+    hotmail.user.user_principal_name = "marc@hotmail.example".into();
+    hotmail.user.display_name = "Marc Hotmail".into();
+    let mut parklands = Mailbox::small();
+    parklands.user.user_principal_name = "marc@parklands.example".into();
+    let mock = rt
+        .block_on(
+            MockGraph::builder()
+                .mailbox("hotmail", hotmail)
+                .tenant("hotmail", CONSUMER_TENANT)
+                .mailbox("parklands", parklands)
+                .device_interval(0)
+                .start(),
+        )
+        .unwrap();
+    let data = data_dir("account-add");
+    let config = data.join("config.toml");
+
+    // `fam init` makes a config once and then leaves it alone.
+    let v = json(&fam(&mock, &data, &["init", "--json"]));
+    assert_eq!(v["created"], true);
+    let v = json(&fam(&mock, &data, &["init", "--json"]));
+    assert_eq!(v["created"], false);
+    std::fs::remove_file(&config).unwrap();
+
+    // A personal account, with no config yet: the file is created.
+    mock.sign_in_as(Some("hotmail"));
+    let v = json(&fam(
+        &mock,
+        &data,
+        &["account", "add", "--device-code", "--json"],
+    ));
+    assert_eq!(v["account"], "hotmail");
+    assert_eq!(v["email"], "marc@hotmail.example");
+    assert_eq!(v["tenant"], "consumers");
+    assert_eq!(v["created_config"], true);
+    assert_eq!(v["famd_restarted"], false);
+
+    // A work account: the tenant is its ID, never `organizations`.
+    mock.sign_in_as(Some("parklands"));
+    let v = json(&fam(
+        &mock,
+        &data,
+        &["account", "add", "--device-code", "--json"],
+    ));
+    assert_eq!(v["account"], "parklands");
+    assert_eq!(v["tenant"], DEFAULT_TENANT);
+    assert_eq!(v["created_config"], false);
+
+    // The config is valid and names both; both are signed in under those names.
+    let v = json(&fam(&mock, &data, &["config", "validate", "--json"]));
+    assert_eq!(v["accounts"].as_array().unwrap().len(), 2, "{v}");
+    let text = std::fs::read_to_string(&config).unwrap();
+    assert!(text.contains("display_name = \"Marc Hotmail\""), "{text}");
+    assert!(text.contains("`fam account add` writes them"), "{text}");
+    let v = json(&fam(&mock, &data, &["auth", "status", "--json"]));
+    let states: Vec<_> = v["accounts"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|a| (a["account"].as_str().unwrap(), a["state"].as_str().unwrap()))
+        .collect();
+    assert_eq!(
+        states,
+        [("hotmail", "signed_in"), ("parklands", "signed_in")]
+    );
+
+    // The same address again is refused and changes nothing.
+    let (code, _, err) = fam(&mock, &data, &["account", "add", "--device-code"]);
+    assert_eq!(code, 2, "{err}");
+    assert!(err.contains("already in Familiar as `parklands`"), "{err}");
+    assert_eq!(std::fs::read_to_string(&config).unwrap(), text);
+
+    // Agents can't add accounts.
+    let out = Command::new(env!("CARGO_BIN_EXE_fam"))
+        .args(["account", "add", "--device-code"])
+        .env("CLAUDECODE", "1")
+        .env("FAMILIAR_LOGIN_URL", mock.login_url())
+        .env("FAMILIAR_TOKEN_STORE", "file")
+        .env("FAMILIAR_TOKEN_PASSPHRASE", "test passphrase")
+        .env("FAMILIAR_DATA_DIR", &data)
+        .env("FAMILIAR_CONFIG", &config)
+        .output()
+        .unwrap();
+    assert_eq!(out.status.code(), Some(2), "{out:?}");
+    assert!(String::from_utf8_lossy(&out.stderr).contains("needs a person"));
+
+    // Gmail has no device code.
+    let (code, _, err) = fam(
+        &mock,
+        &data,
+        &["account", "add", "--provider", "gmail", "--device-code"],
+    );
+    assert_eq!(code, 2, "{err}");
 
     let _ = std::fs::remove_dir_all(&data);
     let _g = rt.enter();

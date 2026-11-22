@@ -2,6 +2,8 @@
 
 `fam auth` signs Familiar in to each Microsoft account in `config.toml` and keeps the tokens on this machine.
 
+On a new install, `fam account add` does it all in one step: it signs in at `common` (any personal or work Microsoft account), then writes the account to `config.toml` (creating the file if needed) with the email, display name and tenant from the sign-in: `consumers` for personal accounts, the tenant ID for work ones. `--provider gmail` adds a Gmail account the same way ([gmail-setup.md](gmail-setup.md)). The name defaults to one made from the address (`hotmail`, `gmail`, or the first part of a work domain; `--name` sets it), a running famd is restarted so it syncs the account, and agents can't run it. `fam init` only creates the commented starting `config.toml`.
+
 ```sh
 fam auth login hotmail                  # opens the browser
 fam auth login parklands --device-code  # or: enter a code at microsoft.com/devicelogin

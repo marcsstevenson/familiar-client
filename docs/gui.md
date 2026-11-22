@@ -188,3 +188,14 @@ The window saves with the same commands as `fam draft`, so drafts round-trip bet
 - **Attachments** are dropped anywhere else in the window or picked with Attach (`file_info` and `pick_files` IPC commands, 3 MB each for now), and uploaded on the next save. Removing one the draft already has sends `remove_attachment`.
 - **Autocomplete** in To, Cc and Bcc uses `contacts.search`.
 - Bcc isn't in the store, so an opened draft reads it from the server; offline it stays as it was unless changed here.
+
+## First run
+
+Until an account is signed in, the main window shows the first-run screens from `ui/src/onboarding/` instead of the mail app. The `onboarding_state` IPC (`src/onboarding.rs`) picks one:
+
+- **No config, or a config with no accounts:** Welcome, with **Microsoft** and **Gmail** side by side. Each runs `account.add` (system browser sign-in, then the account is written to config.toml), then `restart_app` restarts famd and the window.
+- **Accounts but no sign-ins** (a restored config): Welcome back, with **Sign in** per account (`auth.login`).
+- **An invalid config:** its problems with line and column, **Open config** and **Check again**. The file is never overwritten.
+
+The state is checked again when the window gets focus. The settings cog creates config.toml from the starting template (`familiar_config::template`) when there is none. Plan: `designs/First-Run Onboarding Plan.md`.
+

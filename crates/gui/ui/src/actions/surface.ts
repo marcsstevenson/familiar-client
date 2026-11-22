@@ -7,6 +7,7 @@ import type { CommandName } from "../../../../../bindings/commands";
 export type Surface = "palette" | "terminal";
 
 export const COMMAND_SURFACE = {
+  "account.add": "palette", // the Welcome screen and Add another account
   "agent.status": "palette",
   api: "palette",
   "audit.list": "palette",
@@ -42,6 +43,7 @@ export const COMMAND_SURFACE = {
   "followup.add": "palette",
   "followup.cancel": "palette",
   "followup.list": "palette",
+  init: "palette",
   "mail.archive": "palette",
   "mail.process": "palette",
   "mail.report": "palette",

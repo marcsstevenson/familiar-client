@@ -11,6 +11,7 @@
 pub mod edit;
 pub mod model;
 pub mod paths;
+pub mod template;
 pub mod validate;
 
 pub use edit::{ConfigDocument, SignatureKind};
