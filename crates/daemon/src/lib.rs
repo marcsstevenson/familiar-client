@@ -45,13 +45,17 @@ use crate::service::{AccountHandle, Service};
 /// The crate name, used by the workspace smoke tests.
 pub const NAME: &str = env!("CARGO_PKG_NAME");
 
-/// Writes a line to stderr with a UTC timestamp.
+/// Writes a line to stderr with a UTC date and time, e.g.
+/// `famd 2026-11-23T08:05:28Z ...`. The date matters because `famd.log` is
+/// appended to across days and restarts.
 pub fn log(line: &str) {
     let secs = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| d.as_secs());
-    let (h, m, s) = (secs / 3600 % 24, secs / 60 % 60, secs % 60);
-    eprintln!("famd {h:02}:{m:02}:{s:02}Z {line}");
+    eprintln!(
+        "famd {} {line}",
+        familiar_core::commands::auth::rfc3339(secs)
+    );
 }
 
 /// One account to sync.
