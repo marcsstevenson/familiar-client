@@ -635,6 +635,10 @@ async fn snooze_hides_mail_until_famd_brings_it_back() {
         ..policy()
     });
     env.until("first sync", LIMIT, |e| e.settled(30)).await;
+    env.until("daemon accepting writes", LIMIT, |e| {
+        familiar_core::daemon::Client::connect(&e.paths.socket).is_ok()
+    })
+    .await;
     let msgs = inbox(&env, 4);
     let inbox_id = msgs[0].folder;
     let mbox = || env.mock.mailbox(KEY);
@@ -763,8 +767,13 @@ async fn snooze_hides_mail_until_famd_brings_it_back() {
             && e.reader().open_ops().is_ok_and(|o| o.is_empty())
     })
     .await;
-    let m0 = env.reader().message(msgs[0].id).unwrap().unwrap();
-    assert_eq!((m0.folder, m0.is_read), (inbox_id, false));
+    env.until("returned message unread in the local Inbox", LIMIT, |e| {
+        e.reader()
+            .message(msgs[0].id)
+            .unwrap()
+            .is_some_and(|m| m.folder == inbox_id && !m.is_read)
+    })
+    .await;
     assert_eq!(
         env.reader().message(msgs[2].id).unwrap().unwrap().folder,
         archive
