@@ -400,8 +400,11 @@ async fn events_added_changed_answered_and_deleted() {
         .unwrap()
     };
     submit(&env, move_to(18), waiting()).await.unwrap();
-    let edited = env.reader().event(moving.id).unwrap().unwrap();
-    assert_eq!(edited.data.start_at, moving.data.start_at + 3600);
+    let edited_start = moving.data.start_at + 3600;
+    env.until("edited occurrence at its new time", LIMIT, |e| {
+        e.reader().event(moving.id).unwrap().unwrap().data.start_at == edited_start
+    })
+    .await;
     for other in swims.iter().filter(|s| s.id != moving.id) {
         assert_eq!(
             env.reader().event(other.id).unwrap().unwrap().data.start_at,
@@ -422,7 +425,7 @@ async fn events_added_changed_answered_and_deleted() {
             .unwrap()
             .data
             .start_at,
-        edited.data.start_at
+        edited_start
     );
     assert_eq!(
         env.mock
@@ -431,7 +434,7 @@ async fn events_added_changed_answered_and_deleted() {
             .unwrap()
             .start
             .timestamp(),
-        edited.data.start_at
+        edited_start
     );
 
     // Delete one occurrence: it leaves the calendar before the server has it.
