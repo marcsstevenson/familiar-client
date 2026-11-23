@@ -237,18 +237,14 @@ export function MessageMenu(props: {
             Check for spam or scam
           </button>
         </Show>
-        <Show
-          when={!multi && row.in_junk}
-          fallback={
-            <button
-              role="menuitem"
-              title="Tell your mail provider this is spam, and move it to Junk Email"
-              onClick={() => leave("Reported as junk", () => run("mail.report", { messages: ids }))}
-            >
-              Report junk
-            </button>
-          }
+        <button
+          role="menuitem"
+          title="Report as spam. Messages already in Junk are marked read and moved to Trash."
+          onClick={() => leave("Reported as junk", () => run("mail.report", { messages: ids }))}
         >
+          Report junk
+        </button>
+        <Show when={!multi && row.in_junk}>
           <button
             role="menuitem"
             title="Tell your mail provider this isn't spam, and move it to the Inbox"
@@ -260,7 +256,7 @@ export function MessageMenu(props: {
         <button
           role="menuitem"
           class="danger"
-          title="Tell your mail provider this is a scam; Outlook then deletes it"
+          title="Report as phishing. Messages already in Junk are marked read and moved to Trash."
           onClick={() => leave("Reported as phishing", () => run("mail.report", { messages: ids, phishing: true }))}
         >
           Report phishing (scam)

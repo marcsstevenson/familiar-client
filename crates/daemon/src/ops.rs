@@ -449,12 +449,21 @@ impl OpRunner {
                     .await?;
             }
             OpPayload::ReportMessage {
-                message, report, ..
+                message,
+                report,
+                to,
+                trash_after_report,
+                ..
             } => {
                 // Graph moves it; if it picks another folder than the local
                 // guess (a tenant may send phishing elsewhere), sync says so.
-                api.report_message(&self.message_remote(*message)?, report.graph_action(), pr)
+                let remote = self.message_remote(*message)?;
+                api.report_message(&remote, report.graph_action(), !*trash_after_report, pr)
                     .await?;
+                if *trash_after_report {
+                    api.move_message(&remote, &self.folder_remote(*to)?, pr)
+                        .await?;
+                }
             }
             OpPayload::DeleteMessage { message } => {
                 match api
