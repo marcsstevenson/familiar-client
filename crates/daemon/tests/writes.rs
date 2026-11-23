@@ -635,6 +635,10 @@ async fn snooze_hides_mail_until_famd_brings_it_back() {
         ..policy()
     });
     env.until("first sync", LIMIT, |e| e.settled(30)).await;
+    env.until("daemon accepting writes", LIMIT, |e| {
+        familiar_core::daemon::Client::connect(&e.paths.socket).is_ok()
+    })
+    .await;
     let msgs = inbox(&env, 4);
     let inbox_id = msgs[0].folder;
     let mbox = || env.mock.mailbox(KEY);
