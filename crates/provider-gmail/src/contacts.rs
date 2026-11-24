@@ -238,7 +238,9 @@ impl GoogleContactSync {
         priority: Priority,
     ) -> Result<(usize, usize)> {
         let mut all = Vec::new();
-        let connections = format!("/people/me/connections?{CONTACT_FIELDS}&sources=READ_SOURCE_TYPE_CONTACT&pageSize=1000");
+        let connections = format!(
+            "/people/me/connections?{CONTACT_FIELDS}&sources=READ_SOURCE_TYPE_CONTACT&pageSize=1000"
+        );
         let mut path = connections.clone();
         loop {
             let v = self
