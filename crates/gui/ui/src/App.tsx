@@ -138,7 +138,10 @@ export function App(props: { info: UiInfo }) {
           <For each={mainViews}>{name =>
             <button id={"tab-" + name} role="tab" aria-selected={view() === name} aria-controls="main-view"
               tabIndex={view() === name ? 0 : -1} disabled={name !== view() && !!eventDialog()}
-              onClick={() => setView(name)}>{name}</button>
+              onClick={e => {
+                setView(name);
+                if (name === "Calendar" && e.detail > 0) document.querySelector<HTMLElement>(".full-calendar")?.focus();
+              }}>{name}</button>
           }</For>
         </div>
       }>

@@ -4,6 +4,7 @@ import { isCommandError, run } from "../api";
 import { onStoreChanged } from "../list/api";
 import { notify } from "../state";
 import { EventDetails } from "./EventDetails";
+import type { MenuPoint } from "./EventMenu";
 import { NewEvent } from "./NewEvent";
 import { AgendaView, MonthView, TimeView } from "./CalendarViews";
 import { MiniMonth } from "./MiniMonth";
@@ -55,16 +56,20 @@ export function DayPanel(props: { full: boolean; location?: CalendarLocation; re
   function chooseView(v: CalendarView) { setFullView(v); remember(); }
   const [slot, setSlot] = createSignal<{ date: string; endDate?: string; time: string; zone: string }>();
   const [selected, select] = createSignal<number | undefined>(location?.event);
+  const [menu, setMenu] = createSignal<MenuPoint>();
+  let trigger: HTMLButtonElement | undefined;
   createEffect(() => {
     const target = props.target;
     if (!target) return;
     setSlot(undefined);
+    setMenu(undefined);
+    trigger = undefined;
     setDate(target.date);
     setHidden(ids => ids.filter(id => id !== target.calendar));
     select(target.event);
     props.onTargetOpened();
   });
-  createEffect(() => props.remember({ date: date(), event: selected() }));
+  createEffect(() => props.remember({ date: date(), event: menu() ? undefined : selected() }));
   const writable = createMemo(() => calendars().filter(c => c.can_edit));
   const visible = createMemo(() => (result()?.events ?? [])
     .filter(e => !e.cancelled && !hidden().includes(e.calendar_id)));
@@ -108,7 +113,13 @@ export function DayPanel(props: { full: boolean; location?: CalendarLocation; re
   function card(e: CalEvent, prefix?: string) {
     return <button class="day-event" style={{ "border-left-color": color(e.calendar_id) }}
       aria-expanded={selected() === e.id} title={e.subject + " · " + e.account + " · " + e.calendar}
-      onClick={() => select(e.id)}>
+      aria-haspopup="menu" onContextMenu={ev => {
+        ev.preventDefault();
+        trigger = ev.currentTarget;
+        const rect = trigger.getBoundingClientRect();
+        const point = ev.clientX || ev.clientY ? { x: ev.clientX, y: ev.clientY } : { x: rect.left, y: rect.bottom };
+        batch(() => { setMenu(point); select(e.id); });
+      }} onClick={ev => { trigger = ev.currentTarget; select(e.id); }}>
       <strong>{prefix ? prefix + " · " : ""}{e.subject || "(No subject)"}</strong><small>{e.account} · {e.calendar}</small>
     </button>;
   }
@@ -124,8 +135,15 @@ export function DayPanel(props: { full: boolean; location?: CalendarLocation; re
     : view() === "Day" ? dateWords(date()) : dateWords(period().from) + " – " + dateWords(nextDate(period().from, period().days - 1));
   const viewProps = { get dates() { return dates(); }, get events() { return visible(); }, get date() { return date(); }, card, openDay };
   return (
-    <aside class="day-panel" classList={{ "full-calendar": props.full }} aria-label={props.full ? "Full calendar" : "Day calendar"} onKeyDown={e => {
-      if (e.key === "Escape" && !slot() && selected() === undefined) { e.preventDefault(); props.onClose(); }
+    <aside class="day-panel" classList={{ "full-calendar": props.full }} tabindex="-1" aria-label={props.full ? "Full calendar" : "Day calendar"} onKeyDown={e => {
+      if (slot() || selected() !== undefined || e.defaultPrevented) return;
+      if (e.key === "Escape") { e.preventDefault(); props.onClose(); return; }
+      if ((e.key !== "ArrowLeft" && e.key !== "ArrowRight") || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey ||
+          (e.target instanceof Element && e.target.closest("input, select, textarea, [contenteditable=true]"))) return;
+      e.preventDefault();
+      // Event cards and date cells can disappear when the range changes.
+      heading.focus({ preventScroll: true });
+      step(e.key === "ArrowLeft" ? -1 : 1);
     }}>
       <header><h2 ref={heading} tabindex="-1">{props.full ? "Calendar" : "Day panel"}</h2>
         <Show when={!props.full}><button onClick={props.expand}>Open full calendar</button>
@@ -169,7 +187,12 @@ export function DayPanel(props: { full: boolean; location?: CalendarLocation; re
         <footer>{zone.replaceAll("_", " ")}</footer>
       </div>
       <Show when={selected()} keyed>{id => <EventDetails id={id} revision={revision()} expand={props.full ? undefined : props.expand}
-        onClose={() => { select(undefined); heading.focus(); }} onChanged={() => void refreshDay()} />}</Show>
+        menu={menu()} onOpenDetails={() => setMenu(undefined)}
+        onClose={() => {
+          batch(() => { select(undefined); setMenu(undefined); });
+          (trigger?.isConnected ? trigger : heading).focus({ preventScroll: true });
+          trigger = undefined;
+        }} onChanged={() => void refreshDay()} />}</Show>
       <Show when={slot()}>{t => <NewEvent date={t().date} endDate={t().endDate} time={t().time} zone={t().zone} calendars={writable()} onClose={() => setSlot(undefined)}
         onSaved={(c, day, time, savedZone) => {
           navigate(savedZone === "UTC" && time ? localDate(new Date(day + "T" + time + "Z")) : day);

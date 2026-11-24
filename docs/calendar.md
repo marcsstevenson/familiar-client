@@ -142,7 +142,9 @@ out on its own.
 Select **Calendar** beside Familiar in the title bar to return to your last
 calendar date and view. To carry a date or open event over from the day panel,
 choose **Open full calendar** there or in the event's details. Use the mini month to pick a date,
-or step through Day, Week, Month and the 30-day Agenda with the arrow buttons.
+or step through Day, Week, Month and the 30-day Agenda with the arrow buttons or the Left and Right arrow keys.
+Right-click an event in any view or the day panel to open it, edit it, respond to an invitation,
+or confirm a deletion or cancellation. The available actions depend on your role and calendar permissions.
 In Month, double-click empty space in a day to create an event, or drag across
 days in either direction to include them in one event. The height of the first
 click sets the start time to the nearest hour from 6 am to 6 pm. Three quarters
