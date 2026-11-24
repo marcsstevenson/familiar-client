@@ -14,6 +14,8 @@ Familiar already caches both address books for autocomplete. Use that cache for 
 - Google Contacts distinguishes saved people from automatically remembered email recipients. Familiar keeps past correspondents in compose suggestions and shows saved cards in Contacts. [Google Contacts](https://support.google.com/contacts/answer/1069522)
 - Apple Contacts can link cards across services while retaining the underlying accounts. Google limits merging to a single account. Familiar shows the owning account on each card and scopes edits and deletion to that record, even when two records share an email address. [Apple Contacts](https://support.apple.com/en-gb/guide/contacts/adrb33f38d93/mac) and [Google duplicate handling](https://support.google.com/contacts/answer/7078226)
 
+- Cardhop makes the next action available on the card and uses the standard New shortcut within its contacts view. Familiar opens compose from each address, uses Ctrl/Cmd+N for a new contact while Contacts is active, and puts focus in contact search with Ctrl/Cmd+F. [Cardhop actions](https://flexibits.com/cardhop/help/performing-actions) and [Cardhop shortcuts](https://flexibits.com/cardhop/tips)
+
 ## Implementation plan
 
 1. Add a local list command returning accounts and complete saved contact records. Add provider-confirmed create, edit and delete commands with account checks and agent grants. Serialize writes and full sync per account so a stale sync cannot undo a successful save.

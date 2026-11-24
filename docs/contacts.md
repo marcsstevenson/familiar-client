@@ -2,7 +2,7 @@
 
 The desktop **Contacts** tab browses the saved address books of all synced Outlook and Gmail accounts. Search by name, organization, address or phone, filter by account, and select a card to view details or compose an email from that account. A contact with several addresses has one card per provider record.
 
-Choose **New contact** and a destination account to create a card. Edit changes the selected card in its owning account. Delete asks for confirmation before removing it from that provider. Browsing uses the local copy offline. Saving and deleting need a running daemon and a connection to the provider.
+Use Ctrl+F (Cmd+F on macOS) to search. Choose **New contact** or press Ctrl+N (Cmd+N on macOS) and a destination account to create a card. Edit changes the selected card in its owning account. Delete asks for confirmation before removing it from that provider. Browsing uses the local copy offline. Saving and deleting need a running daemon and a connection to the provider.
 
 Existing accounts with read-only contact access can continue browsing. To grant contact editing, run `fam auth login <account>` and approve the additional permission. Managed accounts may need their administrator's consent.
 

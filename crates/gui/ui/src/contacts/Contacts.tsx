@@ -1,4 +1,5 @@
 import { For, Show, batch, createMemo, createResource, createSignal, onCleanup, onMount } from "solid-js";
+import { keyName } from "../actions/registry";
 import { isCommandError, run } from "../api";
 import { openCompose } from "../compose/spec";
 import { onStoreChanged } from "../list/api";
@@ -25,6 +26,8 @@ export function Contacts() {
   const [editor, setEditor] = createSignal<{ original?: Contact }>();
   const [deleting, setDeleting] = createSignal(false);
   let list!: HTMLDivElement;
+  let searchInput!: HTMLInputElement;
+  let newButton!: HTMLButtonElement;
   const accounts = () => data.error ? [] : data()?.accounts ?? [];
   const query = () => search().trim().toLocaleLowerCase();
   const ordered = createMemo(() => [...(data.error ? [] : data()?.contacts ?? [])]
@@ -35,7 +38,18 @@ export function Contacts() {
     c.account === selection()?.account && c.remote_id === selection()?.remote_id) ?? rows()[0]);
   onMount(() => {
     const stop = onStoreChanged(() => void refetch());
-    onCleanup(() => void stop.then(f => f()));
+    function shortcut(event: KeyboardEvent) {
+      if (event.defaultPrevented || document.querySelector('dialog[open], [role="dialog"], [role="alertdialog"]')) return;
+      switch (keyName(event)) {
+        case "Ctrl+N": event.preventDefault(); newButton.click(); break;
+        case "Ctrl+F": event.preventDefault(); searchInput.focus(); searchInput.select(); break;
+      }
+    }
+    window.addEventListener("keydown", shortcut);
+    onCleanup(() => {
+      window.removeEventListener("keydown", shortcut);
+      void stop.then(f => f());
+    });
   });
 
   function move(event: KeyboardEvent) {
@@ -85,10 +99,12 @@ export function Contacts() {
   return <div class="contacts-view">
     <section class="contacts-browser" aria-label="Contact browser">
       <header><h1>Contacts</h1>
-        <button class="contact-primary" disabled={!accounts().length} onClick={() => setEditor({})}>New contact</button>
+        <button ref={newButton} class="contact-primary" aria-keyshortcuts="Control+N Meta+N"
+          disabled={!accounts().length} onClick={() => setEditor({})}>New contact</button>
       </header>
       <div class="contacts-filters">
-        <input type="search" aria-label="Search contacts" placeholder="Search contacts" value={search()}
+        <input ref={searchInput} type="search" aria-label="Search contacts" aria-keyshortcuts="Control+F Meta+F"
+          placeholder="Search contacts" value={search()}
           onInput={e => setSearch(e.currentTarget.value)} />
         <select aria-label="Filter contacts by account" value={account()} onChange={e => setAccount(e.currentTarget.value)}>
           <option value="">All accounts</option>
