@@ -1,7 +1,8 @@
-import { For, Show, createResource, createSignal, onMount } from "solid-js";
+import { For, Show, createResource, createSignal } from "solid-js";
 import type { CalShowOutput, WriteOutput } from "../../../../../bindings/commands";
 import { isCommandError, run } from "../api";
 import { notify } from "../state";
+import { EventMenu, type MenuPoint } from "./EventMenu";
 import { EditEvent } from "./EditEvent";
 import { dateWords } from "./proposals";
 import { nextDate } from "./timeline";
@@ -23,6 +24,7 @@ function times(d: CalShowOutput) {
 }
 
 export function EventDetails(props: {
+  menu?: MenuPoint; onOpenDetails: () => void;
   id: number; revision: number; expand?: () => void; onClose: () => void; onChanged: () => void;
 }) {
   const [details, { refetch }] = createResource(() => [props.id, props.revision] as const,
@@ -33,8 +35,10 @@ export function EventDetails(props: {
   const [tell, setTell] = createSignal(true);
   const [busy, setBusy] = createSignal(false);
   const [error, setError] = createSignal("");
-  let dialog!: HTMLDialogElement;
-  onMount(() => dialog.showModal());
+  const meeting = () => !!live()?.attendees.length;
+  const canRespond = () => !live()?.is_organizer && (meeting() || (live()?.event.response && live()?.event.response !== "none"));
+  const editLabel = () => live()?.is_organizer ? "Edit event" : "Edit reminder";
+  const deleteLabel = () => meeting() ? "Cancel meeting" : "Delete event";
   const writable = () => live()?.can_edit && !live()?.event.cancelled;
   const whole = () => !!live()?.can_act_on_series && series();
 
@@ -68,7 +72,15 @@ export function EventDetails(props: {
   }
   function back() { setError(""); setMode("view"); }
 
-  return <dialog ref={dialog} role="dialog" aria-label="Event details" class="new-event event-dialog"
+  function open(mode: "view" | "edit" | "delete") {
+    setMode(mode);
+    props.onOpenDetails();
+  }
+  function openSource(message: number) {
+    void run("ui.open", { message }).catch(err => setError(isCommandError(err) ? err.message : String(err)));
+  }
+
+  const detailsDialog = () => <dialog ref={el => queueMicrotask(() => { if (el.isConnected) el.showModal(); })} role="dialog" aria-label="Event details" class="new-event event-dialog"
     onCancel={e => { e.preventDefault(); if (!busy()) props.onClose(); }}>
     <div class="event-body">
       <Show when={details.error}>{err => {
@@ -78,14 +90,12 @@ export function EventDetails(props: {
       <Show when={!details.error && !live()}><p role="status">Loading event…</p></Show>
       <Show when={live()}>{detail => {
         const e = () => detail().event;
-        const meeting = () => detail().attendees.length > 0;
         return <>
           <h2>{e().subject || "(No subject)"}</h2>
           <p>{times(detail())}</p>
           <p class="muted">{e().account} · {e().calendar}{detail().can_edit ? "" : " · Read-only"}</p>
           <Show when={mode() === "view" && detail().from_mail}>{message =>
-            <button onClick={() => void run("ui.open", { message: message() })
-              .catch(err => setError(isCommandError(err) ? err.message : String(err)))}>Open source email</button>
+            <button onClick={() => openSource(message())}>Open source email</button>
           }</Show>
           <Show when={mode() !== "edit" || !writable()}>
             <Show when={e().location}><p>{e().location}</p></Show>
@@ -120,11 +130,11 @@ export function EventDetails(props: {
             </Show>
             <Show when={mode() === "view"}>
               <div class="event-actions"><button disabled={busy()} onClick={() => { setError(""); setMode("edit"); }}>
-                {detail().is_organizer ? "Edit event" : "Edit reminder"}</button>
+                {editLabel()}</button>
                 <Show when={detail().is_organizer}><button disabled={busy()} onClick={() => { setError(""); setMode("delete"); }}>
-                  {meeting() ? "Cancel meeting" : "Delete event"}</button></Show>
+                  {deleteLabel()}</button></Show>
               </div>
-              <Show when={!detail().is_organizer && (meeting() || (e().response && e().response !== "none"))}>
+              <Show when={canRespond()}>
                 <label><input type="checkbox" checked={tell()} onChange={ev => setTell(ev.currentTarget.checked)} /> Tell the organiser</label>
                 <div class="event-actions"><button disabled={busy()} onClick={() => answer("accept")}>Accept</button>
                   <button disabled={busy()} onClick={() => answer("tentative")}>Tentative</button>
@@ -139,4 +149,23 @@ export function EventDetails(props: {
         <span class="spacer" /><button disabled={busy()} onClick={props.onClose}>Close</button></div>
     </div>
   </dialog>;
+
+  return <Show when={props.menu} fallback={detailsDialog()}>{point => <EventMenu point={point()} onClose={props.onClose}>
+    <button role="menuitem" onClick={() => open("view")}>Open event</button>
+    <Show when={writable()}>
+      <button role="menuitem" onClick={() => open("edit")}>{editLabel()}…</button>
+      <Show when={canRespond()}>
+        <For each={["accept", "tentative", "decline"] as const}>{response =>
+          <button role="menuitem" onClick={() => { open("view"); answer(response); }}>
+            {{ accept: "Accept", tentative: "Tentative", decline: "Decline" }[response]}</button>
+        }</For>
+      </Show>
+      <Show when={live()?.is_organizer}>
+        <button role="menuitem" class="danger" onClick={() => open("delete")}>{deleteLabel()}…</button>
+      </Show>
+    </Show>
+    <Show when={live()?.from_mail}>{message =>
+      <button role="menuitem" onClick={() => { const id = message(); open("view"); openSource(id); }}>Open source email</button>
+    }</Show>
+  </EventMenu>}</Show>;
 }
