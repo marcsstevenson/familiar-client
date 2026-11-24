@@ -1,15 +1,17 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-//! Contacts read (WP 2.5): the user's Outlook contacts, refreshed in full.
+//! The user's Outlook contacts, refreshed in full and writable by ID.
 //!
 //! Contacts are few (hundreds, not thousands), so each sync lists them all
 //! (the default contacts folder, then each contact folder under it) and
 //! replaces the store's copy in one round: contacts the server no longer
 //! lists are removed.
 
-use familiar_store::{AccountId, Address, NewContact, StoreWriter};
+use familiar_store::{AccountId, Address, ContactChanges, NewContact, StoreWriter};
 use serde::Deserialize;
+use serde_json::{Value, json};
 
 use crate::client::GraphClient;
+use crate::mail::encode_query_value;
 use crate::model::{Page, decode_page};
 use familiar_provider::Priority;
 use familiar_provider::Result;
@@ -28,12 +30,27 @@ pub struct GraphContactEmail {
     pub address: Option<String>,
 }
 
+impl GraphContactEmail {
+    fn to_address(&self, display: &str) -> Option<Address> {
+        let (inner_name, addr) = split_mailbox(self.address.as_deref()?);
+        let name = self
+            .name
+            .clone()
+            .filter(|n| !n.trim().is_empty() && !n.contains('<'))
+            .or(inner_name)
+            .unwrap_or_else(|| display.to_owned());
+        (!addr.is_empty()).then_some(Address { name, addr })
+    }
+}
+
 /// A contact as Graph returns it.
 #[derive(Clone, Debug, Default, Deserialize, PartialEq, Eq)]
 #[serde(rename_all = "camelCase", default)]
 pub struct GraphContact {
     /// ID.
     pub id: String,
+    /// Folder containing the contact.
+    pub parent_folder_id: Option<String>,
     /// Display name.
     pub display_name: Option<String>,
     /// Company.
@@ -49,6 +66,61 @@ pub struct GraphContact {
 }
 
 impl GraphContact {
+    fn path(&self) -> String {
+        let id = encode_query_value(&self.id);
+        match &self.parent_folder_id {
+            Some(folder) => format!(
+                "/me/contactFolders/{}/contacts/{id}",
+                encode_query_value(folder)
+            ),
+            None => format!("/me/contacts/{id}"),
+        }
+    }
+
+    fn write_body(&self, fields: &ContactChanges) -> Value {
+        let mut body = json!({});
+        // Graph can regenerate displayName on unrelated updates unless it is supplied.
+        if let Some(name) = fields.name.as_ref().or(self.display_name.as_ref()) {
+            body["displayName"] = json!(name);
+        }
+        if let Some(company) = &fields.company {
+            body["companyName"] = json!(company);
+        }
+        if let Some(emails) = &fields.emails {
+            let existing: Vec<_> = self
+                .email_addresses
+                .iter()
+                .filter_map(|e| e.to_address(self.display_name.as_deref().unwrap_or_default()))
+                .collect();
+            let addresses: Vec<_> = emails
+                .iter()
+                .map(|address| {
+                    let mut value = json!({"address": address});
+                    if let Some(email) = existing
+                        .iter()
+                        .find(|e| e.addr.eq_ignore_ascii_case(address))
+                    {
+                        value["name"] = json!(email.name);
+                    }
+                    value
+                })
+                .collect();
+            body["emailAddresses"] = json!(addresses);
+        }
+        if let Some(phones) = &fields.phones {
+            // Familiar exposes one list. Keep the Outlook type of surviving numbers.
+            let mobile = self.mobile_phone.as_ref().filter(|p| phones.contains(p));
+            let (home, business): (Vec<_>, Vec<_>) = phones
+                .iter()
+                .filter(|p| Some(*p) != mobile)
+                .partition(|p| self.home_phones.contains(p));
+            body["mobilePhone"] = json!(mobile);
+            body["homePhones"] = json!(home);
+            body["businessPhones"] = json!(business);
+        }
+        body
+    }
+
     /// The store row.
     pub fn to_new(&self, account: AccountId) -> NewContact {
         let display = self.display_name.clone().unwrap_or_default();
@@ -60,16 +132,7 @@ impl GraphContact {
             emails: self
                 .email_addresses
                 .iter()
-                .filter_map(|e| {
-                    let (inner_name, addr) = split_mailbox(e.address.as_deref()?);
-                    let name = e
-                        .name
-                        .clone()
-                        .filter(|n| !n.trim().is_empty() && !n.contains('<'))
-                        .or(inner_name)
-                        .unwrap_or_else(|| display.clone());
-                    (!addr.is_empty()).then_some(Address { name, addr })
-                })
+                .filter_map(|e| e.to_address(&display))
                 .collect(),
             phones: self
                 .mobile_phone
@@ -102,7 +165,7 @@ struct GraphContactFolder {
     id: String,
 }
 
-/// Contact reads for one mailbox.
+/// Contact reads and writes for one mailbox.
 #[derive(Clone, Debug)]
 pub struct ContactsApi {
     client: GraphClient,
@@ -112,6 +175,46 @@ impl ContactsApi {
     /// Reads the signed-in user's contacts.
     pub fn new(client: GraphClient) -> Self {
         Self { client }
+    }
+
+    async fn get_contact(&self, remote_id: &str) -> Result<GraphContact> {
+        let path = format!(
+            "/me/contacts/{}?$select={CONTACT_FIELDS},parentFolderId",
+            encode_query_value(remote_id)
+        );
+        Ok(serde_json::from_value(
+            self.client.get(&path, Priority::User, &[]).await?,
+        )?)
+    }
+
+    /// Creates a contact or updates the supplied fields on an existing contact.
+    pub async fn save_contact(
+        &self,
+        account: AccountId,
+        remote_id: Option<&str>,
+        fields: &ContactChanges,
+    ) -> Result<NewContact> {
+        let saved = if let Some(id) = remote_id {
+            let contact = self.get_contact(id).await?;
+            self.client
+                .patch(&contact.path(), &contact.write_body(fields), Priority::User)
+                .await?
+        } else {
+            self.client
+                .post(
+                    "/me/contacts",
+                    &GraphContact::default().write_body(fields),
+                    Priority::User,
+                )
+                .await?
+        };
+        Ok(serde_json::from_value::<GraphContact>(saved)?.to_new(account))
+    }
+
+    /// Deletes a contact from its Outlook folder.
+    pub async fn delete_contact(&self, remote_id: &str) -> Result<()> {
+        let contact = self.get_contact(remote_id).await?;
+        self.client.delete(&contact.path(), Priority::User).await
     }
 
     async fn pages<T: serde::de::DeserializeOwned>(

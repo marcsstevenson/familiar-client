@@ -43,7 +43,7 @@ pub struct PersonView {
     pub address: String,
     /// `Name <address>`, ready for --to.
     pub mailbox: String,
-    /// In Outlook contacts.
+    /// Saved in an account's contacts.
     pub contact: bool,
     /// Company, from the contact.
     #[serde(default, skip_serializing_if = "String::is_empty")]
@@ -146,7 +146,7 @@ impl Command for ContactsSearch {
     const SPEC: CommandSpec = CommandSpec {
         path: &["contacts", "search"],
         summary: "Find people to write to",
-        description: "Searches Outlook contacts and everyone mail came from or went to, by the start of a name, address or company, best first: contacts, then people written to most, then heard from. Reads the store, so it works without famd. Each result's mailbox field is ready for --to.",
+        description: "Searches saved Outlook and Google contacts and everyone mail came from or went to, by the start of a name, address or company, best first: contacts, then people written to most, then heard from. Reads the store, so it works without famd. Each result's mailbox field is ready for --to.",
         access: Access::Read,
         errors: &[ErrorKind::Usage, ErrorKind::NotFound],
     };

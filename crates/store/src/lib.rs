@@ -44,7 +44,7 @@ mod writer;
 
 pub use bodies::{BodyHash, INLINE_BODY_MAX};
 pub use calendar::{Attendee, Calendar, Event, EventData, EventRange, NewCalendar};
-pub use contacts::{Contact, NewContact, Person, SenderHistory};
+pub use contacts::{Contact, ContactChanges, NewContact, Person, SenderHistory};
 pub use conversation::{
     ALL_MAIL, ALL_MAIL_REMOTE_ID, Conversation, ConversationFolder, ConversationMessage,
     ConversationSummary, DRAFTS, LatestMessage, MessageCopy, SENT_ITEMS, TRASH_FOLDERS,

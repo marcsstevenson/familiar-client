@@ -37,7 +37,7 @@ pub const DEFAULT_CLIENT_ID: &str = "c6057b6a-a692-47dd-b34e-12629372e32a";
 
 /// Scopes Familiar asks for: everything Phases 1 to 4 need, so nobody has to consent twice.
 pub const SCOPES: &str = "openid profile offline_access User.Read Mail.ReadWrite Mail.Send \
-                          Calendars.ReadWrite Contacts.Read MailboxSettings.ReadWrite";
+                          Calendars.ReadWrite Contacts.ReadWrite MailboxSettings.ReadWrite";
 
 /// Scopes Familiar asks Google for: mail now, calendar and contacts later, so nobody has
 /// to consent twice (Gmail plan, WP G.0).
@@ -46,7 +46,7 @@ pub const GOOGLE_SCOPES: &str = "openid email profile \
     https://www.googleapis.com/auth/gmail.send \
     https://www.googleapis.com/auth/gmail.settings.basic \
     https://www.googleapis.com/auth/calendar \
-    https://www.googleapis.com/auth/contacts.readonly \
+    https://www.googleapis.com/auth/contacts \
     https://www.googleapis.com/auth/contacts.other.readonly";
 
 /// The authority stored for a Google account, in place of a Microsoft tenant.

@@ -1160,6 +1160,14 @@ fn route(c: &Ctx<'_>, method: &str) -> R {
         [] => Ok(Reply::ok(render::user(&st.user))),
         ["mailboxsettings"] => Ok(Reply::ok(render::mailbox_settings(&st.user))),
         ["contacts"] => list_contacts(c, ""),
+        ["contacts", _] => {
+            let contact = st
+                .contacts
+                .iter()
+                .find(|x| x.id == segs[1])
+                .ok_or_else(GraphError::not_found)?;
+            Ok(Reply::ok(c.select(render::contact(contact))))
+        }
         ["contactfolders"] => {
             let mut ids: Vec<&str> = st
                 .contacts
@@ -1753,21 +1761,7 @@ fn list_contacts(c: &Ctx<'_>, folder: &str) -> R {
         c.st.contacts
             .iter()
             .filter(|x| x.folder_id == folder)
-            .map(|x| {
-                c.select(json!({
-                    "@odata.type": "#microsoft.graph.contact",
-                    "id": x.id,
-                    "displayName": x.display_name,
-                    "companyName": x.company_name,
-                    "emailAddresses": x.email_addresses.iter()
-                        .map(|e| json!({"name": e.name, "address": e.address}))
-                        .collect::<Vec<_>>(),
-                    "mobilePhone": x.mobile_phone,
-                    "businessPhones": [],
-                    "homePhones": [],
-                    "parentFolderId": if folder.is_empty() { "contacts" } else { folder },
-                }))
-            })
+            .map(|x| c.select(render::contact(x)))
             .collect();
     paged(c, items, "users('me')/contacts", DEFAULT_PAGE)
 }

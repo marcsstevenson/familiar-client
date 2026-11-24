@@ -6,13 +6,14 @@
 //! Gmail's automatic "other contacts" aren't read: they are people the
 //! account has mailed, which the store's correspondents list already has.
 
-use familiar_store::{AccountId, Address, NewContact, StoreWriter};
+use familiar_store::{AccountId, Address, ContactChanges, NewContact, StoreWriter};
+use reqwest::Method;
 use serde::Deserialize;
+use serde_json::{Map, Value as Json, json};
 
-use crate::{GmailApi, Priority, Result, api::enc};
+use crate::{Error, GmailApi, Priority, Result, api::enc};
 
-/// The fields asked for.
-const CONNECTIONS: &str = "/people/me/connections?personFields=names,emailAddresses,organizations,phoneNumbers&pageSize=1000";
+const CONTACT_FIELDS: &str = "personFields=names,emailAddresses,organizations,phoneNumbers";
 
 #[derive(Default, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -89,6 +90,133 @@ impl Person {
     }
 }
 
+fn person_path(remote: &str) -> Result<String> {
+    let id = remote
+        .strip_prefix("people/")
+        .filter(|id| !id.is_empty())
+        .ok_or_else(|| Error::Decode(format!("invalid People resource name: {remote}")))?;
+    Ok(format!("/people/{}", enc(id)))
+}
+
+fn contact_fields(fields: &ContactChanges, current: &Json) -> Map<String, Json> {
+    let mut body = Map::new();
+    if let Some(name) = &fields.name
+        && current["names"][0]["displayName"].as_str() != Some(name)
+    {
+        let names = if name.is_empty() {
+            json!([])
+        } else {
+            json!([{"unstructuredName":name}])
+        };
+        body.insert("names".into(), names);
+    }
+    if let Some(company) = &fields.company {
+        let mut orgs = current["organizations"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
+        if let Some(first) = orgs.first_mut() {
+            first["name"] = json!(company);
+            if company.is_empty()
+                && first.as_object().is_some_and(|org| {
+                    org.keys()
+                        .all(|k| matches!(k.as_str(), "name" | "metadata"))
+                })
+            {
+                orgs.remove(0);
+            }
+        } else if !company.is_empty() {
+            orgs.push(json!({"name":company}));
+        }
+        body.insert("organizations".into(), Json::Array(orgs));
+    }
+    for (key, values) in [
+        ("emailAddresses", &fields.emails),
+        ("phoneNumbers", &fields.phones),
+    ] {
+        if let Some(values) = values {
+            // A field mask replaces the entire list. Retain labels and other
+            // details attached to an address or number the user kept.
+            let existing = current[key]
+                .as_array()
+                .map(Vec::as_slice)
+                .unwrap_or_default();
+            let entries = values
+                .iter()
+                .map(|value| {
+                    existing
+                        .iter()
+                        .find(|e| {
+                            e["value"]
+                                .as_str()
+                                .is_some_and(|s| s.trim().eq_ignore_ascii_case(value))
+                        })
+                        .cloned()
+                        .unwrap_or_else(|| json!({"value":value}))
+                })
+                .collect();
+            body.insert(key.into(), Json::Array(entries));
+        }
+    }
+    body
+}
+
+impl GmailApi {
+    /// Creates or patches one saved contact, returning the server's copy.
+    pub async fn save_contact(
+        &self,
+        account: AccountId,
+        remote_id: Option<&str>,
+        fields: &ContactChanges,
+    ) -> Result<NewContact> {
+        let (method, path, body) = if let Some(remote) = remote_id {
+            let path = person_path(remote)?;
+            let current = self
+                .client()
+                .people_request(
+                    Method::GET,
+                    // Google may also return profile data, which belongs to
+                    // another source and must not be copied into the contact.
+                    &format!("{path}?{CONTACT_FIELDS},metadata&sources=READ_SOURCE_TYPE_CONTACT"),
+                    None,
+                    Priority::User,
+                )
+                .await?;
+            let mut changes = contact_fields(fields, &current);
+            if changes.is_empty() {
+                return Ok(serde_json::from_value::<Person>(current)?.to_new(account));
+            }
+            let mask = changes.keys().cloned().collect::<Vec<_>>().join(",");
+            changes.insert("metadata".into(), current["metadata"].clone());
+            (
+                Method::PATCH,
+                format!("{path}:updateContact?updatePersonFields={mask}&{CONTACT_FIELDS}"),
+                changes,
+            )
+        } else {
+            (
+                Method::POST,
+                format!("/people:createContact?{CONTACT_FIELDS}"),
+                contact_fields(fields, &Json::Null),
+            )
+        };
+        let result = self
+            .client()
+            .people_request(method, &path, Some(&Json::Object(body)), Priority::User)
+            .await?;
+        Ok(serde_json::from_value::<Person>(result)?.to_new(account))
+    }
+
+    /// Deletes one saved contact from this mailbox.
+    pub async fn delete_contact(&self, remote_id: &str) -> Result<()> {
+        let path = format!("{}:deleteContact", person_path(remote_id)?);
+        self.client()
+            .people_request(Method::DELETE, &path, None, Priority::User)
+            .await?;
+        Ok(())
+    }
+}
+
 /// Keeps one Gmail account's contacts in the store.
 #[derive(Clone, Debug)]
 pub struct GoogleContactSync {
@@ -110,7 +238,10 @@ impl GoogleContactSync {
         priority: Priority,
     ) -> Result<(usize, usize)> {
         let mut all = Vec::new();
-        let mut path = CONNECTIONS.to_string();
+        let connections = format!(
+            "/people/me/connections?{CONTACT_FIELDS}&sources=READ_SOURCE_TYPE_CONTACT&pageSize=1000"
+        );
+        let mut path = connections.clone();
         loop {
             let v = self
                 .api
@@ -120,7 +251,7 @@ impl GoogleContactSync {
             let page: Page = serde_json::from_value(v)?;
             all.extend(page.connections);
             match page.next_page_token {
-                Some(t) => path = format!("{CONNECTIONS}&pageToken={}", enc(&t)),
+                Some(t) => path = format!("{connections}&pageToken={}", enc(&t)),
                 None => break,
             }
         }

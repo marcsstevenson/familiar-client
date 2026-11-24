@@ -24,6 +24,10 @@ export const COMMAND_SURFACE = {
   "cal.rsvp": "palette",
   "config.path": "palette",
   "config.validate": "palette",
+  "contacts.create": "palette",
+  "contacts.delete": "palette",
+  "contacts.edit": "palette",
+  "contacts.list": "palette",
   "contacts.search": "palette",
   "draft.create": "palette",
   "draft.edit": "terminal", // opens $EDITOR and waits

@@ -30,7 +30,7 @@ Familiar is an open source desktop email and calendar client that I'm building f
 | `Mail.ReadWrite` | Read and organise my mail |
 | `Mail.Send` | Send mail as me |
 | `Calendars.ReadWrite` | Read and update my calendar |
-| `Contacts.Read` | Address suggestions from my contacts |
+| `Contacts.ReadWrite` | Browse and edit my saved contacts and suggest recipients |
 | `MailboxSettings.ReadWrite` | Time zone, automatic replies |
 
 All of these are delegated: the app can only act as me, on my own mailbox, while I'm signed in. It can't read anyone else's mail.
