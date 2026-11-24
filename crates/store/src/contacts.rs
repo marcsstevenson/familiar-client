@@ -32,6 +32,21 @@ pub struct NewContact {
     pub phones: Vec<String>,
 }
 
+/// Editable fields shared by Outlook and Google. Omitted fields are left alone.
+#[derive(
+    Debug, Default, Clone, PartialEq, Eq, serde::Deserialize, Serialize, schemars::JsonSchema,
+)]
+pub struct ContactChanges {
+    /// Full display name.
+    pub name: Option<String>,
+    /// Company or organization.
+    pub company: Option<String>,
+    /// Email addresses. An empty list clears the field.
+    pub emails: Option<Vec<String>>,
+    /// Phone numbers. An empty list clears the field.
+    pub phones: Option<Vec<String>>,
+}
+
 /// A stored contact.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct Contact {
@@ -135,6 +150,28 @@ impl WriteTx<'_> {
             }
         }
         Ok(id)
+    }
+
+    /// Provider ID of a saved record in this account.
+    pub fn contact_remote_id(&self, account: AccountId, id: ContactId) -> Result<Option<String>> {
+        use rusqlite::OptionalExtension;
+        Ok(self
+            .tx
+            .query_row(
+                "SELECT remote_id FROM contacts WHERE account_id = ?1 AND id = ?2",
+                params![account, id],
+                |row| row.get(0),
+            )
+            .optional()?)
+    }
+
+    /// Removes the provider-confirmed deletion from the cache.
+    pub fn delete_contact(&self, account: AccountId, id: ContactId) -> Result<()> {
+        self.tx.execute(
+            "DELETE FROM contacts WHERE account_id = ?1 AND id = ?2",
+            params![account, id],
+        )?;
+        Ok(())
     }
 
     /// Ends a round: removes the account's contacts it did not see.

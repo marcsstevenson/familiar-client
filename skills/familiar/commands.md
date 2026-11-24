@@ -285,6 +285,65 @@ Parses and checks the config file: syntax, unknown or misspelt keys, types, refe
 
 - `PATH`: The config file. Defaults to FAMILIAR_CONFIG, then the platform default (see `fam config path`).
 
+## contacts.create
+
+Create a contact in one account. Access: `write`.
+
+```
+fam contacts create
+```
+
+Saves a contact in the specified Outlook or Google account. Requires a connection to the provider.
+
+- `--account <account>` (required): Account in which to create the contact.
+- `--company <company>`: Company or organization.
+- `--emails <emails>` (repeatable): Email addresses. An empty list clears the field.
+- `--name <name>`: Full display name.
+- `--phones <phones>` (repeatable): Phone numbers. An empty list clears the field.
+
+## contacts.delete
+
+Delete a saved contact. Access: `delete`.
+
+```
+fam contacts delete <CONTACT>
+```
+
+Deletes one contact from its owning Outlook or Google account. Requires --yes.
+
+- `--account <account>` (required): Account that owns the saved record.
+- `CONTACT` (required): Local contact ID from contacts list.
+- `--remote-id <remote-id>`: Provider ID from the selected card, to detect a stale selection.
+- `--yes`: Confirm deletion from the provider account.
+
+## contacts.edit
+
+Edit a saved contact. Access: `write`.
+
+```
+fam contacts edit <CONTACT>
+```
+
+Updates the supplied fields on one contact in its owning account. Omit fields to keep them.
+
+- `--account <account>` (required): Account that owns the saved record.
+- `--company <company>`: Company or organization.
+- `CONTACT` (required): Local contact ID from contacts list.
+- `--emails <emails>` (repeatable): Email addresses. An empty list clears the field.
+- `--name <name>`: Full display name.
+- `--phones <phones>` (repeatable): Phone numbers. An empty list clears the field.
+- `--remote-id <remote-id>`: Provider ID from the selected card, to detect a stale selection.
+
+## contacts.list
+
+List saved contacts from all accounts. Access: `read`.
+
+```
+fam contacts list
+```
+
+Reads each saved Outlook or Google contact from the local store with its owning account, email addresses and phones.
+
 ## contacts.search
 
 Find people to write to. Access: `read`.
@@ -293,7 +352,7 @@ Find people to write to. Access: `read`.
 fam contacts search [QUERY]
 ```
 
-Searches Outlook contacts and everyone mail came from or went to, by the start of a name, address or company, best first: contacts, then people written to most, then heard from. Reads the store, so it works without famd. Each result's mailbox field is ready for --to.
+Searches saved Outlook and Google contacts and everyone mail came from or went to, by the start of a name, address or company, best first: contacts, then people written to most, then heard from. Reads the store, so it works without famd. Each result's mailbox field is ready for --to.
 
 - `--account <account>`: Only this account (its name in config.toml).
 - `--limit <limit>`: How many to show, 1 to 200. Default 20.

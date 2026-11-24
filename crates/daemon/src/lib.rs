@@ -17,6 +17,7 @@
 //! sign-in store, and tests build one against the mock Graph.
 
 pub mod check;
+mod contacts;
 pub mod engine;
 pub mod gmail_ops;
 pub mod hooks;

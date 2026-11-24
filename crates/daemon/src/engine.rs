@@ -83,6 +83,8 @@ pub const CONTACTS_RESOURCE: &str = "contacts";
 pub struct AccountShared {
     /// What `daemon.status` reports.
     pub live: Mutex<AccountLive>,
+    /// Serializes full contact snapshots and contact mutations for this account.
+    pub(crate) contacts_lock: tokio::sync::Mutex<()>,
     /// Wakes the engine early.
     pub wake: Notify,
     /// Set by `sync.now`: everything is due.
@@ -107,6 +109,7 @@ impl AccountShared {
                 bodies_fetched: 0,
                 failures: 0,
             }),
+            contacts_lock: tokio::sync::Mutex::new(()),
             wake: Notify::new(),
             force: AtomicBool::new(false),
             requested: AtomicU64::new(0),
@@ -828,6 +831,7 @@ impl Engine {
         let Some(contacts) = &self.contacts else {
             return Ok(());
         };
+        let _guard = self.shared.contacts_lock.lock().await;
         match contacts.sync(&mut self.w, Priority::Background).await {
             Ok((n, rm)) => {
                 let at = (self.clock)();

@@ -8,6 +8,7 @@ import { onGlobalKey, setKeyOverrides } from "./actions/registry";
 import { type DaemonState, type UiInfo, watchDaemon } from "./api";
 import { DayPanel, type CalendarLocation } from "./calendar/DayPanel";
 import { localDate } from "./calendar/timeline";
+import { Contacts } from "./contacts/Contacts";
 import { ReadingPane } from "./reading/ReadingPane";
 import { Palette } from "./palette/Palette";
 import { EventDialog } from "./calendar/EventDialog";
@@ -30,7 +31,7 @@ type UiCommand =
   | { kind: "open"; folder: number; message: number }
   | { kind: "folder"; folder: number | null };
 
-const mainViews = ["Mail", "Calendar"] as const;
+const mainViews = ["Mail", "Calendar", "Contacts"] as const;
 type MainView = typeof mainViews[number];
 
 export function App(props: { info: UiInfo }) {
@@ -43,7 +44,7 @@ export function App(props: { info: UiInfo }) {
   const [view, setView] = createSignal<MainView>(saved?.view ?? (saved?.calendar === "full" ? "Calendar" : "Mail"));
   const [dayPanelOpen, setDayPanelOpen] = createSignal(saved?.dayPanelOpen ?? saved?.calendar === "panel");
   const calendarMode = (): keyof typeof locations | undefined =>
-    view() === "Calendar" ? "calendar" : dayPanelOpen() && !eventDialog() ? "dayPanel" : undefined;
+    view() === "Calendar" ? "calendar" : view() === "Mail" && dayPanelOpen() && !eventDialog() ? "dayPanel" : undefined;
   const locations = {
     calendar: readSession<CalendarLocation>("calendar"),
     dayPanel: readSession<CalendarLocation>(saved?.calendar === "panel" ? "calendar" : "dayPanel"),
@@ -151,7 +152,7 @@ export function App(props: { info: UiInfo }) {
         </button></Show>
       </TitleBar>
       <main class="main-view"><div class="panes" id="main-view" role="tabpanel" aria-labelledby={"tab-" + view()}
-        classList={{ "reviewing-proposal": !!eventDialog(), "calendar-expanded": view() === "Calendar" }} style={{ "grid-template-columns": paneColumns() }}>
+        classList={{ "reviewing-proposal": !!eventDialog(), "calendar-expanded": view() === "Calendar", "contacts-expanded": view() === "Contacts" }} style={{ "grid-template-columns": paneColumns() }}>
         <Splitters />
         <nav class="pane folders" aria-label="Folders">
           <FolderTree views={props.info.views} />
@@ -173,6 +174,7 @@ export function App(props: { info: UiInfo }) {
             {d => <EventDialog message={d.message} from={d.from} onClose={() => setEventDialog(null)} />}
           </Show>
         </div>
+        <Show when={view() === "Contacts"}><Contacts /></Show>
       </div></main>
       <footer class="statusbar" role="status">
         <SyncStatus daemon={daemon()} />

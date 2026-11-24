@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-//! Write routes: the subset of Graph's mail and calendar writes Familiar uses.
+//! Write routes: the subset of Graph's mail, contact and calendar writes Familiar uses.
 //!
 //! Each route changes the mailbox model through the same mutation methods
 //! tests use, so every write shows up in delta rounds like a change made
 //! anywhere else.
 
 use super::{GraphError, R, Reply, strip_prefix_ci};
-use crate::model::{Attachment, EmailAddress, Folder, MailboxState, Message};
+use crate::model::{Attachment, Contact, EmailAddress, Folder, MailboxState, Message};
 use crate::render::{self, Prefer};
 use serde_json::{Value, json};
 
@@ -84,6 +84,31 @@ pub(super) fn route(
     let lower: Vec<String> = segs.iter().map(|s| s.to_ascii_lowercase()).collect();
     let l: Vec<&str> = lower.iter().map(String::as_str).collect();
     match (method, l.as_slice()) {
+        ("POST", ["contacts"]) => {
+            let mut contact = patch_contact(&Contact::default(), body)?;
+            contact.id = st.new_id("con");
+            let reply = created(render::contact(&contact));
+            st.add_contact(contact);
+            Ok(reply)
+        }
+        ("PATCH" | "DELETE", ["contacts", _] | ["contactfolders", _, "contacts", _]) => {
+            let id = segs[segs.len() - 1];
+            let folder = if segs.len() == 4 { segs[1] } else { "contacts" };
+            let index = st
+                .contacts
+                .iter()
+                .position(|c| c.id == id && c.parent_folder_id() == folder)
+                .ok_or_else(GraphError::not_found)?;
+            if method == "DELETE" {
+                st.contacts.remove(index);
+                return Ok(no_content());
+            }
+            let contact = patch_contact(&st.contacts[index], body)?;
+            let reply = Reply::ok(render::contact(&contact));
+            st.contacts[index] = contact;
+            Ok(reply)
+        }
+
         // Messages.
         ("PATCH", ["messages", _]) | ("PATCH", ["mailfolders", _, "messages", _]) => {
             update_message(st, segs[segs.len() - 1], body, prefer)
@@ -186,6 +211,21 @@ pub(super) fn route(
             format!("The mock does not serve {method} on '{}'.", segs.join("/")),
         )),
     }
+}
+
+fn patch_contact(contact: &Contact, body: &Value) -> Result<Contact, GraphError> {
+    let mut merged = json!(contact);
+    let fields = body
+        .as_object()
+        .ok_or_else(|| bad_request("Expected a contact object."))?;
+    for (key, value) in fields {
+        match key.as_str() {
+            "displayName" | "companyName" | "emailAddresses" | "mobilePhone" | "homePhones"
+            | "businessPhones" | "categories" => merged[key] = value.clone(),
+            _ => return Err(bad_request(format!("Unknown contact property: {key}"))),
+        }
+    }
+    serde_json::from_value(merged).map_err(|e| bad_request(e.to_string()))
 }
 
 // --- messages ---------------------------------------------------------------

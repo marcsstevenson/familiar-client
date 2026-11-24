@@ -18,7 +18,7 @@ About 15 minutes. Part 1 registers the Familiar app in your own Azure directory,
    - `Mail.ReadWrite`
    - `Mail.Send`
    - `Calendars.ReadWrite`
-   - `Contacts.Read`
+   - `Contacts.ReadWrite`
    - `MailboxSettings.ReadWrite`
 
    Click **Add permissions**.
@@ -41,7 +41,7 @@ Don't create a client secret or certificate. Familiar is a public client and doe
    **Full scopes:**
 
    ```
-   https://login.microsoftonline.com/organizations/oauth2/v2.0/authorize?client_id=CLIENT_ID&response_type=code&redirect_uri=http%3A%2F%2Flocalhost&response_mode=query&scope=openid%20profile%20offline_access%20User.Read%20Mail.ReadWrite%20Mail.Send%20Calendars.ReadWrite%20Contacts.Read%20MailboxSettings.ReadWrite&prompt=select_account
+   https://login.microsoftonline.com/organizations/oauth2/v2.0/authorize?client_id=CLIENT_ID&response_type=code&redirect_uri=http%3A%2F%2Flocalhost&response_mode=query&scope=openid%20profile%20offline_access%20User.Read%20Mail.ReadWrite%20Mail.Send%20Calendars.ReadWrite%20Contacts.ReadWrite%20MailboxSettings.ReadWrite&prompt=select_account
    ```
 
 3. Sign in as your **iM3 Dental** user and see which screen you get:

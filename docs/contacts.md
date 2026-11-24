@@ -1,5 +1,15 @@
 # Contacts
 
+The desktop **Contacts** tab browses the saved address books of all synced Outlook and Gmail accounts. Search by name, organization, address or phone, filter by account, and select a card to view details or compose an email from that account. A contact with several addresses has one card per provider record.
+
+Choose **New contact** and a destination account to create a card. Edit changes the selected card in its owning account. Delete asks for confirmation before removing it from that provider. Browsing uses the local copy offline. Saving and deleting need a running daemon and a connection to the provider.
+
+Existing accounts with read-only contact access can continue browsing. To grant contact editing, run `fam auth login <account>` and approve the additional permission. Managed accounts may need their administrator's consent.
+
+The same operations are available through `fam contacts list`, `create`, `edit` and `delete`. Use `fam contacts list --json` to get local IDs and accounts. For example, `fam contacts create --account work --name "Jane Coach" --emails jane@example.org`. Deleting a card needs `--yes`.
+
+## Recipient suggestions
+
 `fam contacts search <words>` (WP 2.5) finds people to write to, for
 address autocomplete in the CLI, the GUI and agents. It reads the store, so
 it works without famd.
@@ -21,11 +31,11 @@ most.
 - **Outlook contacts.** famd lists every contact (the default contacts
   folder and each contact folder in it) at start and then every hour
   (`SyncPolicy::contacts_interval`), replacing the store's copy, so a
-  contact deleted in Outlook goes too. Uses `Contacts.Read`, consented at
+  contact deleted in Outlook goes too. Uses `Contacts.ReadWrite`, consented at
   sign-in. A mailbox that refuses is logged and tried again next hour.
 - **Google contacts.** For a Gmail account, famd lists the saved contacts
   (People API `people.connections`) on the same hourly schedule and
-  replaces the store's copy the same way. Uses `contacts.readonly`, asked
+  replaces the store's copy the same way. Uses `contacts`, asked
   for at Google sign-in. Gmail's automatic "other contacts" aren't read:
   they are people the account has mailed, which past correspondents
   already cover.

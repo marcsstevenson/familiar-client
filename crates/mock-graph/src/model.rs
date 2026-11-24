@@ -417,9 +417,26 @@ pub struct Contact {
     /// Mobile phone.
     #[serde(default)]
     pub mobile_phone: Option<String>,
+    /// Work numbers.
+    #[serde(default)]
+    pub business_phones: Vec<String>,
+    /// Home numbers.
+    #[serde(default)]
+    pub home_phones: Vec<String>,
+    /// Contact categories.
+    #[serde(default)]
+    pub categories: Vec<String>,
 }
 
 impl Contact {
+    pub(crate) fn parent_folder_id(&self) -> &str {
+        if self.folder_id.is_empty() {
+            "contacts"
+        } else {
+            &self.folder_id
+        }
+    }
+
     /// A contact with one address.
     pub fn new(name: impl Into<String>, address: impl Into<String>) -> Self {
         let name = name.into();

@@ -698,6 +698,78 @@ export type ConfigWarning = {
   message: string;
 };
 
+export type ContactBook = {
+  /** Available synced account keys, including empty address books. */
+  accounts: Array<string>;
+  /** Saved contact records. */
+  contacts: Array<ContactCard>;
+};
+
+export type ContactCard = {
+  /** Owning account key. */
+  account: string;
+  /** Organization name. */
+  company: string;
+  /** All saved email addresses. */
+  emails: Array<string>;
+  /** Local record ID. */
+  id: number;
+  /** Display name. */
+  name: string;
+  /** All saved phone numbers. */
+  phones: Array<string>;
+  /** Provider record ID. */
+  remote_id: string;
+};
+
+export type ContactCreateInput = {
+  /** Account in which to create the contact. */
+  account: string;
+  /** Company or organization. */
+  company?: string | null;
+  /** Email addresses. An empty list clears the field. */
+  emails?: Array<string> | null;
+  /** Full display name. */
+  name?: string | null;
+  /** Phone numbers. An empty list clears the field. */
+  phones?: Array<string> | null;
+};
+
+export type ContactDeleteInput = {
+  /** Account that owns the saved record. */
+  account: string;
+  /** Local contact ID from contacts list. */
+  contact: number;
+  /** Provider ID from the selected card, to detect a stale selection. */
+  remote_id?: string | null;
+  /** Confirm deletion from the provider account. */
+  yes?: boolean;
+};
+
+export type ContactEditInput = {
+  /** Account that owns the saved record. */
+  account: string;
+  /** Company or organization. */
+  company?: string | null;
+  /** Local contact ID from contacts list. */
+  contact: number;
+  /** Email addresses. An empty list clears the field. */
+  emails?: Array<string> | null;
+  /** Full display name. */
+  name?: string | null;
+  /** Phone numbers. An empty list clears the field. */
+  phones?: Array<string> | null;
+  /** Provider ID from the selected card, to detect a stale selection. */
+  remote_id?: string | null;
+};
+
+export type ContactWritten = {
+  /** Local ID of the affected contact. */
+  contact: number;
+};
+
+export type ContactsListInput = Record<string, never>;
+
 export type ContactsSearchInput = {
   /** Only this account (its name in config.toml). */
   account?: string | null;
@@ -1660,7 +1732,7 @@ export type PersonView = {
   address: string;
   /** Company, from the contact. */
   company?: string;
-  /** In Outlook contacts. */
+  /** Saved in an account's contacts. */
   contact: boolean;
   /** Last message either way (RFC 3339), if any. */
   last?: string | null;
@@ -2040,6 +2112,14 @@ export interface Commands {
   "config.path": { input: ConfigPathInput; output: ConfigPathOutput };
   /** Check config.toml for errors */
   "config.validate": { input: ConfigPathInput; output: ConfigValidateOutput };
+  /** Create a contact in one account */
+  "contacts.create": { input: ContactCreateInput; output: ContactWritten };
+  /** Delete a saved contact */
+  "contacts.delete": { input: ContactDeleteInput; output: ContactWritten };
+  /** Edit a saved contact */
+  "contacts.edit": { input: ContactEditInput; output: ContactWritten };
+  /** List saved contacts from all accounts */
+  "contacts.list": { input: ContactsListInput; output: ContactBook };
   /** Find people to write to */
   "contacts.search": { input: ContactsSearchInput; output: ContactsSearchOutput };
   /** Save a new draft */
@@ -2166,6 +2246,10 @@ export const COMMAND_NAMES = [
   "cal.show",
   "config.path",
   "config.validate",
+  "contacts.create",
+  "contacts.delete",
+  "contacts.edit",
+  "contacts.list",
   "contacts.search",
   "draft.create",
   "draft.edit",

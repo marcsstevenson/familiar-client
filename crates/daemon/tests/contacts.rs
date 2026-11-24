@@ -137,3 +137,69 @@ async fn contacts_and_correspondents() {
     assert_eq!(search(&env, "newbie")[0].name, "Nora Newbie");
     env.stop().await;
 }
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn provider_writes_update_the_book_and_require_the_selected_identity() {
+    use familiar_core::ErrorKind;
+    use familiar_core::commands::contact_book::{METHOD_CONTACT_WRITE, list_at};
+    use serde_json::json;
+
+    let mut env = Env::new(0).await;
+    env.start(policy());
+    let svc = env.daemon().service();
+    let create = json!({"kind":"create","account":KEY,"phones":["+64 21 123456"]});
+    let denied = svc
+        .handle(
+            METHOD_CONTACT_WRITE,
+            json!({"source":"mcp","mutation":create}),
+        )
+        .await
+        .unwrap_err();
+    assert_eq!(denied.kind, ErrorKind::PermissionDenied);
+    let write = |mutation| {
+        svc.handle(
+            METHOD_CONTACT_WRITE,
+            json!({"source":"gui","mutation":mutation}),
+        )
+    };
+    let made = write(create).await.unwrap();
+    let id = made["contact"].as_i64().unwrap();
+    let book = list_at(&env.paths).unwrap();
+    assert_eq!(book.accounts, [KEY]);
+    let card = book.contacts.iter().find(|c| c.id == id).unwrap();
+    assert_eq!(card.phones, ["+64 21 123456"]);
+    assert!(card.emails.is_empty());
+    let changed = write(json!({"kind":"edit","account":KEY,"contact":id,"remote_id":card.remote_id,"company":"Club"})).await.unwrap();
+    assert_eq!(changed["contact"], id);
+    assert_eq!(
+        list_at(&env.paths)
+            .unwrap()
+            .contacts
+            .iter()
+            .find(|c| c.id == id)
+            .unwrap()
+            .company,
+        "Club"
+    );
+    let mut delete = json!({"kind":"delete","account":KEY,"contact":id,"yes":false});
+    assert_eq!(
+        write(delete.clone()).await.unwrap_err().kind,
+        ErrorKind::ConfirmationRequired
+    );
+    delete["yes"] = json!(true);
+    delete["remote_id"] = json!("stale-selection");
+    assert_eq!(
+        write(delete.clone()).await.unwrap_err().kind,
+        ErrorKind::Conflict
+    );
+    delete["remote_id"] = json!(card.remote_id);
+    write(delete).await.unwrap();
+    assert!(
+        list_at(&env.paths)
+            .unwrap()
+            .contacts
+            .iter()
+            .all(|c| c.id != id)
+    );
+    env.stop().await;
+}

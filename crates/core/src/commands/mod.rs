@@ -11,6 +11,7 @@ pub mod cal_propose;
 pub mod cal_write;
 pub mod check_spam;
 pub mod config;
+pub mod contact_book;
 pub mod contacts;
 pub mod draft;
 pub mod draft_edit;

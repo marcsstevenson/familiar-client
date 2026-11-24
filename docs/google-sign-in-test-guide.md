@@ -29,7 +29,7 @@ Do it all signed in as your `@gmail.com` account.
    https://www.googleapis.com/auth/gmail.send
    https://www.googleapis.com/auth/gmail.settings.basic
    https://www.googleapis.com/auth/calendar
-   https://www.googleapis.com/auth/contacts.readonly
+   https://www.googleapis.com/auth/contacts
    https://www.googleapis.com/auth/contacts.other.readonly
    ```
 

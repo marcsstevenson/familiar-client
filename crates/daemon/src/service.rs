@@ -78,7 +78,7 @@ pub fn command_error(e: GraphError) -> CommandError {
     CommandError::new(kind, e.to_string())
 }
 
-fn store_error(e: familiar_store::Error) -> CommandError {
+pub(crate) fn store_error(e: familiar_store::Error) -> CommandError {
     match e {
         familiar_store::Error::NotFound(m) => CommandError::new(ErrorKind::NotFound, m),
         e => CommandError::internal(format!("store: {e}")),
@@ -235,6 +235,9 @@ impl Service {
     /// Runs one request.
     pub async fn handle(&self, method: &str, p: Value) -> Result<Value, CommandError> {
         match method {
+            familiar_core::commands::contact_book::METHOD_CONTACT_WRITE => {
+                to_value(&self.contact_write(params(p)?).await?)
+            }
             METHOD_STATUS => to_value(&self.status()),
             METHOD_PIN => to_value(&self.pin(params(p)?).await?),
             METHOD_FETCH_BODY => to_value(&self.fetch_body(params(p)?).await?),

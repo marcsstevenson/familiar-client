@@ -205,6 +205,10 @@ impl Registry {
         r.register(crate::commands::cal_write::CalRsvp);
         r.register(crate::commands::cal_propose::CalPropose);
         r.register(crate::commands::check_spam::MailCheckSpam);
+        r.register(crate::commands::contact_book::ContactsList);
+        r.register(crate::commands::contact_book::ContactsCreate);
+        r.register(crate::commands::contact_book::ContactsEdit);
+        r.register(crate::commands::contact_book::ContactsDelete);
         r.register(crate::commands::contacts::ContactsSearch);
         r.register(crate::commands::agent::AgentStatus);
         r.register(crate::commands::agent::AuditList);

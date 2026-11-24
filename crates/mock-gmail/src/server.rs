@@ -3,6 +3,7 @@
 
 use std::collections::HashMap;
 use std::net::SocketAddr;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
@@ -779,27 +780,99 @@ fn fixture_people() -> Vec<Value> {
     ]
 }
 
-/// `GET /people/v1/people/me/connections`, paged by `pageSize` and an offset token.
+fn people_stamp(person: &mut Value) {
+    static SERIAL: AtomicU64 = AtomicU64::new(1);
+    let serial = SERIAL.fetch_add(1, Ordering::Relaxed);
+    if person["resourceName"].is_null() {
+        person["resourceName"] = json!(format!("people/mock-{serial}"));
+    }
+    let id = person["resourceName"]
+        .as_str()
+        .unwrap()
+        .trim_start_matches("people/");
+    person["metadata"]["sources"] = json!([{"type":"CONTACT", "id":id, "etag":serial.to_string()}]);
+    if let Some(name) = person["names"].get_mut(0)
+        && let Some(display) = name.get("unstructuredName").cloned()
+    {
+        name["displayName"] = display;
+    }
+}
+
+/// People v1 contact mutations and connection listing.
 fn people_route(
-    all: &[Value],
+    all: &mut Vec<Value>,
     method: &str,
     route: &str,
     p: &[(String, String)],
+    body: &[u8],
 ) -> Result<Reply, ApiError> {
-    if (method, route) != ("GET", "/people/me/connections") {
-        return Err(ApiError::new(
-            404,
-            "notFound",
-            format!("Unknown mock People resource {route}"),
-        ));
-    }
     let get = |k: &str| p.iter().find(|(n, _)| n == k).map(|(_, v)| v.as_str());
-    if !get("personFields").is_some_and(|f| !f.is_empty()) {
+    let parse = || {
+        serde_json::from_slice::<serde_json::Map<String, Value>>(body)
+            .map(Value::Object)
+            .map_err(|e| ApiError::new(400, "invalidArgument", e.to_string()))
+    };
+    if method != "DELETE" && !get("personFields").is_some_and(|f| !f.is_empty()) {
         return Err(ApiError::new(
             400,
             "invalidArgument",
             "personFields mask is required",
         ));
+    }
+    if (method, route) == ("POST", "/people:createContact") {
+        let mut person = parse()?;
+        people_stamp(&mut person);
+        all.push(person.clone());
+        return Ok(Reply::Json(person));
+    }
+    if (method, route) != ("GET", "/people/me/connections") {
+        let (resource, action) = route
+            .trim_start_matches('/')
+            .split_once(':')
+            .unwrap_or((route.trim_start_matches('/'), ""));
+        let missing = || {
+            ApiError::new(
+                404,
+                "notFound",
+                format!("Unknown mock People resource {route}"),
+            )
+        };
+        let index = all
+            .iter()
+            .position(|person| person["resourceName"] == resource)
+            .ok_or_else(missing)?;
+        let person = &mut all[index];
+        if person["metadata"]["sources"].is_null() {
+            people_stamp(person);
+        }
+        return match (method, action) {
+            ("GET", "") => Ok(Reply::Json(person.clone())),
+            ("PATCH", "updateContact") => {
+                let changes = parse()?;
+                if changes["metadata"]["sources"] != person["metadata"]["sources"] {
+                    return Err(ApiError::new(
+                        400,
+                        "failedPrecondition",
+                        "Expected current contact source etag",
+                    ));
+                }
+                let fields = get("updatePersonFields")
+                    .filter(|m| !m.is_empty())
+                    .ok_or_else(|| {
+                        ApiError::new(400, "invalidArgument", "updatePersonFields is required")
+                    })?;
+                for key in fields.split(',') {
+                    person[key] = changes.get(key).cloned().unwrap_or_else(|| json!([]));
+                }
+                people_stamp(person);
+                Ok(Reply::Json(person.clone()))
+            }
+            ("DELETE", "deleteContact") => {
+                all.remove(index);
+                Ok(Reply::Empty)
+            }
+            _ => Err(missing()),
+        };
     }
     let size = get("pageSize")
         .and_then(|v| v.parse().ok())
@@ -934,7 +1007,7 @@ async fn serve(
                 .people
                 .entry(mailbox.clone())
                 .or_insert_with(fixture_people);
-            people_route(all, method, route, &p)
+            people_route(all, method, route, &p, body)
         } else if let Some(route) = calendar {
             let events = st
                 .calendar_events

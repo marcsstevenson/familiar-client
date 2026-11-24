@@ -5,7 +5,8 @@ use chrono::{DateTime, NaiveDateTime, SecondsFormat, Utc};
 use serde_json::{Map, Value, json};
 
 use crate::model::{
-    Calendar, EmailAddress, EventRecord, FolderRecord, MailboxState, MessageRecord, User, fnv1a,
+    Calendar, Contact, EmailAddress, EventRecord, FolderRecord, MailboxState, MessageRecord, User,
+    fnv1a,
 };
 
 /// Options from the `Prefer` header.
@@ -50,6 +51,21 @@ impl Prefer {
 
 pub(crate) fn dt(t: &DateTime<Utc>) -> String {
     t.to_rfc3339_opts(SecondsFormat::Secs, true)
+}
+
+pub(crate) fn contact(contact: &Contact) -> Value {
+    json!({
+        "@odata.type": "#microsoft.graph.contact",
+        "id": contact.id,
+        "parentFolderId": contact.parent_folder_id(),
+        "displayName": contact.display_name,
+        "companyName": contact.company_name,
+        "emailAddresses": contact.email_addresses,
+        "mobilePhone": contact.mobile_phone,
+        "homePhones": contact.home_phones,
+        "businessPhones": contact.business_phones,
+        "categories": contact.categories,
+    })
 }
 
 /// Graph's dateTimeTimeZone format: no offset, seven fractional digits.
