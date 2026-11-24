@@ -4,6 +4,7 @@
 // ticked event. A meeting invitation is answered with `cal rsvp` instead.
 import { For, Match, Show, Switch, createEffect, createResource, createSignal, onCleanup, onMount } from "solid-js";
 import { ProposalSchedule } from "./ProposalSchedule";
+import { writableCalendars } from "./preferences";
 import { localDate } from "./timeline";
 import { EventFields } from "./EventFields";
 import { textToHtml } from "../compose/html";
@@ -31,7 +32,7 @@ type Created = { id: number | null; event: number | null; series: boolean; guest
 export function EventDialog(props: { message: number; from: string; onClose: () => void }) {
   const [proposal] = createResource(() => run("cal.propose", { from_mail: props.message, with_mail: true }));
   const [calendars] = createResource(async () =>
-    (await run("cal.calendars", {})).calendars.filter((c) => c.can_edit),
+    writableCalendars((await run("cal.calendars", {})).calendars),
   );
   const [drafts, setDrafts] = createStore<Draft[]>([]);
   const [chosen, setChosen] = createSignal<string>("");
@@ -306,13 +307,13 @@ export function EventDialog(props: { message: number; from: string; onClose: () 
               </div>
               <label class="event-calendar">
                 Calendar:
-                <select disabled={busy()} value={chosen()} onChange={(e) => setChosen(e.currentTarget.value)}>
+                <select disabled={busy() || !calendars()?.length} value={chosen()} onChange={(e) => setChosen(e.currentTarget.value)}>
                   <For each={accounts()}>
                     {(a) => (
                       <optgroup label={a}>
                         <For each={(calendars() ?? []).filter((c) => c.account === a)}>
                           {(c) => (
-                            <option value={calendarKey(c)}>
+                            <option value={calendarKey(c)} selected={chosen() === calendarKey(c)}>
                               {c.account} · {c.name}
                               {c.purposes && c.purposes.length > 0 ? `  (${c.purposes.join(", ")})` : ""}
                             </option>
@@ -323,6 +324,7 @@ export function EventDialog(props: { message: number; from: string; onClose: () 
                   </For>
                 </select>
               </label>
+              <Show when={!calendars()?.length}><p class="muted">To add an event, enable a writable calendar under Calendar → Configure.</p></Show>
               <Show when={error()}>{(e) => <p class="warn" role="alert">{e()}</p>}</Show>
               <div class="event-actions">
                 <span class="spacer" />

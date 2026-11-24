@@ -9,17 +9,11 @@ import { NewEvent } from "./NewEvent";
 import { AgendaView, MonthView, TimeView } from "./CalendarViews";
 import { MiniMonth } from "./MiniMonth";
 import { dateWords, type Calendar } from "./proposals";
+import { calendarView, calendarVisible, chooseView, setCalendarVisible, writableCalendars } from "./preferences";
 import { calendarRange, datesFrom, localDate, nextDate, shiftMonth, views, type CalendarView } from "./timeline";
 import "./full-calendar.css";
 import "./day-panel.css";
 
-function preferences() {
-  try {
-    const saved = JSON.parse(localStorage.getItem("familiar.calendar-view") ?? "{}");
-    return { view: views.includes(saved.view) ? saved.view as CalendarView : "Week" as const,
-      hidden: Array.isArray(saved.hidden) ? saved.hidden.filter(Number.isSafeInteger) as number[] : [] };
-  } catch { return { view: "Week" as const, hidden: [] }; }
-}
 function errorText(error: unknown) {
   // Solid resources wrap rejected command objects in an Error.
   const cause = error instanceof Error ? error.cause : error;
@@ -36,9 +30,8 @@ export function DayPanel(props: { full: boolean; location?: CalendarLocation; re
   const location = props.location;
   const [date, setDate] = createSignal(location?.date ?? localDate(new Date()));
   const [catalogue, { refetch: refreshCalendars }] = createResource(() => run("cal.calendars", {}));
-  const saved = preferences();
-  const [fullView, setFullView] = createSignal<CalendarView>(saved.view);
-  const view = () => props.full ? fullView() : "Day";
+  const [configuring, setConfiguring] = createSignal(false);
+  const view = () => props.full ? calendarView() : "Day";
   const period = createMemo(() => calendarRange(view(), date()), undefined, {
     equals: (a, b) => a?.from === b.from && a.days === b.days,
   });
@@ -48,12 +41,6 @@ export function DayPanel(props: { full: boolean; location?: CalendarLocation; re
   }));
   const calendars = () => catalogue.error ? [] : catalogue()?.calendars ?? [];
   const result = () => range.error || range()?.query !== period() ? undefined : range();
-  const [hidden, setHidden] = createSignal<number[]>(saved.hidden);
-  function remember() {
-    try { localStorage.setItem("familiar.calendar-view", JSON.stringify({ view: fullView(), hidden: hidden() })); }
-    catch { /* Keep the current choices in memory. */ }
-  }
-  function chooseView(v: CalendarView) { setFullView(v); remember(); }
   const [slot, setSlot] = createSignal<{ date: string; endDate?: string; time: string; zone: string }>();
   const [selected, select] = createSignal<number | undefined>(location?.event);
   const [menu, setMenu] = createSignal<MenuPoint>();
@@ -65,14 +52,15 @@ export function DayPanel(props: { full: boolean; location?: CalendarLocation; re
     setMenu(undefined);
     trigger = undefined;
     setDate(target.date);
-    setHidden(ids => ids.filter(id => id !== target.calendar));
     select(target.event);
     props.onTargetOpened();
   });
   createEffect(() => props.remember({ date: date(), event: menu() ? undefined : selected() }));
-  const writable = createMemo(() => calendars().filter(c => c.can_edit));
+  const enabled = createMemo(() => calendars().filter(c => calendarVisible(c.id)));
+  const sidebarCalendars = () => configuring() ? calendars() : enabled();
+  const writable = createMemo(() => writableCalendars(calendars()));
   const visible = createMemo(() => (result()?.events ?? [])
-    .filter(e => !e.cancelled && !hidden().includes(e.calendar_id)));
+    .filter(e => !e.cancelled && calendarVisible(e.calendar_id)));
   const [revision, setRevision] = createSignal(0);
   const color = (id: number) => {
     const value = calendars().find(c => c.id === id)?.color ?? "";
@@ -124,12 +112,9 @@ export function DayPanel(props: { full: boolean; location?: CalendarLocation; re
     </button>;
   }
   function checkbox(c: Calendar) {
-    return <label><input type="checkbox" checked={!hidden().includes(c.id)}
-      onChange={e => {
-        const checked = e.currentTarget.checked;
-        setHidden(ids => checked ? ids.filter(id => id !== c.id) : [...ids, c.id]);
-        remember();
-      }} /><i style={{ background: color(c.id) }} />{!props.full && c.account + " · "}{c.name}{c.can_edit ? "" : " (read-only)"}</label>;
+    return <label><input type="checkbox" checked={calendarVisible(c.id)}
+      onChange={e => setCalendarVisible(c.id, e.currentTarget.checked)} />
+      <i style={{ background: color(c.id) }} /><span>{!props.full && c.account + " · "}{c.name}{c.can_edit ? "" : " (read-only)"}</span></label>;
   }
   const rangeTitle = () => view() === "Month" ? new Date(date() + "T12:00").toLocaleDateString(undefined, { month: "long", year: "numeric" })
     : view() === "Day" ? dateWords(date()) : dateWords(period().from) + " – " + dateWords(nextDate(period().from, period().days - 1));
@@ -151,8 +136,19 @@ export function DayPanel(props: { full: boolean; location?: CalendarLocation; re
       </header>
       <Show when={props.full}><div class="calendar-sidebar">
         <MiniMonth date={date()} navigate={navigate} />
-        <h3>Calendars</h3><For each={[...new Set(calendars().map(c => c.account))]}>{account =>
-          <fieldset><legend>{account}</legend><For each={calendars().filter(c => c.account === account)}>{checkbox}</For></fieldset>
+        <div class="calendar-key-heading"><h3>Calendars</h3>
+          <button type="button" aria-label={configuring() ? "Done configuring calendars" : "Configure calendars"}
+            onClick={() => setConfiguring(!configuring())}>{configuring() ? "Done" : "Configure"}</button>
+        </div>
+        <Show when={!configuring() && calendars().length > 0 && !enabled().length}><p>No calendars selected.</p></Show>
+        <For each={[...new Set(sidebarCalendars().map(c => c.account))]}>{account =>
+          <fieldset><legend>{account}</legend><div class="calendar-key-items">
+            <For each={sidebarCalendars().filter(c => c.account === account)}>{c =>
+              <Show when={configuring()} fallback={
+                <span class="calendar-pill" style={{ "--calendar-color": color(c.id) }}><i />{c.name}</span>
+              }>{checkbox(c)}</Show>
+            }</For>
+          </div></fieldset>
         }</For>
       </div></Show>
       <div class="calendar-content">
@@ -174,7 +170,7 @@ export function DayPanel(props: { full: boolean; location?: CalendarLocation; re
         </div>
         <Show when={catalogue.error || range.error}>{e => <p class="day-warning" role="alert">{errorText(e())}</p>}</Show>
         <Show when={!catalogue.loading && !catalogue.error && !calendars().length}><p>No calendars have synced yet.</p></Show>
-        <For each={calendars().filter(c => !hidden().includes(c.id) && c.error)}>{c =>
+        <For each={enabled().filter(c => c.error)}>{c =>
           <p class="day-warning">{c.account} · {c.name} — {c.error}</p>}</For>
         <For each={result()?.warnings}>{w => <p class="day-warning">{w}</p>}</For>
         <Show when={range.loading && !result()}><p role="status">Loading schedule…</p></Show>
@@ -196,8 +192,6 @@ export function DayPanel(props: { full: boolean; location?: CalendarLocation; re
       <Show when={slot()}>{t => <NewEvent date={t().date} endDate={t().endDate} time={t().time} zone={t().zone} calendars={writable()} onClose={() => setSlot(undefined)}
         onSaved={(c, day, time, savedZone) => {
           navigate(savedZone === "UTC" && time ? localDate(new Date(day + "T" + time + "Z")) : day);
-          setHidden(ids => ids.filter(id => id !== c.id));
-          remember();
           setSlot(undefined);
           void refreshDay();
           notify("Added to " + c.account + " · " + c.name);
