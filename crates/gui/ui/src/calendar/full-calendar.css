@@ -36,7 +36,6 @@
 .full-calendar .day-nav { flex-wrap: wrap; }
 .full-calendar .day-nav input { flex: 0 1 auto; }
 .calendar-range { flex: 1; text-align: center; }
-.full-calendar .day-nav select { font: inherit; color: inherit; background: var(--bg); padding: var(--space-2); border: 1px solid var(--border); border-radius: var(--radius-sm); }
 .time-view .time-head { flex: none; max-height: 24%; overflow: auto; }
 .time-columns, .time-head { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); }
 .time-head .day-all { max-height: none; }

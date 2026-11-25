@@ -4,6 +4,7 @@
 // so nothing in the message can run, while this pane can still reach into the
 // document to show where a link goes and to open links outside the app.
 import { createEffect, onCleanup } from "solid-js";
+import { accent, applyAccent } from "../theme";
 import { onGlobalKey } from "../actions/registry";
 import { DARK_FIRST_CSS, darken } from "./dark";
 import type { QuoteAction } from "../compose/spec";
@@ -43,6 +44,7 @@ export function MessageFrame(props: {
     if (!doc) return;
     if (props.dark) darken(doc);
     addQuotedActions(doc, props.onQuote, props.dark);
+    applyAccent(doc.documentElement, accent(), props.dark);
     const id = props.message;
     const key = props.standalone ? "readerScroll/" + id : "readingScroll";
     const page = doc.scrollingElement;
@@ -96,6 +98,12 @@ export function MessageFrame(props: {
     });
     props.onLoad();
   };
+
+  createEffect(() => {
+    const value = accent();
+    const root = frame.contentDocument?.documentElement;
+    if (root) applyAccent(root, value, props.dark);
+  });
 
   // Switching between dark and light reloads the message, which is local.
   createEffect(() => {

@@ -18,7 +18,7 @@
 .contacts-browser h1, .contact-details h2, .contact-editor h2 { font-size: var(--text-xl); margin: 0; }
 .contacts-filters, .contact-editor fieldset { display: grid; gap: var(--space-3); }
 .contacts-filters { padding-top: 0; border-bottom: 1px solid var(--border); }
-.contacts-view :is(button, input, select, textarea) {
+.contacts-view button {
   font: inherit; color: var(--text); background: var(--bg);
   padding: var(--space-2) var(--space-3); border: 1px solid var(--border); border-radius: var(--radius-sm);
 }
@@ -45,7 +45,7 @@
 .contact-details .contact-email { border: 0; background: transparent; padding: 0; color: var(--accent); text-align: left; text-decoration: underline; overflow-wrap: anywhere; }
 .contact-editor {
   width: min(420px, 92vw); max-height: 92vh; overflow: auto; padding: var(--space-6);
-  background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius-md);
+  background: var(--dialog-bg); color: var(--text); border: 1px solid var(--border); border-radius: var(--radius-dialog);
 }
 .contact-editor::backdrop { background: rgb(0 0 0 / 35%); }
 .contact-editor fieldset { padding: 0; margin: var(--space-5) 0; border: 0; }

@@ -74,7 +74,7 @@ export function Attachments(props: { message: number; onStatus: (s: string) => v
                   </span>
                 </button>
                 <Show when={a.kind === "file"}>
-                  <button class="attachment-save" title={`Save ${a.name} to Downloads`} onClick={() => save(a)}>
+                  <button class="attachment-save" aria-label={`Save ${a.name}`} title={`Save ${a.name} to Downloads`} onClick={() => save(a)}>
                     Save
                   </button>
                 </Show>

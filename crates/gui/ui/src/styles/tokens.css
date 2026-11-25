@@ -16,8 +16,12 @@
   --space-5: 16px;
   --space-6: 24px;
 
-  --radius-sm: 4px;
-  --radius-md: 6px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-dialog: 14px;
+  --field-padding: 6px 12px;
+  --focus: var(--accent);
+  accent-color: var(--accent);
 
   --titlebar-h: 36px;
   --statusbar-h: 24px;
@@ -39,11 +43,11 @@
 :root[data-theme="light"] {
   color-scheme: light;
   --bg: #ffffff;
-  --bg-sidebar: #f4f5f7;
-  --bg-chrome: #eceef1;
-  --bg-hover: #e6e8ec;
-  --bg-selected: #d6e4fb;
-  --bg-selected-inactive: #e3e6ea;
+  --bg-sidebar: #f6f6f7;
+  --bg-chrome: #f0f0f1;
+  --bg-hover: #eaeaec;
+  --bg-selected: #e1e2e5;
+  --bg-selected-inactive: #ededee;
   --border: #d9dce1;
   --text: #1b1d21;
   --text-muted: #5b616b;
@@ -52,7 +56,7 @@
   --warn: #9a4b00;
   --danger: #c42b1c;
   --success: #187530;
-  --focus: #1f5fc7;
+  --dialog-bg: #ffffff;
   /* Folder colours (fam folder color). */
   --folder-red: #d13438;
   --folder-orange: #ca5010;
@@ -67,21 +71,21 @@
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --bg: #1d1f23;
-  --bg-sidebar: #191b1e;
-  --bg-chrome: #151619;
-  --bg-hover: #2a2d32;
-  --bg-selected: #1f3961;
-  --bg-selected-inactive: #30343a;
-  --border: #33363c;
+  --bg: #171718;
+  --bg-sidebar: #1c1c1e;
+  --bg-chrome: #1c1c1e;
+  --bg-hover: #29292b;
+  --bg-selected: #353537;
+  --bg-selected-inactive: #29292c;
+  --border: #39393b;
   --text: #e6e7ea;
   --text-muted: #a2a7b0;
-  --text-on-accent: #0d1a2e;
+  --text-on-accent: #141414;
   --accent: #6ea2f5;
   --warn: #f0a050;
   --danger: #ff6b5e;
   --success: #4ac26b;
-  --focus: #6ea2f5;
+  --dialog-bg: #262628;
   --folder-red: #ff6b6b;
   --folder-orange: #f7894a;
   --folder-yellow: #f2d04b;

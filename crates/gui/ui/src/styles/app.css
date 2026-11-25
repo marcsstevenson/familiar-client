@@ -41,6 +41,17 @@ body {
   background: transparent;
 }
 
+:where(input:not([type=checkbox], [type=radio], [type=color], [type=file]), textarea, select) {
+  font: inherit;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--field-padding);
+}
+
+::selection { background: var(--accent); color: var(--text-on-accent); }
+
 button {
   font: inherit;
   color: inherit;
@@ -133,6 +144,45 @@ button {
   background: var(--danger);
   color: var(--text-on-accent);
 }
+
+/* Appearance */
+.appearance-dialog {
+  width: min(380px, 92vw);
+  padding: var(--space-6);
+  color: var(--text);
+  background: var(--dialog-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-dialog);
+  box-shadow: 0 12px 40px rgb(0 0 0 / 24%);
+}
+.appearance-dialog::backdrop { background: rgb(0 0 0 / 32%); }
+.appearance-dialog h2 { margin: 0 0 var(--space-4); font-size: var(--text-xl); }
+.appearance-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding-block: var(--space-4);
+  border-bottom: 1px solid var(--border);
+}
+.appearance-row input[type=color] {
+  width: 48px;
+  height: 32px;
+  padding: 2px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.appearance-dialog footer { display: flex; justify-content: space-between; margin-top: var(--space-5); }
+.appearance-dialog footer button:not(.primary) {
+  padding: var(--field-padding);
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: var(--bg-sidebar);
+}
+.appearance-dialog footer button:disabled { color: var(--text-muted); opacity: .6; }
+button.primary:focus-visible { outline-color: var(--text-on-accent); }
 
 /* Panes */
 .main-view { display: grid; min-height: 0; min-width: 0; }
@@ -291,7 +341,7 @@ button {
 .folder-tree {
   height: 100%;
   overflow-y: auto;
-  padding: var(--space-3) 0;
+  padding: var(--space-3) var(--space-2);
 }
 .folder-account {
   display: flex;
@@ -313,7 +363,8 @@ button {
   display: flex;
   align-items: center;
   width: 100%;
-  height: 28px;
+  height: 30px;
+  border-radius: var(--radius-sm);
   padding-right: var(--space-4);
   border: 0;
   background: transparent;
@@ -324,6 +375,7 @@ button {
   background: var(--bg-hover);
 }
 .folder-item.selected {
+  box-shadow: inset 3px 0 var(--accent);
   background: var(--bg-selected);
 }
 .folder-item.drop-target {
@@ -464,10 +516,10 @@ button {
   display: flex;
   flex-direction: column;
   gap: var(--space-4);
-  padding: var(--space-5);
-  background: var(--bg);
+  padding: var(--space-6);
+  background: var(--dialog-bg);
   border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-dialog);
   box-shadow: 0 12px 40px rgb(0 0 0 / 0.3);
   user-select: text;
 }
@@ -479,14 +531,7 @@ button {
   flex-direction: column;
   gap: var(--space-3);
 }
-.folder-dialog input {
-  font: inherit;
-  color: inherit;
-  background: var(--bg-sidebar);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: var(--space-2) var(--space-3);
-}
+
 .folder-dialog-buttons {
   display: flex;
   justify-content: flex-end;
@@ -553,7 +598,7 @@ button {
   background: var(--bg);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  padding: var(--space-1) var(--space-2);
+  padding: var(--field-padding);
 }
 .list-count {
   margin-left: auto;
@@ -659,6 +704,7 @@ button {
   background: var(--bg-selected-inactive);
 }
 .list-scroller:focus .list-row.selected {
+  box-shadow: inset 3px 0 var(--accent);
   background: var(--bg-selected);
 }
 /* The unread dot: on every row, shown on unread ones. It shrinks away when
@@ -794,7 +840,6 @@ button {
   border: 0;
   border-bottom: 1px solid var(--border);
   padding: var(--space-4) var(--space-5);
-  outline: none;
 }
 .palette-list {
   list-style: none;
@@ -875,16 +920,7 @@ kbd {
 .command-field .command-help {
   grid-column: 2;
 }
-.command-field input:not([type="checkbox"]),
-.command-field select,
-.command-field textarea {
-  font: inherit;
-  color: inherit;
-  background: var(--bg);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: var(--space-2) var(--space-3);
-}
+
 .command-field input[type="checkbox"] {
   justify-self: start;
 }
@@ -934,12 +970,8 @@ button.link {
 .search-bar input {
   flex: 1;
   min-width: 0;
-  font: inherit;
-  color: inherit;
   background: var(--bg-sidebar);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: var(--space-2) var(--space-3);
+  border-radius: 999px;
 }
 .search-server {
   flex: none;

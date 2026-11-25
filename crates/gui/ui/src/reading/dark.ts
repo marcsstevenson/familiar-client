@@ -1,3 +1,5 @@
+import { luminance } from "../colour";
+
 // Dark mode for a message written for a white page, as Outlook does: light
 // backgrounds become dark and dark text becomes light, each keeping its hue.
 // Pictures and emoji are left as they are, and colours that already suit a
@@ -30,19 +32,12 @@ function toHsl([r, g, b]: Rgba): [number, number, number] {
 const css = (h: number, s: number, l: number, a: number) =>
   `hsla(${h.toFixed(1)},${(s * 100).toFixed(1)}%,${(l * 100).toFixed(1)}%,${a})`;
 
-/** How bright a colour looks (WCAG relative luminance, 0 to 1). Yellow is
- * bright and blue dark at the same HSL lightness, so decisions use this. */
-function luminance([r, g, b]: Rgba): number {
-  const lin = (c: number) => (c /= 255) <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
-  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
-}
-
 /** A light background made dark: white becomes #121212, light grey and
  * highlighter yellow a little lighter. */
 function background(c: string): string | null {
   const v = parse(c);
   if (!v || v[3] === 0) return null;
-  const y = luminance(v);
+  const y = luminance(v[0], v[1], v[2]);
   if (y <= 0.4) return null;
   const [h, s] = toHsl(v);
   return css(h, s, 0.07 + (1 - y) * 0.9, v[3]);
@@ -52,7 +47,7 @@ function background(c: string): string | null {
 function text(c: string): string | null {
   const v = parse(c);
   if (!v || v[3] === 0) return null;
-  const y = luminance(v);
+  const y = luminance(v[0], v[1], v[2]);
   if (y >= 0.18) return null;
   const [h, s] = toHsl(v);
   return css(h, s, Math.max(0.92 - y * 1.2, 0.7), v[3]);
