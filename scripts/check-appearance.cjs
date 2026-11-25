@@ -1,0 +1,104 @@
+// SPDX-License-Identifier: MIT OR Apache-2.0
+// Run against the UI's Vite dev server with Playwright installed.
+const assert = require("node:assert/strict");
+const { chromium } = require("playwright");
+const origin = process.argv[2] || "http://localhost:5173";
+
+async function mount(page, main) {
+  await page.route(origin + "/test", route => route.fulfill({
+    contentType: "text/html", body: '<html lang="en"><title>Familiar</title><main class="reading"></main></html>',
+  }));
+  await page.goto(origin + "/test");
+  await page.evaluate(async main => {
+    const { mockWindows, mockIPC } = await import("/node_modules/@tauri-apps/api/mocks.js");
+    mockWindows("main");
+    mockIPC(cmd => {
+      if (cmd === "reading_attachments") return [{ kind: "file", id: "1", name: "Notes.txt", size: 120 }];
+      if (cmd === "reading_preview") return { kind: "text", text: "Attachment preview" };
+      if (cmd === "reading_save") return "Downloads/Notes.txt";
+    });
+    const { TitleBar } = await import("/src/TitleBar.tsx");
+    const { SearchBar } = await import("/src/list/SearchBar.tsx");
+    const { Attachments } = await import("/src/reading/Attachments.tsx");
+    await import("/src/reading/reading.css");
+    await import("/src/compose/compose.css");
+    await import("/src/styles/tokens.css");
+    await import("/src/styles/app.css");
+    (await import("/src/theme.ts")).initTheme("light", main);
+    document.body.prepend(TitleBar({ platform: "windows" }), SearchBar());
+    const { render } = await import("/node_modules/solid-js/web/dist/web.js");
+    render(() => Attachments({ message: 1, onStatus: s => window.status = s }), document.querySelector("main"));
+  }, main);
+}
+
+(async () => {
+  const browser = await chromium.launch({ executablePath: process.env.CHROMIUM_PATH });
+  try {
+    const context = await browser.newContext();
+    const main = await context.newPage();
+    await mount(main, true);
+    const secondary = await context.newPage();
+    await mount(secondary, false);
+    const search = main.getByRole("searchbox");
+    assert.equal(await search.evaluate(el => getComputedStyle(el).paddingInlineStart), "12px");
+    const file = main.getByTitle("View Notes.txt");
+    const save = main.getByRole("button", { name: "Save Notes.txt" });
+    const border = el => getComputedStyle(el).borderTopWidth;
+    assert.equal(await file.locator("..").evaluate(border), "1px");
+    assert.equal(await file.evaluate(border), "0px");
+    assert.equal(await save.evaluate(border), "0px");
+    await file.click();
+    await main.getByText("Attachment preview", { exact: true }).waitFor();
+    await main.getByRole("button", { name: "Close viewer" }).click();
+    await save.click();
+    await main.waitForFunction(() => window.status.includes("Downloads/Notes.txt"));
+
+    const appearance = main.getByRole("button", { name: "Appearance" });
+    await appearance.click();
+    const dialog = main.getByRole("dialog", { name: "Appearance" });
+    const picker = dialog.getByLabel("Accent colour");
+    for (const theme of ["light", "dark"]) {
+      await dialog.getByLabel("Theme", { exact: true }).selectOption(theme);
+      await secondary.waitForFunction(t => document.documentElement.dataset.theme === t, theme);
+      for (const colour of ["#ffff00", "#000000", "#ffffff", "#7000ca"]) {
+        await picker.fill(colour);
+        await secondary.waitForFunction(c => localStorage.getItem("familiar.accent") === c, colour);
+        const rendered = await main.evaluate(() => document.documentElement.style.getPropertyValue("--accent"));
+        await secondary.waitForFunction(c => document.documentElement.style.getPropertyValue("--accent") === c, rendered);
+        const passes = await main.evaluate(async () => {
+          const relativeLuminance = channels => channels.reduce((sum, n, i) => {
+            const c = n / 255;
+            return sum + [0.2126, 0.7152, 0.0722][i] * (c <= .04045 ? c / 12.92 : ((c + .055) / 1.055) ** 2.4);
+          }, 0);
+          const rgb = css => css.match(/\d+/g).map(Number);
+          const probe = document.createElement("span");
+          document.body.append(probe);
+          const luminance = token => {
+            probe.style.color = `var(--${token})`;
+            return relativeLuminance(rgb(getComputedStyle(probe).color));
+          };
+          const accent = luminance("accent");
+          const results = ["bg", "bg-hover", "bg-selected", "bg-chrome", "bg-sidebar", "text-on-accent"].map(token => {
+            const surface = luminance(token);
+            return (Math.max(accent, surface) + .05) / (Math.min(accent, surface) + .05);
+          });
+          probe.remove();
+          return results;
+        });
+        assert.ok(passes.every(r => r >= 4.5), `${theme} ${colour}: ${passes}`);
+      }
+    }
+    await main.keyboard.press("Escape");
+    assert.equal(await dialog.isVisible(), false);
+    assert.ok(await appearance.evaluate(el => el === document.activeElement));
+    await mount(main, true);
+    await appearance.click();
+    assert.equal(await picker.inputValue(), "#7000ca");
+    await dialog.getByRole("button", { name: "Reset accent" }).click();
+    await secondary.waitForFunction(() => !document.documentElement.style.getPropertyValue("--accent"));
+    await dialog.getByRole("button", { name: "Done" }).click();
+    console.log("Appearance, field padding, attachment actions and cross-window accent checks passed");
+  } finally {
+    await browser.close();
+  }
+})().catch(error => { console.error(error); process.exitCode = 1; });

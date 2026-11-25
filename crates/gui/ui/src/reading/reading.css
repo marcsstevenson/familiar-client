@@ -118,14 +118,28 @@
   border-bottom: 1px solid var(--border);
   font-size: var(--text-sm);
 }
-.attachment {
+.reading-attachments .attachment {
   display: flex;
-  gap: var(--space-1);
+  max-width: 100%;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  background: var(--bg-sidebar);
+}
+.reading-attachments .attachment button {
+  border: 0;
+  padding: 6px var(--space-3);
+}
+.reading-attachments .attachment-save {
+  flex: none;
+}
+.reading-attachments .attachment button:focus-visible {
+  outline-offset: -2px;
 }
 .attachment[aria-busy="true"] {
   opacity: 0.6;
 }
-.attachment .attachment-name {
+.reading-attachments .attachment-name {
+  min-width: 0;
   color: var(--text);
   max-width: 280px;
   overflow: hidden;

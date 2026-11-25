@@ -33,7 +33,7 @@
   padding: var(--space-2) var(--space-4);
   cursor: pointer;
 }
-.welcome button:hover:not(:disabled) {
+.welcome button:hover:not(:disabled, .primary) {
   background: var(--bg-hover);
 }
 .welcome button:disabled {

@@ -42,7 +42,7 @@
   padding: var(--space-2) var(--space-3);
   cursor: pointer;
 }
-.day-nav input { flex: 1; min-width: 0; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-sm); }
+.day-nav input { flex: 1; min-width: 0; }
 .day-tools { align-items: baseline; justify-content: space-between; }
 .day-tools details { flex: 1; min-width: 0; }
 .day-tools summary { cursor: pointer; }
@@ -86,7 +86,7 @@
 .day-event[aria-expanded="true"] { outline: 1px solid var(--accent); outline-offset: -1px; }
 .day-now { position: absolute; left: 44px; right: 0; border-top: 2px solid var(--accent); pointer-events: none; }
 .day-panel footer { padding: var(--space-2) var(--space-4); border-top: 1px solid var(--border); }
-.new-event { color: var(--text); background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 0; }
+.new-event { color: var(--text); background: var(--dialog-bg); border: 1px solid var(--border); border-radius: var(--radius-dialog); padding: 0; }
 .new-event::backdrop { background: rgb(0 0 0 / .25); }
 .event-guests { margin: var(--space-2) 0; padding-left: var(--space-5); overflow-wrap: anywhere; }
 .event-preview { white-space: pre-wrap; overflow-wrap: anywhere; }

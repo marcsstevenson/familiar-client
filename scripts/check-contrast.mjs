@@ -5,7 +5,7 @@
 import { readFileSync } from "node:fs";
 
 const file = process.argv[2] ?? "crates/gui/ui/src/styles/tokens.css";
-const css = readFileSync(file, "utf8");
+const css = readFileSync(file, "utf8").replaceAll("\r\n", "\n");
 
 function block(selector) {
   const i = css.indexOf(selector + " {");
@@ -28,7 +28,8 @@ function ratio(a, b) {
 const surfaces = ["bg", "bg-sidebar", "bg-chrome", "bg-hover", "bg-selected", "bg-selected-inactive"];
 const pairs = [
   ...["text", "text-muted"].flatMap((t) => surfaces.map((s) => [t, s, 4.5])),
-  ...["accent", "warn", "danger", "success"].flatMap((t) => ["bg", "bg-sidebar", "bg-chrome"].map((s) => [t, s, 4.5])),
+  ...["warn", "danger", "success"].flatMap((t) => ["bg", "bg-sidebar", "bg-chrome"].map((s) => [t, s, 4.5])),
+  ...surfaces.map((s) => ["accent", s, 4.5]),
   ["text-on-accent", "accent", 4.5],
   ...["focus"].flatMap((t) => surfaces.map((s) => [t, s, 3])),
 ];
@@ -39,6 +40,8 @@ for (const [name, selector] of [
   ["dark", ':root[data-theme="dark"]'],
 ]) {
   const t = block(selector);
+  if (!css.includes("--focus: var(--accent)")) throw new Error("Focus must use the app accent");
+  t.focus = t.accent;
   for (const [fg, bg, min] of pairs) {
     if (!t[fg] || !t[bg]) {
       console.log(`${name}: --${fg} or --${bg} missing`);

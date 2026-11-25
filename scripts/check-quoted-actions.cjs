@@ -27,6 +27,7 @@ const html = "<html><head></head><body>Outer cover note" + quoted("Shop", "shop@
       const { mockWindows, mockIPC } = await import("/node_modules/@tauri-apps/api/mocks.js");
       mockWindows("main");
       mockIPC((cmd, args) => {
+        if (cmd === "run" && args.name === "mail.events") return [];
         if (cmd === "reading_open") return { html, message: { id: 7, subject: "FW: Nets", account: "me",
           from: { name: "Cover", addr: "outer@example.org" }, to: [], cc: [], is_read: true } };
         if (cmd === "open_compose") window.opened = args.spec;
@@ -41,7 +42,7 @@ const html = "<html><head></head><body>Outer cover note" + quoted("Shop", "shop@
       const { ReadingPane } = await import("/src/reading/ReadingPane.tsx");
       await import("/src/styles/tokens.css");
       const { setSelectedMessage } = await import("/src/state.ts");
-      document.body.append(ReadingPane());
+      document.body.append(ReadingPane({}));
       setSelectedMessage(7);
     }, html);
     const rows = page.frameLocator(".message-frame").locator(".fam-quoted-from");

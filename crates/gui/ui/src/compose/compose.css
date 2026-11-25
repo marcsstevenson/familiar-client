@@ -9,28 +9,28 @@
   position: relative;
   user-select: text;
 }
-.compose button {
+.compose-main button {
   border: 1px solid var(--border);
   background: var(--bg);
   border-radius: var(--radius-sm);
   padding: var(--space-2) var(--space-4);
 }
-.compose button:hover:not(:disabled) {
+.compose-main button:hover:not(:disabled, .primary) {
   background: var(--bg-hover);
 }
-.compose button.primary {
+.compose-main button.primary {
   background: var(--accent);
   border-color: var(--accent);
   color: var(--text-on-accent);
   font-weight: 600;
 }
-.compose button.link {
+.compose-main button.link {
   border: 0;
   background: transparent;
   color: var(--accent);
   padding: 0 var(--space-2);
 }
-.compose button:disabled {
+.compose-main button:disabled {
   opacity: 0.5;
 }
 .compose input,
@@ -61,7 +61,7 @@
 .compose-select select {
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  padding: var(--space-1) var(--space-2);
+  padding: var(--field-padding);
 }
 .compose-fields {
   border-bottom: 1px solid var(--border);
@@ -96,7 +96,6 @@
   flex: 1;
   border: 0;
   padding: var(--space-3);
-  outline: none;
 }
 
 /* Recipient chips and suggestions */
@@ -167,8 +166,7 @@ body.chip-drag-active * {
   flex: 1;
   min-width: 120px;
   border: 0;
-  outline: none;
-  padding: var(--space-2) 0;
+  padding: var(--space-2);
 }
 .suggestions {
   position: absolute;
@@ -178,7 +176,7 @@ body.chip-drag-active * {
   min-width: 320px;
   max-width: 70%;
   margin: 0;
-  padding: var(--space-2) 0;
+  padding: var(--space-2);
   list-style: none;
   background: var(--bg);
   border: 1px solid var(--border);
@@ -208,7 +206,8 @@ body.chip-drag-active * {
   list-style: none;
   border-bottom: 1px solid var(--border);
 }
-.attachment {
+.attachments > .attachment {
+  max-width: 100%;
   display: flex;
   align-items: center;
   gap: var(--space-3);
@@ -216,6 +215,13 @@ body.chip-drag-active * {
   border-radius: var(--radius-sm);
   padding: var(--space-1) var(--space-2) var(--space-1) var(--space-3);
 }
+.attachments .attachment-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.attachments :is(.attachment-size, .chip-remove) { flex: none; }
 .attachment-size,
 .compose-note {
   color: var(--text-muted);
@@ -270,14 +276,13 @@ body.chip-drag-active * {
   margin-left: var(--space-3);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  padding: var(--space-1) var(--space-2);
-  width: 280px;
+  padding: var(--field-padding);
+  width: min(280px, 40%);
 }
 .editor {
   flex: 1;
   overflow: auto;
   padding: var(--space-5);
-  outline: none;
   font: var(--text-lg) / 1.5 var(--font-ui);
   color: var(--text);
 }
@@ -360,9 +365,9 @@ body.chip-drag-active * {
   top: 30%;
   transform: translateX(-50%);
   width: min(480px, 90%);
-  background: var(--bg);
+  background: var(--dialog-bg);
   border: 1px solid var(--border);
-  border-radius: var(--radius-md);
+  border-radius: var(--radius-dialog);
   box-shadow: 0 8px 32px rgb(0 0 0 / 25%);
   padding: var(--space-5);
   z-index: 20;
