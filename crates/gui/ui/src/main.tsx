@@ -6,6 +6,7 @@ import { uiInfo } from "./api";
 import { App } from "./App";
 import { Welcome, onboardingState } from "./onboarding/Welcome";
 import { ComposeWindow, composeSpec, installComposeKeys } from "./compose";
+import { followWindowIcon } from "./icon";
 import { initTheme } from "./theme";
 import { ReadingPane } from "./reading/ReadingPane";
 import { SpamDialog } from "./spam/SpamDialog";
@@ -36,6 +37,7 @@ const rememberFocus = () => writeSession("active", windowKey);
 window.addEventListener("focus", rememberFocus);
 if (document.hasFocus()) rememberFocus();
 initTheme(info.theme, mainWindow);
+if (info.platform !== "macos") followWindowIcon();
 if (mainWindow) {
   installComposeKeys();
   await getCurrentWindow().onCloseRequested(async e => {

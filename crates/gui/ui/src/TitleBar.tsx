@@ -3,11 +3,11 @@
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { type JSX, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
-import { type Theme, isCommandError } from "./api";
-import keaUrl from "./assets/kea.svg";
+import { isCommandError } from "./api";
+import { iconUrl } from "./icon";
 import { openCompose } from "./compose/spec";
 import { notify } from "./state";
-import { DEFAULT_ACCENT, accent, chooseAccent, chooseTheme, theme } from "./theme";
+import { Appearance } from "./Appearance";
 
 /** Opens config.toml in the default editor; errors go to the status bar. */
 function openConfig() {
@@ -21,7 +21,7 @@ export function TitleBar(props: { platform: string; title?: string; navigation?:
   const mac = () => props.platform === "macos";
   return (
     <header class="titlebar" classList={{ mac: mac() }} data-tauri-drag-region>
-      <img class="titlebar-icon" src={keaUrl} alt="" data-tauri-drag-region />
+      <img class="titlebar-icon" src={iconUrl()} alt="" data-tauri-drag-region />
       <span class="titlebar-name" data-tauri-drag-region>
         {props.title ?? "Familiar"}
       </span>
@@ -48,27 +48,7 @@ export function TitleBar(props: { platform: string; title?: string; navigation?:
           <path d="M8 2a6 6 0 0 1 0 12Z" fill="currentColor" />
         </svg>
       </button>
-      <dialog ref={appearance} class="appearance-dialog" aria-labelledby="appearance-title"
-        onKeyDown={e => e.stopPropagation()}>
-        <h2 id="appearance-title">Appearance</h2>
-        <div class="appearance-row">
-          <label for="appearance-theme">Theme</label>
-          <select id="appearance-theme" value={theme()} onChange={e => chooseTheme(e.currentTarget.value as Theme)}>
-            <option value="system">Use system setting</option>
-            <option value="light">Light</option>
-            <option value="dark">Dark</option>
-          </select>
-        </div>
-        <div class="appearance-row">
-          <label for="appearance-accent">Accent colour</label>
-          <input id="appearance-accent" type="color" value={accent() ?? DEFAULT_ACCENT}
-            onInput={e => chooseAccent(e.currentTarget.value)} />
-        </div>
-        <footer>
-          <button type="button" disabled={!accent()} onClick={() => chooseAccent(null)}>Reset accent</button>
-          <button type="button" class="primary" onClick={() => appearance.close()}>Done</button>
-        </footer>
-      </dialog>
+      <Appearance ref={el => { appearance = el; }} />
       <Show when={!mac()}>
         <div class="window-buttons">
           <button aria-label="Minimise" onClick={() => void win.minimize()}>

@@ -6,7 +6,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { For, Match, Show, Switch, createSignal, onCleanup, onMount } from "solid-js";
 import { isCommandError, run } from "../api";
 import { TitleBar } from "../TitleBar";
-import keaUrl from "../assets/kea.svg";
+import { iconUrl } from "../icon";
 import "./welcome.css";
 
 export type Stage = "no_config" | "invalid" | "no_accounts" | "signed_out" | "ready";
@@ -124,7 +124,7 @@ export function Welcome(props: { platform: string; state: OnboardingState }) {
     <div class="app welcome-app">
       <TitleBar platform={props.platform} title="Familiar" />
       <main class="welcome">
-        <img class="welcome-icon" src={keaUrl} alt="" />
+        <img class="welcome-icon" src={iconUrl()} alt="" />
         <Switch>
           <Match when={state().stage === "invalid"}>
             <h1>Your config has problems</h1>

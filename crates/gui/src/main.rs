@@ -10,6 +10,7 @@
 mod compose;
 mod config_watch;
 mod daemon;
+mod icon;
 mod list;
 mod onboarding;
 mod reading;
@@ -366,6 +367,7 @@ fn main() {
             compose::file_info,
             compose::pick_files,
             bench_elapsed_ms,
+            icon::set_accent_icon,
             set_unread_badge
         ])
         .setup(|app| {

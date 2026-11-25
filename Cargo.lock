@@ -1481,6 +1481,7 @@ dependencies = [
  "familiar-core",
  "familiar-search",
  "familiar-store",
+ "ico",
  "open",
  "reqwest 0.12.28",
  "serde",
@@ -1492,6 +1493,7 @@ dependencies = [
  "tempfile",
  "tokio",
  "webbrowser",
+ "windows",
 ]
 
 [[package]]

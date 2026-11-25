@@ -12,7 +12,8 @@ async function mount(page, main) {
   await page.evaluate(async main => {
     const { mockWindows, mockIPC } = await import("/node_modules/@tauri-apps/api/mocks.js");
     mockWindows("main");
-    mockIPC(cmd => {
+    mockIPC((cmd, args) => {
+      if (cmd === "set_accent_icon") window.iconPixels = Array.from(new Uint8Array(args));
       if (cmd === "reading_attachments") return [{ kind: "file", id: "1", name: "Notes.txt", size: 120 }];
       if (cmd === "reading_preview") return { kind: "text", text: "Attachment preview" };
       if (cmd === "reading_save") return "Downloads/Notes.txt";
@@ -25,6 +26,7 @@ async function mount(page, main) {
     await import("/src/styles/tokens.css");
     await import("/src/styles/app.css");
     (await import("/src/theme.ts")).initTheme("light", main);
+    (await import("/src/icon.ts")).followWindowIcon();
     document.body.prepend(TitleBar({ platform: "windows" }), SearchBar());
     const { render } = await import("/node_modules/solid-js/web/dist/web.js");
     render(() => Attachments({ message: 1, onStatus: s => window.status = s }), document.querySelector("main"));
@@ -57,6 +59,24 @@ async function mount(page, main) {
     await appearance.click();
     const dialog = main.getByRole("dialog", { name: "Appearance" });
     const picker = dialog.getByLabel("Accent colour");
+    const hex = dialog.getByRole("textbox", { name: "Hex colour" });
+    const sky = dialog.getByRole("button", { name: "Sky", exact: true });
+    const done = dialog.getByRole("button", { name: "Done" });
+    await hex.fill("#99D9");
+    assert.ok(await done.isDisabled());
+    await hex.fill("99D9EA");
+    assert.equal(await picker.inputValue(), "#99d9ea");
+    assert.equal(await sky.getAttribute("aria-pressed"), "true");
+    assert.ok(await done.isEnabled());
+    await Promise.all([main, secondary].map(page => page.waitForFunction(() => {
+      const rgba = window.iconPixels;
+      return rgba?.length === 64 * 64 * 4 && rgba.some((r, i) =>
+        i % 4 === 0 && r === 0x99 && rgba[i + 1] === 0xd9 && rgba[i + 2] === 0xea && rgba[i + 3] === 255);
+    })));
+    assert.ok(decodeURIComponent(await main.locator(".titlebar-icon").getAttribute("src")).includes("#99d9ea"));
+    await dialog.getByRole("button", { name: "Violet", exact: true }).click();
+    assert.equal(await hex.inputValue(), "#8A5CF6");
+    assert.equal(await sky.getAttribute("aria-pressed"), "false");
     for (const theme of ["light", "dark"]) {
       await dialog.getByLabel("Theme", { exact: true }).selectOption(theme);
       await secondary.waitForFunction(t => document.documentElement.dataset.theme === t, theme);
@@ -94,6 +114,7 @@ async function mount(page, main) {
     await mount(main, true);
     await appearance.click();
     assert.equal(await picker.inputValue(), "#7000ca");
+    assert.equal(await hex.inputValue(), "#7000CA");
     await dialog.getByRole("button", { name: "Reset accent" }).click();
     await secondary.waitForFunction(() => !document.documentElement.style.getPropertyValue("--accent"));
     await dialog.getByRole("button", { name: "Done" }).click();

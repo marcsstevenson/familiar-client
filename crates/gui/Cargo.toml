@@ -33,6 +33,10 @@ webbrowser = "1"
 tokio = { version = "1", features = ["net", "io-util"] }
 tauri-plugin-window-state = "2"
 
+[target.'cfg(windows)'.dependencies]
+ico = "0.6"
+windows = { version = "0.62", features = ["Win32_Storage_FileSystem", "Win32_System_Com", "Win32_UI_Shell", "Win32_UI_WindowsAndMessaging"] }
+
 [dev-dependencies]
 tempfile = "3"
 
