@@ -5,7 +5,7 @@ import { type CommandError, isCommandError, run, setUnreadBadge } from "../api";
 import type { FolderRow } from "../../../../../bindings/commands";
 import { onStoreChanged } from "../list/api";
 import { FolderMenu } from "./FolderMenu";
-import { isGmail } from "./providers";
+import { providerTitle } from "./providers";
 import { countLabel, dragged, followUpView, notify, removeFromList, searchQuery, selectedFolder, setDeletedFolderShown, setDragged, setFollowUpView, setSearchQuery, setSelectedFolder, setSelectedMessage } from "../state";
 
 /** Each account's folders, in tree order. `folder.list` already sorts
@@ -249,6 +249,7 @@ export function FolderTree(props: { views: { name: string; query: string }[] }) 
             <div role="group" aria-label={account}>
               <button
                 class="folder-account"
+                title={providerTitle(account)}
                 role="treeitem"
                 aria-expanded={!collapsed().has(`a:${account}`)}
                 onClick={() => setOpen(`a:${account}`, collapsed().has(`a:${account}`))}
@@ -258,9 +259,6 @@ export function FolderTree(props: { views: { name: string; query: string }[] }) 
               >
                 <span class="folder-twisty" aria-hidden="true">{collapsed().has(`a:${account}`) ? "▸" : "▾"}</span>
                 {account}
-                <Show when={isGmail(account)}>
-                  <span class="folder-badge" title="A Gmail account: its folders are Gmail labels">Gmail</span>
-                </Show>
               </button>
               <Show when={!collapsed().has(`a:${account}`)}>
                 <For each={shown(rows())}>
