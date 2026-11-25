@@ -174,6 +174,27 @@ button {
   border-radius: var(--radius-sm);
   cursor: pointer;
 }
+.accent-inputs { display: flex; align-items: center; gap: var(--space-3); }
+.accent-hex { width: 9ch; box-sizing: content-box; font-family: var(--font-mono); }
+.accent-hex[aria-invalid=true] { border-color: var(--danger); }
+.accent-format { color: var(--danger); margin-block: var(--space-3); }
+.accent-palette {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-3);
+  padding-block: var(--space-4);
+}
+.accent-swatch {
+  width: 28px;
+  height: 28px;
+  padding: 3px;
+  background: var(--swatch) content-box;
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  cursor: pointer;
+}
+.accent-swatch[aria-pressed=true] { border: 2px solid var(--text); padding: 2px; }
+.accent-swatch:focus-visible { outline-offset: 2px; }
 .appearance-dialog footer { display: flex; justify-content: space-between; margin-top: var(--space-5); }
 .appearance-dialog footer button:not(.primary) {
   padding: var(--field-padding);
