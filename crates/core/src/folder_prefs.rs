@@ -1,127 +1,87 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
-//! Folder colours, pins and order: settings kept on this device only, in
-//! `folders.json` in the data directory. Keyed by account and Graph folder ID,
-//! so they follow a folder through a rename or a move.
+//! Folder colours, pins and ordering in config.toml, keyed by account and provider ID.
 
-use std::collections::BTreeMap;
-use std::path::Path;
+use crate::{CommandError, ErrorKind};
+use familiar_config::{ConfigDocument, edit::EditError, model::FolderPref};
+use std::{
+    collections::BTreeMap,
+    path::{Path, PathBuf},
+};
 
-use serde::{Deserialize, Serialize};
-
-/// The file name in the data directory.
-pub const FILE: &str = "folders.json";
-
-/// The colours a folder can have. The desktop app has a light and a dark
-/// shade of each.
+/// The colours supported by the desktop folder pane.
 pub const COLOURS: &[&str] = &[
     "red", "orange", "yellow", "green", "teal", "blue", "purple", "pink", "grey",
 ];
 
-/// One folder's settings.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct FolderPref {
-    /// One of [`COLOURS`].
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub color: Option<String>,
-    /// Listed at the top of the folder pane.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub pinned: bool,
-    /// Its place among its sibling folders (`fam folder reorder`), lowest
-    /// first. Folders without one follow, in the default order.
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub order: Option<u32>,
-    /// Its place among the pinned folders (`fam folder reorder --pinned`).
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub pin_order: Option<u32>,
+type Folders = BTreeMap<String, BTreeMap<String, FolderPref>>;
+
+/// The active config used by desktop and command-line preferences.
+pub fn config_path() -> Result<PathBuf, CommandError> {
+    familiar_config::paths::resolve(None)
+        .map(|(path, _)| path)
+        .ok_or_else(|| CommandError::new(ErrorKind::Config, "no config path"))
 }
 
-impl FolderPref {
-    fn is_empty(&self) -> bool {
-        self == &Self::default()
-    }
+/// Imports an old JSON preferences file once. Explicit TOML settings take precedence.
+pub fn import_legacy<T: serde::de::DeserializeOwned>(
+    config: &Path,
+    legacy: &Path,
+    apply: impl FnOnce(&mut ConfigDocument, T) -> Result<(), EditError>,
+) -> Result<(), String> {
+    let bytes = match std::fs::read(legacy) {
+        Ok(b) => b,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(()),
+        Err(e) => return Err(format!("{}: {e}", legacy.display())),
+    };
+    let old = serde_json::from_slice(&bytes).map_err(|e| format!("{}: {e}", legacy.display()))?;
+    ConfigDocument::update(config, |doc| apply(doc, old)).map_err(|e| e.to_string())?;
+    std::fs::rename(legacy, legacy.with_extension("json.migrated")).or_else(|e| {
+        if e.kind() == std::io::ErrorKind::NotFound {
+            Ok(())
+        } else {
+            Err(e.to_string())
+        }
+    })
 }
 
-/// Every folder's settings: account key, then Graph folder ID.
-#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
-pub struct FolderPrefs(pub BTreeMap<String, BTreeMap<String, FolderPref>>);
-
-impl FolderPrefs {
-    /// Reads `folders.json` from `data_dir`. A missing file is empty; an
-    /// unreadable one is reported on stderr and treated as empty.
-    pub fn load(data_dir: &Path) -> Self {
-        let path = data_dir.join(FILE);
-        match std::fs::read(&path) {
-            Ok(bytes) => serde_json::from_slice(&bytes).unwrap_or_else(|e| {
-                eprintln!("familiar: ignoring an unreadable {}: {e}", path.display());
-                Self::default()
-            }),
-            Err(e) if e.kind() == std::io::ErrorKind::NotFound => Self::default(),
-            Err(e) => {
-                eprintln!("familiar: couldn't read {}: {e}", path.display());
-                Self::default()
+/// Reads the folder settings, importing a previous install's colours, pins and order.
+pub fn load(config: &Path, data: &Path) -> Result<Folders, CommandError> {
+    if let Err(e) = import_legacy(config, &data.join("folders.json"), |doc, old: Folders| {
+        for (account, folders) in old {
+            for (id, pref) in folders {
+                let path = ["folders", &account, &id];
+                if !doc.contains(&path) {
+                    doc.set_serialized(&path, &pref)?;
+                }
             }
         }
+        Ok(())
+    }) {
+        eprintln!("familiar: importing folder preferences: {e}");
     }
-
-    /// Writes `folders.json` to `data_dir` (through a temporary file, so a
-    /// reader never sees half of it).
-    pub fn save(&self, data_dir: &Path) -> std::io::Result<()> {
-        std::fs::create_dir_all(data_dir)?;
-        let path = data_dir.join(FILE);
-        let tmp = data_dir.join(format!("{FILE}.tmp"));
-        let json = serde_json::to_vec_pretty(self).map_err(std::io::Error::other)?;
-        std::fs::write(&tmp, json)?;
-        std::fs::rename(&tmp, &path)
-    }
-
-    /// The settings of one folder.
-    pub fn get(&self, account: &str, remote_id: &str) -> FolderPref {
-        self.0
-            .get(account)
-            .and_then(|a| a.get(remote_id))
-            .cloned()
-            .unwrap_or_default()
-    }
-
-    /// Changes one folder's settings, dropping entries left empty.
-    pub fn update(&mut self, account: &str, remote_id: &str, f: impl FnOnce(&mut FolderPref)) {
-        let folders = self.0.entry(account.to_string()).or_default();
-        let pref = folders.entry(remote_id.to_string()).or_default();
-        f(pref);
-        if pref.is_empty() {
-            folders.remove(remote_id);
+    match familiar_config::load(config) {
+        Ok(c) => Ok(c.folders),
+        Err(familiar_config::LoadError::Io(e)) if e.kind() == std::io::ErrorKind::NotFound => {
+            Ok(Folders::new())
         }
-        if folders.is_empty() {
-            self.0.remove(account);
-        }
+        Err(e) => Err(CommandError::new(ErrorKind::Config, e.to_string())),
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn round_trip_and_empty_entries_dropped() {
-        let dir = std::env::temp_dir().join(format!("fam-prefs-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&dir);
-        assert_eq!(FolderPrefs::load(&dir), FolderPrefs::default());
-
-        let mut p = FolderPrefs::default();
-        p.update("hotmail", "AAA", |f| f.pinned = true);
-        p.update("hotmail", "BBB", |f| f.color = Some("red".into()));
-        p.save(&dir).unwrap();
-        let back = FolderPrefs::load(&dir);
-        assert!(back.get("hotmail", "AAA").pinned);
-        assert_eq!(back.get("hotmail", "BBB").color.as_deref(), Some("red"));
-
-        let mut p = back;
-        p.update("hotmail", "AAA", |f| f.pinned = false);
-        p.update("hotmail", "BBB", |f| f.color = None);
-        assert!(p.0.is_empty());
-
-        std::fs::write(dir.join(FILE), b"not json").unwrap();
-        assert_eq!(FolderPrefs::load(&dir), FolderPrefs::default());
-        let _ = std::fs::remove_dir_all(&dir);
+/// Changes one folder, retaining every other setting and removing cleared values.
+pub fn change(
+    doc: &mut ConfigDocument,
+    account: &str,
+    id: &str,
+    f: impl FnOnce(&mut FolderPref),
+) -> Result<(), EditError> {
+    let path = ["folders", account, id];
+    let mut pref = doc.get(&path)?.unwrap_or_default();
+    f(&mut pref);
+    if pref == FolderPref::default() {
+        doc.remove(&path);
+    } else {
+        doc.set_serialized(&path, &pref)?;
     }
+    Ok(())
 }

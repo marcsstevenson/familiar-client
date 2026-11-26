@@ -122,6 +122,8 @@ pub struct CalCalendarsInput {
 /// One calendar in `fam cal calendars`.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
 pub struct CalCalendar {
+    /// Stable provider calendar ID.
+    pub remote_id: String,
     /// Local calendar ID.
     pub id: i64,
     /// Provider colour, when supplied.
@@ -608,6 +610,7 @@ fn calendars_in(
                 })
                 .unwrap_or_default();
             out.push(CalCalendar {
+                remote_id: c.remote_id.clone(),
                 id: c.id.0,
                 color: c.color.clone(),
                 account: a.key.clone(),

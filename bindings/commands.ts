@@ -376,6 +376,8 @@ export type CalCalendar = {
   owner?: string;
   /** Purposes from `[calendar.purposes]` that point here. */
   purposes?: Array<string>;
+  /** Stable provider calendar ID. */
+  remote_id: string;
   /** Start of the synced window (date), once a sync has run. */
   synced_from?: string | null;
   /** End of the synced window (date, exclusive). */

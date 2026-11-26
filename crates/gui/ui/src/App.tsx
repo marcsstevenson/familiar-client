@@ -1,5 +1,6 @@
 // The three-pane window: folders, message list, reading pane, and a status bar.
 // Each pane is its own component folder; they share selection through state.ts.
+import { choose, flushPreferences, preferences } from "./preferences";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { For, Show, batch, createEffect, createSignal, onCleanup, onMount } from "solid-js";
@@ -36,13 +37,13 @@ type MainView = typeof mainViews[number];
 
 export function App(props: { info: UiInfo }) {
   const saved = readSession<{ folder: number | null; message: number | null; query: string | null;
-    followUp: boolean; view?: MainView; dayPanelOpen?: boolean; calendar?: "mail" | "panel" | "full" }>("navigation");
+    followUp: boolean; view?: MainView; calendar?: "mail" | "panel" | "full" }>("navigation");
   setSelectedFolder(saved?.folder ?? null);
   setSelectedMessage(saved?.message ?? null);
   setSearchQuery(saved?.query ?? null);
   setFollowUpView(saved?.followUp ?? false);
   const [view, setView] = createSignal<MainView>(saved?.view ?? (saved?.calendar === "full" ? "Calendar" : "Mail"));
-  const [dayPanelOpen, setDayPanelOpen] = createSignal(saved?.dayPanelOpen ?? saved?.calendar === "panel");
+  const dayPanelOpen = () => preferences().day_panel_open ?? false;
   const calendarMode = (): keyof typeof locations | undefined =>
     view() === "Calendar" ? "calendar" : view() === "Mail" && dayPanelOpen() && !eventDialog() ? "dayPanel" : undefined;
   const locations = {
@@ -52,7 +53,7 @@ export function App(props: { info: UiInfo }) {
   const [eventTarget, setEventTarget] = createSignal<{ calendar: number; event: number; date: string }>();
   createEffect(() => writeSession("navigation", {
     folder: selectedFolder(), message: selectedMessage(), query: searchQuery(), followUp: followUpView(),
-    view: view(), dayPanelOpen: dayPanelOpen(),
+    view: view(),
   }));
   let dayPanelToggle!: HTMLButtonElement;
   let viewTabs!: HTMLDivElement;
@@ -65,7 +66,7 @@ export function App(props: { info: UiInfo }) {
     setView("Calendar");
   }
   function toggleDayPanel() {
-    setDayPanelOpen(open => !open);
+    choose({ day_panel_open: !dayPanelOpen() });
     if (!dayPanelOpen()) {
       locations.dayPanel = undefined;
       writeSession("dayPanel", undefined);
@@ -116,7 +117,7 @@ export function App(props: { info: UiInfo }) {
         });
         return;
       }
-      setDayPanelOpen(false);
+      if (dayPanelOpen()) choose({ day_panel_open: false });
       setView("Mail");
       setSearchQuery(null);
       setFollowUpView(false);
@@ -187,7 +188,7 @@ export function App(props: { info: UiInfo }) {
         <Show when={configChanged()}>
           <span>
             config.toml changed.{" "}
-            <button class="statusbar-button" onClick={() => void flushEditorWrites().then(() => invoke("restart_app"))
+            <button class="statusbar-button" onClick={() => void Promise.all([flushEditorWrites(), flushPreferences()]).then(() => invoke("restart_app"))
               .catch(e => notify("Couldn't restart: " + e, true))}>
               Restart
             </button>

@@ -1,3 +1,4 @@
+import { choose, preferences } from "../preferences";
 // Turning `cal propose`'s proposals into editable drafts, describing repeats
 // in words, and building the `cal add` input for a confirmed draft. No UI here.
 import type { Commands } from "../api";
@@ -211,19 +212,12 @@ export function toolWords(tool: string | null): string {
   return "your AI tool";
 }
 
-const LAST_KEY = "familiar.event-calendar";
-
 /** The calendar to start with: the one last used for this sender, else the
  * receiving account's main calendar, else the first. */
 export function defaultCalendar(cals: Calendar[], account: string, from: string): Calendar | undefined {
-  let last: { account: string; name: string; id?: number } | undefined;
-  try {
-    last = JSON.parse(localStorage.getItem(LAST_KEY) ?? "{}")[from.toLowerCase()];
-  } catch {
-    last = undefined;
-  }
+  const last = preferences().sender_calendars?.[from.toLowerCase()];
   return (
-    cals.find((c) => last && c.id === last.id && c.account === last.account) ??
+    cals.find((c) => last && c.remote_id === last.remote_id && c.account === last.account) ??
     cals.find((c) => last && c.account === last.account && c.name === last.name) ??
     cals.find((c) => c.account === account && c.is_default) ??
     cals.find((c) => c.account === account) ??
@@ -234,13 +228,9 @@ export function defaultCalendar(cals: Calendar[], account: string, from: string)
 /** Remembers the calendar used for this sender. */
 export function rememberCalendar(from: string, cal: Calendar): void {
   if (!from) return;
-  try {
-    const all = JSON.parse(localStorage.getItem(LAST_KEY) ?? "{}");
-    all[from.toLowerCase()] = { account: cal.account, name: cal.name, id: cal.id };
-    localStorage.setItem(LAST_KEY, JSON.stringify(all));
-  } catch {
-    // Not remembering is fine.
-  }
+  choose({ sender_calendars: { ...preferences().sender_calendars,
+    [from.toLowerCase()]: { account: cal.account, name: cal.name, remote_id: cal.remote_id },
+  } });
 }
 
 export const calendarKey = (c: Calendar) => String(c.id);

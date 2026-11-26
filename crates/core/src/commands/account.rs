@@ -326,6 +326,8 @@ impl Command for AccountAdd {
 
         // Build and check the config change before saving anything.
         let path = config_path()?;
+        let _config_lock = familiar_config::ConfigDocument::lock(&path)
+            .map_err(|e| CommandError::new(ErrorKind::Config, e.0))?;
         let created_config =
             familiar_config::template::create(&path).map_err(|e| io_error(&path, e))?;
         let mut doc = familiar_config::ConfigDocument::open(&path)

@@ -1,3 +1,5 @@
+import { listen } from "@tauri-apps/api/event";
+import { choose as choosePreference, preferences } from "../preferences";
 // The folder pane: the unified Inbox, then each account's folder tree.
 import { For, Show, createEffect, createMemo, createResource, createSignal, onCleanup, onMount } from "solid-js";
 import { createStore, reconcile } from "solid-js/store";
@@ -48,26 +50,13 @@ function step(group: FolderRow[], f: FolderRow, dir: -1 | 1, pinned: boolean, do
   void reorder(group, f.id, other.id, dir < 0, pinned, done);
 }
 
-// Collapsed accounts (`a:<key>`) and folders (`f:<id>`), kept between runs.
-const COLLAPSED_KEY = "familiar.folders.collapsed";
-function loadCollapsed(): Set<string> {
-  try {
-    return new Set(JSON.parse(localStorage.getItem(COLLAPSED_KEY) ?? "[]") as string[]);
-  } catch {
-    return new Set();
-  }
-}
-const [collapsed, setCollapsed] = createSignal(loadCollapsed());
+const collapsed = createMemo(() => new Set(preferences().collapsed));
+const folderKey = (f: FolderRow) => `f:${f.account}:${f.remote_id}`;
 function setOpen(key: string, open: boolean) {
   const next = new Set(collapsed());
   if (open) next.delete(key);
   else next.add(key);
-  setCollapsed(next);
-  try {
-    localStorage.setItem(COLLAPSED_KEY, JSON.stringify([...next]));
-  } catch {
-    // Not kept; the tree still works.
-  }
+  choosePreference({ collapsed: [...next] });
 }
 
 /** The rows to show: those not under a collapsed folder. Returns the rows
@@ -76,7 +65,7 @@ function shown(rows: FolderRow[]): FolderRow[] {
   let hideBelow: number | null = null;
   return rows.filter((f) => {
     if (hideBelow !== null && f.depth > hideBelow) return false;
-    hideBelow = collapsed().has(`f:${f.id}`) ? f.depth : null;
+    hideBelow = collapsed().has(folderKey(f)) ? f.depth : null;
     return true;
   });
 }
@@ -121,7 +110,8 @@ export function FolderTree(props: { views: { name: string; query: string }[] }) 
       void refetch();
       void refetchFollowups();
     });
-    onCleanup(stop);
+    const stopPrefs = await listen("folder_preferences_changed", () => void refetch());
+    onCleanup(() => { stop(); stopPrefs(); });
   });
   const dueCount = () => (followups.latest?.followups ?? []).filter((f) => f.status === "due").length;
   // Folders keep their identity across refreshes (every sync and every move
@@ -267,8 +257,8 @@ export function FolderTree(props: { views: { name: string; query: string }[] }) 
                       name={f.name}
                       unread={f.unread}
                       depth={f.depth}
-                      expanded={parents(rows()).has(f.id) ? !collapsed().has(`f:${f.id}`) : undefined}
-                      onToggle={(open) => setOpen(`f:${f.id}`, open)}
+                      expanded={parents(rows()).has(f.id) ? !collapsed().has(folderKey(f)) : undefined}
+                      onToggle={(open) => setOpen(folderKey(f), open)}
                       selected={selectedFolder() === f.id && searchQuery() === null}
                       onSelect={() => choose(f.id)}
                       color={f.color}

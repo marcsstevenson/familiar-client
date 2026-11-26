@@ -23,7 +23,21 @@ export function isCommandError(e: unknown): e is CommandError {
 export type Theme = "system" | "light" | "dark";
 export type Platform = "windows" | "macos" | "linux";
 
+export type DesktopPreferences = {
+  accent: string;
+  neon: boolean;
+  panes: { folders: number; list: number };
+  collapsed: string[];
+  calendar_view: import("./calendar/timeline").CalendarView;
+  hidden_calendars: string[];
+  sender_calendars: Record<string, { account: string; name: string; remote_id?: string }>;
+  sort: import("./list/api").Sort;
+  unread_only: boolean;
+  day_panel_open: boolean;
+};
+
 export type UiInfo = {
+  desktop: Partial<DesktopPreferences>;
   session_store: string | null;
   version: string;
   platform: Platform | string;
