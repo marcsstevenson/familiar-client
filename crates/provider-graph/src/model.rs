@@ -26,6 +26,8 @@ pub const WELL_KNOWN_FOLDERS: &[&str] = &[
     "junkemail",
     "archive",
     "outbox",
+    // Outlook.com shows it but refuses to delete it; knowing it marks it built-in.
+    "conversationhistory",
 ];
 
 /// A mail folder.

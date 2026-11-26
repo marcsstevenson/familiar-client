@@ -60,13 +60,19 @@ async fn folder_tree_with_parents_and_well_known_names() {
             .map(|f| f.id)
     );
     assert!(folders.iter().any(|f| f.name == "Orders"));
-    // Well-known folders are only looked up on a full round.
-    assert!(
-        env.mock
-            .requests()
-            .iter()
-            .all(|r| !r.path.ends_with("/mailFolders/inbox"))
-    );
+    // An incremental round looks up only well-known names not known locally.
+    let asked: Vec<String> = env
+        .mock
+        .requests()
+        .iter()
+        .filter_map(|r| {
+            r.path
+                .rsplit_once("/mailFolders/")
+                .map(|(_, n)| n.to_string())
+        })
+        .filter(|n| !n.contains('/') && n != "delta")
+        .collect();
+    assert_eq!(asked, ["conversationhistory"], "asked: {asked:?}");
     assert_eq!(
         env.folders()
             .iter()
@@ -76,6 +82,30 @@ async fn folder_tree_with_parents_and_well_known_names() {
             .as_deref(),
         Some("inbox"),
         "an incremental round keeps well-known names"
+    );
+
+    // A store that predates a well-known name learns it on the next round,
+    // even when the folder itself didn't change.
+    let archive = env
+        .folders()
+        .into_iter()
+        .find(|f| f.name == "Archive")
+        .unwrap();
+    env.w
+        .write(|tx| {
+            tx.upsert_folder(&familiar_store::NewFolder {
+                account: archive.account,
+                remote_id: archive.remote_id.clone(),
+                parent: archive.parent,
+                name: archive.name.clone(),
+                well_known: None,
+            })
+        })
+        .unwrap();
+    env.sync_tree().await;
+    assert_eq!(
+        env.folder(&archive.remote_id).well_known.as_deref(),
+        Some("archive")
     );
 
     mbx.delete_folder(&added).unwrap();

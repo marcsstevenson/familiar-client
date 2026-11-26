@@ -208,13 +208,12 @@ impl MailSync {
         }
 
         // Well-known names aren't in v1.0 folder JSON; ask for them by name
-        // on a full round, or when Inbox isn't known yet.
+        // on a full round, and otherwise for any not known locally yet (a
+        // mailbox without one asks again each round, one cheap GET).
         let mut well_known: HashMap<String, String> = HashMap::new();
-        let have_inbox = local
-            .iter()
-            .any(|f| f.well_known.as_deref() == Some("inbox"));
-        if full || !have_inbox {
-            for name in WELL_KNOWN_FOLDERS {
+        for name in WELL_KNOWN_FOLDERS {
+            let known = local.iter().any(|f| f.well_known.as_deref() == Some(*name));
+            if full || !known {
                 if let Some(id) = self.api.well_known_folder(name, priority).await? {
                     well_known.insert(id, (*name).to_string());
                 }
@@ -241,6 +240,20 @@ impl MailSync {
                 }
             }
             report.upserted = apply_folders(tx, acc, &ready, &well_known)?;
+            // A name newly learnt for a folder this round didn't touch.
+            for (id, name) in &well_known {
+                if let Some(f) = tx.folder_by_remote(acc, id)?
+                    && f.well_known.is_none()
+                {
+                    tx.upsert_folder(&NewFolder {
+                        account: acc,
+                        remote_id: f.remote_id,
+                        parent: f.parent,
+                        name: f.name,
+                        well_known: Some(name.clone()),
+                    })?;
+                }
+            }
             for id in &removed {
                 if id.starts_with(familiar_store::LOCAL_REMOTE_PREFIX) || !keep(id)? {
                     continue;
