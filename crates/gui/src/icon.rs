@@ -40,7 +40,10 @@ mod taskbar {
             Foundation::{LPARAM, WPARAM},
             System::Com::{CLSCTX_INPROC_SERVER, CoCreateInstance, IPersistFile, STGM_READWRITE},
             UI::{
-                Shell::{IShellLinkW, SHCNE_UPDATEITEM, SHCNF_PATHW, SHChangeNotify, ShellLink},
+                Shell::{
+                    IShellLinkW, SHCNE_UPDATEITEM, SHCNF_FLUSHNOWAIT, SHCNF_PATHW, SHChangeNotify,
+                    SHUpdateImageW, Shell_GetCachedImageIndexW, ShellLink,
+                },
                 WindowsAndMessaging::{ICON_BIG, ICON_SMALL, SendMessageW, WM_GETICON, WM_SETICON},
             },
         },
@@ -72,7 +75,7 @@ mod taskbar {
             let link = window
                 .path()
                 .data_dir()?
-                .join("Microsoft/Internet Explorer/Quick Launch/User Pinned/TaskBar/Familiar.lnk");
+                .join(r"Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar\Familiar.lnk");
             if link.is_file() {
                 update_pin(&link, &window.path().app_local_data_dir()?, rgba)?;
             }
@@ -106,24 +109,39 @@ mod taskbar {
         icons.add_entry(ico::IconDirEntry::encode_as_png(&image)?);
         let mut encoded = Vec::new();
         icons.write(&mut encoded)?;
-        // Explorer caches by path. Alternate two owned files so it sees a
-        // new icon and the shortcut always points at a complete file.
+        // Keep the pinned icon's cache key. Explorer can continue painting the old
+        // system-image-list entry even after a shortcut starts pointing elsewhere.
         let first = dir.join("accent-a.ico");
-        let second = dir.join("accent-b.ico");
-        if (current == first || current == second) && fs::read(&current).is_ok_and(|b| b == encoded)
-        {
-            return Ok(());
-        }
-        let next = if current == first { second } else { first };
+        let icon_path = if current == dir.join("accent-b.ico") {
+            current.clone()
+        } else {
+            first
+        };
         fs::create_dir_all(dir)?;
-        fs::write(&next, encoded)?;
-        // Change just the icon location of this executable's existing pin.
+        let icon_name = HSTRING::from(icon_path.as_os_str());
+        // Look up the existing slot before replacing its source. The first
+        // write has no old slot; saving the shortcut creates the association.
+        let slot = if icon_path.is_file() {
+            unsafe { Shell_GetCachedImageIndexW(&icon_name, 0, 0) }
+        } else {
+            -1
+        };
+        if !fs::read(&icon_path).is_ok_and(|b| b == encoded) {
+            let staged = icon_path.with_extension(format!("{}.tmp", std::process::id()));
+            fs::write(&staged, encoded)?;
+            fs::rename(staged, &icon_path)?;
+        }
         unsafe {
-            link.SetIconLocation(&HSTRING::from(next.as_os_str()), 0)?;
-            file.Save(&name, true)?;
+            if current != icon_path {
+                link.SetIconLocation(&icon_name, 0)?;
+                file.Save(&name, true)?;
+            }
+            if slot >= 0 {
+                SHUpdateImageW(&icon_name, 0, 0, slot);
+            }
             SHChangeNotify(
                 SHCNE_UPDATEITEM,
-                SHCNF_PATHW,
+                SHCNF_PATHW | SHCNF_FLUSHNOWAIT,
                 Some(name.as_ptr().cast()),
                 None,
             );

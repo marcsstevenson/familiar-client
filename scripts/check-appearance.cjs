@@ -61,6 +61,10 @@ async function mount(page, main) {
     const picker = dialog.getByLabel("Accent colour");
     const hex = dialog.getByRole("textbox", { name: "Hex colour" });
     const sky = dialog.getByRole("button", { name: "Sky", exact: true });
+    const presets = dialog.getByRole("group", { name: "Accent presets" });
+    assert.equal(await presets.getByRole("button").count(), 16);
+    assert.ok((await presets.boundingBox()).y < (await picker.boundingBox()).y);
+    assert.equal(await dialog.getByRole("button", { name: "Reset accent" }).count(), 0);
     const done = dialog.getByRole("button", { name: "Done" });
     await hex.fill("#99D9");
     assert.ok(await done.isDisabled());
@@ -115,7 +119,7 @@ async function mount(page, main) {
     await appearance.click();
     assert.equal(await picker.inputValue(), "#7000ca");
     assert.equal(await hex.inputValue(), "#7000CA");
-    await dialog.getByRole("button", { name: "Reset accent" }).click();
+    await presets.getByRole("button", { name: "Familiar blue" }).click();
     await secondary.waitForFunction(() => !document.documentElement.style.getPropertyValue("--accent"));
     await dialog.getByRole("button", { name: "Done" }).click();
     console.log("Appearance, field padding, attachment actions and cross-window accent checks passed");
