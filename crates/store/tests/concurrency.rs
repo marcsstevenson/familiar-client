@@ -13,6 +13,10 @@ use std::time::{Duration, Instant};
 /// blocked commit or read shows up as a failure rather than a slow pass.
 const NOT_BLOCKED: Duration = Duration::from_secs(1);
 
+/// The writer's busy timeout. A commit that waits on a reader's lock waits
+/// this long and then fails, so a stall shows up near or past it.
+const BUSY_TIMEOUT: Duration = Duration::from_secs(5);
+
 #[test]
 fn writer_commits_while_a_reader_holds_a_snapshot() {
     let dir = tempfile::tempdir().unwrap();
@@ -175,7 +179,11 @@ fn busy_readers_never_stall_a_sync_sized_write_load() {
         total / elapsed.as_secs_f64(),
         reads.load(Ordering::Relaxed)
     );
-    assert!(worst < NOT_BLOCKED, "worst commit {worst:?}");
+    // Sixty batches on a loaded runner can see one slow commit (an
+    // auto-checkpoint, a slow disk flush): Windows CI once hit 1.01 s. A
+    // reader stalling the writer would wait out the busy timeout instead, so
+    // half of it separates the two without hiding a real stall.
+    assert!(worst < BUSY_TIMEOUT / 2, "worst commit {worst:?}");
     assert!(reads.load(Ordering::Relaxed) > 0);
     assert_eq!(w.repair_derived().unwrap(), 0);
 }
