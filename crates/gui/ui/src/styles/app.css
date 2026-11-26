@@ -291,12 +291,11 @@ button.primary:focus-visible { outline-color: var(--text-on-accent); }
   place-items: center;
   color: var(--text-muted);
 }
-/* The kea as a faint silhouette, a shade off the pane background in either
-   theme. The SVG is only the mask. */
+/* The SVG supplies the silhouette. Its fill follows the chosen accent. */
 .reading-empty-kea {
   width: 192px;
   height: 192px;
-  background: color-mix(in srgb, var(--text) 9%, var(--bg));
+  background: var(--accent-source, var(--accent));
   -webkit-mask: url("../assets/kea-mono.svg") center / contain no-repeat;
   mask: url("../assets/kea-mono.svg") center / contain no-repeat;
 }
