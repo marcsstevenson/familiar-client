@@ -1380,7 +1380,7 @@ checksum = "7360491ce676a36bf9bb3c56c1aa791658183a54d2744120f27285738d90465a"
 
 [[package]]
 name = "familiar-auth"
-version = "0.1.0"
+version = "0.5.0"
 dependencies = [
  "argon2",
  "base64 0.22.1",
@@ -1400,7 +1400,7 @@ dependencies = [
 
 [[package]]
 name = "familiar-cli"
-version = "0.1.0"
+version = "0.5.0"
 dependencies = [
  "chrono",
  "clap",
@@ -1419,7 +1419,7 @@ dependencies = [
 
 [[package]]
 name = "familiar-config"
-version = "0.1.0"
+version = "0.5.0"
 dependencies = [
  "serde",
  "toml 1.2.0+spec-1.1.0",
@@ -1428,7 +1428,7 @@ dependencies = [
 
 [[package]]
 name = "familiar-core"
-version = "0.1.0"
+version = "0.5.0"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -1449,7 +1449,7 @@ dependencies = [
 
 [[package]]
 name = "familiar-daemon"
-version = "0.1.0"
+version = "0.5.0"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -1472,7 +1472,7 @@ dependencies = [
 
 [[package]]
 name = "familiar-gui"
-version = "0.1.0"
+version = "0.5.0"
 dependencies = [
  "ammonia",
  "base64 0.22.1",
@@ -1498,7 +1498,7 @@ dependencies = [
 
 [[package]]
 name = "familiar-mock-gmail"
-version = "0.1.0"
+version = "0.5.0"
 dependencies = [
  "axum",
  "base64 0.22.1",
@@ -1512,7 +1512,7 @@ dependencies = [
 
 [[package]]
 name = "familiar-mock-graph"
-version = "0.1.0"
+version = "0.5.0"
 dependencies = [
  "axum",
  "base64 0.22.1",
@@ -1528,7 +1528,7 @@ dependencies = [
 
 [[package]]
 name = "familiar-provider"
-version = "0.1.0"
+version = "0.5.0"
 dependencies = [
  "familiar-auth",
  "familiar-store",
@@ -1540,7 +1540,7 @@ dependencies = [
 
 [[package]]
 name = "familiar-provider-gmail"
-version = "0.1.0"
+version = "0.5.0"
 dependencies = [
  "axum",
  "base64 0.22.1",
@@ -1560,7 +1560,7 @@ dependencies = [
 
 [[package]]
 name = "familiar-provider-graph"
-version = "0.1.0"
+version = "0.5.0"
 dependencies = [
  "chrono",
  "familiar-auth",
@@ -1578,14 +1578,14 @@ dependencies = [
 
 [[package]]
 name = "familiar-rules"
-version = "0.1.0"
+version = "0.5.0"
 dependencies = [
  "familiar-core",
 ]
 
 [[package]]
 name = "familiar-search"
-version = "0.1.0"
+version = "0.5.0"
 dependencies = [
  "familiar-store",
  "schemars 1.2.3",
@@ -1599,7 +1599,7 @@ dependencies = [
 
 [[package]]
 name = "familiar-store"
-version = "0.1.0"
+version = "0.5.0"
 dependencies = [
  "blake3",
  "fs4",
