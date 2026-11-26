@@ -232,7 +232,7 @@ button.primary:focus-visible { outline-color: var(--text-on-accent); }
   :root[data-neon] {
     --neon-glow: color-mix(in srgb, var(--accent-source, var(--accent)) 60%, transparent);
   }
-  [data-neon] :is(.titlebar-icon, .welcome-icon) { filter: drop-shadow(0 0 4px var(--neon-glow)); }
+  [data-neon] :is(.titlebar-icon, .welcome-icon, .reading-empty-kea) { filter: drop-shadow(0 0 4px var(--neon-glow)); }
   [data-neon] :is(.primary:enabled, .contact-primary:enabled, .accent-swatch[aria-pressed=true], .neon-switch:checked) {
     box-shadow: 0 0 3px var(--neon-glow), 0 0 9px var(--neon-glow);
   }
@@ -291,10 +291,14 @@ button.primary:focus-visible { outline-color: var(--text-on-accent); }
   place-items: center;
   color: var(--text-muted);
 }
-/* The SVG supplies the silhouette. Its fill follows the chosen accent. */
+/* Mask the child so the parent's Neon shadow can extend beyond the silhouette. */
 .reading-empty-kea {
+  display: grid;
   width: 192px;
   height: 192px;
+}
+.reading-empty-kea::before {
+  content: "";
   background: var(--accent-source, var(--accent));
   -webkit-mask: url("../assets/kea-mono.svg") center / contain no-repeat;
   mask: url("../assets/kea-mono.svg") center / contain no-repeat;
