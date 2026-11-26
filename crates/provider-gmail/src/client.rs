@@ -325,8 +325,12 @@ impl GmailClient {
                         "rateLimitExceeded" | "userRateLimitExceeded"
                     ));
             let retry_5xx = method == Method::GET && status.is_server_error();
+            // A token from before a new sign-in can lack a scope the new one
+            // has (seen live after contacts went read/write): refresh once.
+            let stale =
+                status == StatusCode::UNAUTHORIZED || missing_scope(status, &reason, &message);
             match status {
-                StatusCode::UNAUTHORIZED if !refreshed => {
+                _ if stale && !refreshed => {
                     refreshed = true;
                     attempt -= 1;
                     self.token(true).await?;
@@ -375,6 +379,13 @@ impl GmailClient {
     }
 }
 
+/// A 403 for a token without the scope the request needs.
+fn missing_scope(status: StatusCode, reason: &str, message: &str) -> bool {
+    status == StatusCode::FORBIDDEN
+        && (reason == "insufficientPermissions"
+            || message.contains("insufficient authentication scopes"))
+}
+
 /// Gmail's `{"error": {"code", "message", "errors": [{"reason"}], "status"}}`:
 /// the first reason (else the status), and the message.
 fn gmail_error(body: &[u8]) -> (String, String) {
@@ -415,6 +426,14 @@ mod tests {
         );
         let b = br#"{"error":{"code":404,"message":"gone","status":"NOT_FOUND"}}"#;
         assert_eq!(gmail_error(b).0, "NOT_FOUND");
+        let b = br#"{"error":{"code":403,"message":"Request had insufficient authentication scopes.","status":"PERMISSION_DENIED"}}"#;
+        let (reason, message) = gmail_error(b);
+        assert!(missing_scope(StatusCode::FORBIDDEN, &reason, &message));
+        assert!(!missing_scope(
+            StatusCode::FORBIDDEN,
+            "userRateLimitExceeded",
+            "slow down"
+        ));
     }
 
     #[tokio::test]
