@@ -161,7 +161,7 @@ The People API gives two lists that map onto the existing tables: `people.connec
 
 ## Rules (Phase 4)
 
-Gmail filters (`users.settings.filters`) are the server rules for Gmail accounts. They match on from, to, subject, has-words and size, and can add or remove labels, archive, mark read, star, forward or trash, and they run on all incoming mail, not just the Inbox. `fam rules plan` and `apply` translate the same `[[rules]]` entries; conditions or actions a filter can't express fall back to `run = "local"`, as they do for Graph. Gmail filters can't be edited in place (only created and deleted), so `apply` replaces a changed filter. This waits for WP 4.3 and isn't part of the first Gmail cut.
+Gmail filters (`users.settings.filters`) are the server rules for Gmail accounts. They match on from, to, subject, has-words and size, and can add or remove labels, archive, mark read, star, forward or trash, and they run on all incoming mail, not just the Inbox. `fam rules plan` and `apply` translate the same `[[rules]]` entries; conditions or actions a filter can't express fall back to `run = "local"`, as they do for Graph. Gmail filters can't be edited in place (only created and deleted), so `apply` replaces a changed filter. **Dropped (Marc, 27 Nov 2026):** Familiar won't manage Gmail filters; WP 4.3 rules cover Outlook accounts only. Gmail filters stay managed in Gmail.
 
 ## Configuration
 
@@ -242,7 +242,7 @@ All of this is one new phase, **Phase G**, with its own gate. Each package is si
 | G.8 | **Google Calendar** (after the Phase G gate). Calendar list, window rounds with expanded events, writes, RSVP, recurrence, purposes, create from email | Phase G gate | Live read verified 21 Nov 2026: four Google calendars and upcoming events are available through Familiar. The remaining live write check is a family event created from a Gmail message. |
 | G.9 | **Google contacts** (after the Phase G gate). Connections and other contacts into the existing tables for autocomplete | Phase G gate | `fam contacts search` finds Gmail contacts. **Built 23 Nov 2026** against the mock: saved contacts (People API connections), hourly full rounds; other contacts left to the correspondents list |
 | G.10 | **GUI touches.** Labels shown as folders (a message in two labels appears in both), All Mail, a Gmail badge on the account, "Archive" wording for Gmail, send-as identities in compose | G.6, G.7 | A week of Gmail use in the app alongside the Microsoft accounts. **Built 23 Nov 2026**: Gmail badge on the account, deleting a label says Gmail deletes it for good (its mail stays in All Mail), send-as addresses come from `aliases` in config.toml as for Microsoft accounts (Familiar refuses others before sending, and Gmail refuses unverified ones) |
-| G.11 | **Gmail filters as server rules** | G.6, WP 4.3 | `fam rules plan/apply` keeps Gmail filters in sync with config |
+| G.11 | ~~**Gmail filters as server rules**~~ Dropped by Marc, 27 Nov 2026 | G.6, WP 4.3 | `fam rules plan/apply` keeps Gmail filters in sync with config |
 
 ```
 G.0 ──► G.3 ──┐
@@ -250,7 +250,7 @@ G.0 ──► G.3 ──┐
 G.1 ──────────┼──► G.5 ──► G.6 ──► G.7 ──► G.10
 G.2 ──────────┘
 Phase G gate ──► G.8, G.9
-G.6 + WP 4.3 ──► G.11
+G.6 + WP 4.3 ──► G.11 (dropped)
 ```
 
 **Phase G gate:** Marc's Gmail account syncs completely, search is fast, the mail gate tasks (find a thread, save a draft) work on it through `fam`, and Marc uses it in the desktop app for a week. Calendar and contacts (G.8, G.9) follow the gate; G.0 and G.3 still ask for their scopes, so adding them needs no second sign-in.
@@ -303,9 +303,9 @@ Gmail is on the design doc's "Later" list, and Phase 3's gate (a week of daily m
 
 1. **Done (20 Nov 2026):** WP G.0. The unverified production app works for restricted scopes (see G.0 results).
 2. **After the Phase 3 gate:** G.1 and G.2, the two refactors, while Familiar is otherwise stable.
-3. **Then:** G.3 to G.7 and G.10 (mail), before or alongside Phase 4, as Marc prefers. G.8 and G.9 (calendar and contacts) after the Phase G gate. G.11 waits for WP 4.3.
+3. **Then:** G.3 to G.7 and G.10 (mail), before or alongside Phase 4, as Marc prefers. G.8 and G.9 (calendar and contacts) after the Phase G gate. G.11 is dropped.
 
-If Gmail matters more to Marc than Phase 4's calendar views and rules, Phase G can go straight after Phase 3; nothing in it depends on Phase 4 apart from G.11.
+If Gmail matters more to Marc than Phase 4's calendar views and rules, Phase G can go straight after Phase 3; nothing in it depends on Phase 4.
 
 ## Risks
 
