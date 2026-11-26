@@ -4,12 +4,12 @@ import kea from "./assets/kea.svg?raw";
 import { luminance } from "./colour";
 import { accent, DEFAULT_ACCENT } from "./theme";
 
-/** Use the chosen colour exactly. Switch the feather cutouts for pale accents. */
-export function iconUrl(): string {
+/** Transparent cutouts reveal the title bar. The native icon uses contrasting feathers. */
+export function iconUrl(cutouts: "transparent" | "contrast" = "contrast"): string {
   const colour = accent() ?? DEFAULT_ACCENT;
   const channel = (i: number) => parseInt(colour.slice(i, i + 2), 16);
-  const feather = luminance(channel(1), channel(3), channel(5)) > 0.35 ? "#222" : "white";
-  const svg = kea.replace("<svg ", `<svg style="color:${colour};--feather:${feather}" `);
+  const contrast = luminance(channel(1), channel(3), channel(5)) > 0.35 ? "#222" : "white";
+  const svg = kea.replace("<svg ", `<svg style="color:${colour};--feather:${cutouts === "transparent" ? "transparent" : contrast}" `);
   return "data:image/svg+xml," + encodeURIComponent(svg);
 }
 
