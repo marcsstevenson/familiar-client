@@ -2,7 +2,7 @@
 //! The typed shape of `config.toml`. Unknown keys are errors, so a typo is
 //! reported instead of silently ignored.
 
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 
 /// The config file format version this build reads.
@@ -17,6 +17,15 @@ pub struct Config {
     /// App-wide settings.
     #[serde(default)]
     pub app: App,
+    /// Desktop display and navigation preferences.
+    #[serde(default)]
+    pub desktop: Desktop,
+    /// Folder preferences by account key and provider folder ID.
+    #[serde(default)]
+    pub folders: BTreeMap<String, BTreeMap<String, FolderPref>>,
+    /// Message reading preferences.
+    #[serde(default)]
+    pub reading: Reading,
     /// Mail accounts by short name (the name used with `--account`).
     #[serde(default)]
     pub accounts: BTreeMap<String, Account>,
@@ -44,6 +53,112 @@ pub struct Config {
     /// Scripts famd runs when something happens, such as new mail.
     #[serde(default)]
     pub hooks: Vec<Hook>,
+}
+
+/// Desktop preferences. Missing keys use the desktop defaults.
+#[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Desktop {
+    /// Custom accent as a six-digit hex colour.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub accent: Option<String>,
+    /// Glow around the icon and active controls.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub neon: Option<bool>,
+    /// Folder and message list pane widths in pixels.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub panes: Option<PaneWidths>,
+    /// Collapsed account and folder keys.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub collapsed: Option<Vec<String>>,
+    /// Calendar display mode.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub calendar_view: Option<CalendarView>,
+    /// Hidden calendars by account and provider ID.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hidden_calendars: Option<Vec<String>>,
+    /// Preferred calendar for each sender.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sender_calendars: Option<BTreeMap<String, SenderCalendar>>,
+    /// Message list sort order.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub sort: Option<ListSort>,
+    /// Only show unread messages.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub unread_only: Option<bool>,
+    /// Show the day panel beside mail.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub day_panel_open: Option<bool>,
+}
+
+/// Resizable pane widths in pixels.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct PaneWidths {
+    /// Folder pane width.
+    pub folders: u32,
+    /// Message list width.
+    pub list: u32,
+}
+
+/// Full calendar display modes.
+#[allow(missing_docs)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+pub enum CalendarView {
+    Day,
+    Week,
+    Month,
+    Agenda,
+}
+
+/// Message list sort order.
+#[allow(missing_docs)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum ListSort {
+    Newest,
+    Oldest,
+    From,
+    Subject,
+}
+
+/// Calendar used when adding an event from a sender.
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub struct SenderCalendar {
+    /// Account key.
+    pub account: String,
+    /// Display name, also used when importing old preferences.
+    pub name: String,
+    /// Stable provider ID if known.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub remote_id: Option<String>,
+}
+
+/// Reading preferences.
+#[derive(Debug, Clone, Default, PartialEq, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct Reading {
+    /// Addresses whose remote images may load automatically.
+    pub image_senders: std::collections::BTreeSet<String>,
+}
+
+/// One folder's display preferences.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(default, deny_unknown_fields)]
+pub struct FolderPref {
+    /// Colour in the folder pane.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub color: Option<String>,
+    /// Show in the pinned list.
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub pinned: bool,
+    /// Position among siblings.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub order: Option<u32>,
+    /// Position among pinned folders.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub pin_order: Option<u32>,
 }
 
 /// `[app]`.

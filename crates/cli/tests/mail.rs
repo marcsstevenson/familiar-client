@@ -328,11 +328,33 @@ fn api_is_get_only_and_graph_only() {
 }
 
 #[test]
-fn folder_colours_and_pins_are_kept_on_this_device() {
+fn folder_colours_and_pins_follow_the_config() {
     let dir = tempfile::tempdir().unwrap();
     let data = dir.path();
     sync_store(data);
 
+    let rows = json(data, &["folder", "list"]);
+    let club = rows["folders"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|f| f["path"] == "Cricket Club")
+        .unwrap();
+    let id = club["remote_id"].as_str().unwrap();
+    std::fs::write(
+        data.join("folders.json"),
+        serde_json::json!({"hotmail":{(id):{"color":"red"}}}).to_string(),
+    )
+    .unwrap();
+    let imported = json(data, &["folder", "list"]);
+    assert!(
+        imported["folders"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|f| f["path"] == "Cricket Club" && f["color"] == "red")
+    );
+    assert!(data.join("folders.json.migrated").exists());
     let v = json(data, &["folder", "color", "Cricket Club", "Green"]);
     assert_eq!(v["path"], "Cricket Club");
     assert_eq!(v["color"], "green");
@@ -346,7 +368,9 @@ fn folder_colours_and_pins_are_kept_on_this_device() {
     assert_eq!(row("Inbox/Receipts")["pinned"], true);
     assert!(row("Inbox").get("color").is_none());
     assert!(row("Inbox").get("pinned").is_none());
-    assert!(data.join("folders.json").exists());
+    let config = std::fs::read_to_string(data.join("config.toml")).unwrap();
+    assert!(config.contains("[folders.hotmail]"));
+    assert!(!data.join("folders.json").exists());
 
     json(data, &["folder", "color", "Cricket Club", "none"]);
     json(data, &["folder", "unpin", "Inbox/Receipts"]);

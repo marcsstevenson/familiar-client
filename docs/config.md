@@ -32,7 +32,13 @@ Your own config has your signatures in it, so keep it in a private repo, not in 
 | --- | --- |
 | top level | `version` (required, 1) |
 | `[app]` | `client_id` (defaults to Familiar's own, `c6057b6a-a692-47dd-b34e-12629372e32a`), `theme` (`system`, `light`, `dark`), `send_delay_seconds` (default 10) |
-| `[accounts.<name>]` | `email`, `tenant` (both required), `display_name`, `aliases` (other addresses to send from), `processed_folder` (where the Processed tick and `fam mail process` move messages; created at the top level when missing; off when unset), `spam_check` (offer the spam and scam check on this account's mail, `false` by default; see [spam.md](spam.md)), `spam_auto` (also check new Inbox and Junk mail in the background; implies `spam_check`; `false` by default) |
+| `[app.google]` | `client_file`, the path to Google Desktop app credentials for Gmail |
+| `[desktop]` | `accent` (e.g. `"#99D9EA"`, omitted for Familiar blue), `neon` (false), `panes` (folder and list widths in pixels, 240 and 400), `sort` (newest, oldest, from, subject), `unread_only` (false), `day_panel_open` (false), `calendar_view` (Day, Week, Month, Agenda), `collapsed` and `hidden_calendars` (see the example for key formats) |
+| `[desktop.sender_calendars]` | Sender address mapped to an account, calendar name and optional provider ID |
+| `[folders.<account>]` | Each provider folder ID maps to its `color`, `pinned`, `order` and `pin_order` |
+| `[reading]` | `image_senders`, the addresses whose remote images you always allow |
+| `[calendar]` | `past` (3m) and `future` (1y), the event sync window |
+| `[accounts.<name>]` | `email`, `provider` (graph or gmail), `tenant` (required for Microsoft), `display_name`, `aliases` (other addresses to send from), `processed_folder` (where the Processed tick and `fam mail process` move messages; created at the top level when missing; off when unset), `spam_check` (offer the spam and scam check on this account's mail, `false` by default; see [spam.md](spam.md)), `spam_auto` (also check new Inbox and Junk mail in the background; implies `spam_check`; `false` by default) |
 | `[accounts.<name>.signature]` | `new`, `reply`, as HTML |
 | `[calendar.purposes]` | `<purpose> = { account, calendar }` |
 | `[sync]` | `window` (`1y`), `headers` (`all`), `older_bodies` (`on-demand`, `none`), `cache_limit` (`2GB`), `attachments` (`on-demand`, `window`) |
@@ -43,6 +49,10 @@ Your own config has your signatures in it, so keep it in a private repo, not in 
 | `[agent]` | `allow` (default `["read", "draft"]`; may add `write`) |
 | `[ai]` | `enabled` (default `false`), `tool` (`auto`, `claude`, `codex`, `none` or a path), `model`, `timeout_seconds` (`90`), `accounts`. See [ai.md](ai.md). |
 | `[agent.accounts.<name>]` | `allow`: more access on that account, e.g. `["send", "delete"]` |
+
+## Upgrading existing preferences
+
+Familiar imports preferences previously saved by the webview and the old folder and reader JSON files. Explicit TOML values take precedence. The JSON files get a `.migrated` suffix after a successful import. Window positions, open messages, scroll positions and draft recovery use the local session.
 
 ## Writing back
 

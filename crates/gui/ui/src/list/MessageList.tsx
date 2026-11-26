@@ -1,3 +1,4 @@
+import { choose, preferences } from "../preferences";
 // The virtualised message list. Rust holds the sorted IDs of the view; this
 // component asks for the rows on screen a page at a time and draws only those.
 import { For, Show, createEffect, createSignal, on, onCleanup, onMount } from "solid-js";
@@ -28,9 +29,8 @@ export function MessageList() {
   const [total, setTotal] = createSignal(0);
   const [scrollTop, setScrollTop] = createSignal(0);
   const [viewH, setViewH] = createSignal(600);
-  const saved = readSession<{ sort: Sort; unread: boolean }>("list");
-  const [sort, setSort] = createSignal<Sort>(saved?.sort ?? "newest");
-  const [unreadOnly, setUnreadOnly] = createSignal(saved?.unread ?? false);
+  const sort = () => preferences().sort ?? "newest";
+  const unreadOnly = () => preferences().unread_only ?? false;
   let initialTop = readSession<number>("listTop");
   function restoreTop(top: number) {
     if (!scroller.clientHeight) {
@@ -42,7 +42,6 @@ export function MessageList() {
     setScrollTop(scroller.scrollTop);
     writeSession("listTop", scroller.scrollTop);
   }
-  createEffect(() => writeSession("list", { sort: sort(), unread: unreadOnly() }));
   const [selIndex, setSelIndex] = createSignal<number | null>(null);
   const [error, setError] = createSignal<string | null>(null);
   const [rev, setRev] = createSignal(0);
@@ -500,7 +499,7 @@ export function MessageList() {
             value={searchQuery() ? "newest" : sort()}
             disabled={searchQuery() !== null}
             title={searchQuery() ? "Search results are newest first" : undefined}
-            onChange={(e) => setSort(e.currentTarget.value as Sort)}
+            onChange={(e) => choose({ sort: e.currentTarget.value as Sort })}
           >
             <For each={SORTS}>{(s) => <option value={s.value}>{s.label}</option>}</For>
           </select>
@@ -509,7 +508,7 @@ export function MessageList() {
           <input
             type="checkbox"
             checked={unreadOnly()}
-            onChange={(e) => setUnreadOnly(e.currentTarget.checked)}
+            onChange={(e) => choose({ unread_only: e.currentTarget.checked })}
           />
           Unread
         </label>

@@ -508,7 +508,7 @@ Colour a mail folder in the folder pane. Access: `write`.
 fam folder color <FOLDER> <COLOR>
 ```
 
-Gives a folder a colour in the desktop app's folder pane, or none to clear it. Kept on this device only (folders.json in the data directory), not on the server; it follows the folder through a rename or move.
+Gives a folder a colour in the desktop app's folder pane, or none to clear it. Saved in config.toml; it follows the folder through a rename or move.
 
 - `--account <account>`: The account, when more than one has the folder.
 - `COLOR` (required): red, orange, yellow, green, teal, blue, purple, pink, grey, or none.
@@ -587,7 +587,7 @@ Pin a mail folder to the top of the folder pane. Access: `write`.
 fam folder pin <FOLDER>
 ```
 
-Lists a folder below All inboxes in the desktop app's folder pane. Kept on this device only (folders.json in the data directory), not on the server.
+Lists a folder below All inboxes in the desktop app's folder pane. Saved in config.toml.
 
 - `--account <account>`: The account, when more than one has the folder.
 - `FOLDER` (required): The folder (path, or name).
@@ -617,7 +617,7 @@ Set the order of folders in the folder pane. Access: `write`.
 fam folder reorder <FOLDERS>...
 ```
 
-Puts sibling folders (same account and parent) in the order given, or with --pinned the pinned folders. Give the whole group: folders left out keep any earlier place. Kept on this device only (folders.json in the data directory), not on the server. The desktop app sets it when a folder is dragged.
+Puts sibling folders (same account and parent) in the order given, or with --pinned the pinned folders. Give the whole group: folders left out keep any earlier place. Saved in config.toml. The desktop app sets it when a folder is dragged.
 
 - `FOLDERS` (required, repeatable): Local folder IDs (the id column of fam folder list --json), in the order wanted. They must share a parent folder and account, unless --pinned is given.
 - `--pinned`: Order the pinned folders (any accounts) instead of sibling folders.

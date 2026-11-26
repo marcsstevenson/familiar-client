@@ -10,8 +10,9 @@ use std::collections::HashMap;
 use crate::commands::mail::{open_store, pick_accounts, store_err};
 use crate::daemon::DaemonPaths;
 use crate::error::{CommandError, ErrorKind};
-use crate::folder_prefs::{COLOURS, FolderPref, FolderPrefs};
+use crate::folder_prefs::{self, COLOURS};
 use crate::registry::{Access, Command, CommandSpec, Context};
+use familiar_config::{ConfigDocument, model::FolderPref};
 use familiar_store::{Folder, FolderId};
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -114,7 +115,7 @@ pub fn folder_list_at(
     input: &FolderListInput,
 ) -> Result<FolderListOutput, CommandError> {
     let r = open_store(paths)?;
-    let prefs = FolderPrefs::load(&paths.data_dir);
+    let prefs = folder_prefs::load(&folder_prefs::config_path()?, &paths.data_dir)?;
     let mut out = Vec::new();
     for a in pick_accounts(&r, input.account.as_deref())? {
         let folders = r.folders(a.id).map_err(store_err)?;
@@ -127,7 +128,13 @@ pub fn folder_list_at(
             children.entry(parent).or_default().push(f);
         }
         let key = |f: &Folder| {
-            let order = prefs.get(&a.key, &f.remote_id).order.unwrap_or(u32::MAX);
+            let order = prefs
+                .get(&a.key)
+                .and_then(|fs| fs.get(&f.remote_id))
+                .cloned()
+                .unwrap_or_default()
+                .order
+                .unwrap_or(u32::MAX);
             let known = f
                 .well_known
                 .as_deref()
@@ -143,7 +150,11 @@ pub fn folder_list_at(
             .map(|v| v.iter().rev().map(|f| (*f, 0)).collect())
             .unwrap_or_default();
         while let Some((f, depth)) = stack.pop() {
-            let pref = prefs.get(&a.key, &f.remote_id);
+            let pref = prefs
+                .get(&a.key)
+                .and_then(|fs| fs.get(&f.remote_id))
+                .cloned()
+                .unwrap_or_default();
             out.push(FolderRow {
                 id: f.id.0,
                 account: a.key.clone(),
@@ -251,11 +262,12 @@ fn change_pref_at(
             )));
         }
     };
-    let mut prefs = FolderPrefs::load(&paths.data_dir);
-    prefs.update(&key, &remote_id, f);
-    prefs
-        .save(&paths.data_dir)
-        .map_err(|e| CommandError::internal(format!("save {}: {e}", crate::folder_prefs::FILE)))?;
+    let config = folder_prefs::config_path()?;
+    folder_prefs::load(&config, &paths.data_dir)?;
+    ConfigDocument::update(&config, |doc| {
+        folder_prefs::change(doc, &key, &remote_id, f)
+    })
+    .map_err(|e| CommandError::new(ErrorKind::Config, e.0))?;
     folder_list_at(
         paths,
         &FolderListInput {
@@ -321,7 +333,7 @@ impl Command for FolderColor {
     const SPEC: CommandSpec = CommandSpec {
         path: &["folder", "color"],
         summary: "Colour a mail folder in the folder pane",
-        description: "Gives a folder a colour in the desktop app's folder pane, or none to clear it. Kept on this device only (folders.json in the data directory), not on the server; it follows the folder through a rename or move.",
+        description: "Gives a folder a colour in the desktop app's folder pane, or none to clear it. Saved in config.toml; it follows the folder through a rename or move.",
         access: Access::Write,
         errors: &[ErrorKind::NotFound, ErrorKind::Usage],
     };
@@ -370,7 +382,7 @@ impl Command for FolderPin {
     const SPEC: CommandSpec = CommandSpec {
         path: &["folder", "pin"],
         summary: "Pin a mail folder to the top of the folder pane",
-        description: "Lists a folder below All inboxes in the desktop app's folder pane. Kept on this device only (folders.json in the data directory), not on the server.",
+        description: "Lists a folder below All inboxes in the desktop app's folder pane. Saved in config.toml.",
         access: Access::Write,
         errors: &[ErrorKind::NotFound, ErrorKind::Usage],
     };
@@ -463,20 +475,19 @@ pub fn folder_reorder_at(
             "the folders must share a parent folder and account (or give --pinned)",
         ));
     }
-    let mut prefs = FolderPrefs::load(&paths.data_dir);
-    for (i, f) in picked.iter().enumerate() {
-        let place = Some(i as u32);
-        prefs.update(&f.account, &f.remote_id, |p| {
-            if input.pinned {
-                p.pin_order = place;
-            } else {
-                p.order = place;
-            }
-        });
-    }
-    prefs
-        .save(&paths.data_dir)
-        .map_err(|e| CommandError::internal(format!("save {}: {e}", crate::folder_prefs::FILE)))?;
+    ConfigDocument::update(&folder_prefs::config_path()?, |doc| {
+        for (i, folder) in picked.iter().enumerate() {
+            folder_prefs::change(doc, &folder.account, &folder.remote_id, |p| {
+                if input.pinned {
+                    p.pin_order = Some(i as u32);
+                } else {
+                    p.order = Some(i as u32);
+                }
+            })?;
+        }
+        Ok(())
+    })
+    .map_err(|e| CommandError::new(ErrorKind::Config, e.0))?;
     let all = folder_list_at(paths, &FolderListInput::default())?.folders;
     let folders = input
         .folders
@@ -492,7 +503,7 @@ impl Command for FolderReorder {
     const SPEC: CommandSpec = CommandSpec {
         path: &["folder", "reorder"],
         summary: "Set the order of folders in the folder pane",
-        description: "Puts sibling folders (same account and parent) in the order given, or with --pinned the pinned folders. Give the whole group: folders left out keep any earlier place. Kept on this device only (folders.json in the data directory), not on the server. The desktop app sets it when a folder is dragged.",
+        description: "Puts sibling folders (same account and parent) in the order given, or with --pinned the pinned folders. Give the whole group: folders left out keep any earlier place. Saved in config.toml. The desktop app sets it when a folder is dragged.",
         access: Access::Write,
         errors: &[ErrorKind::NotFound, ErrorKind::Usage],
     };

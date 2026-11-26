@@ -13,6 +13,19 @@ async function mount(page, main) {
     const { mockWindows, mockIPC } = await import("/node_modules/@tauri-apps/api/mocks.js");
     mockWindows("main");
     mockIPC((cmd, args) => {
+      if (cmd === "ui_info") {
+        const { theme = "light", ...desktop } = JSON.parse(localStorage.getItem("mock.config") ?? "{}");
+        return { theme, desktop };
+      }
+      if (cmd === "save_preferences") {
+        const config = JSON.parse(localStorage.getItem("mock.config") ?? "{}");
+        for (const [key, value] of Object.entries(args.changes)) {
+          if (args.import && key in config) continue;
+          if (value === null) delete config[key];
+          else config[key] = value;
+        }
+        localStorage.setItem("mock.config", JSON.stringify(config));
+      }
       if (cmd === "set_accent_icon") window.iconPixels = Array.from(new Uint8Array(args));
       if (cmd === "reading_attachments") return [{ kind: "file", id: "1", name: "Notes.txt", size: 120 }];
       if (cmd === "reading_preview") return { kind: "text", text: "Attachment preview" };
@@ -25,7 +38,8 @@ async function mount(page, main) {
     await import("/src/compose/compose.css");
     await import("/src/styles/tokens.css");
     await import("/src/styles/app.css");
-    (await import("/src/theme.ts")).initTheme("light", main);
+    await (await import("/src/preferences.ts")).initPreferences();
+    (await import("/src/theme.ts")).initTheme();
     (await import("/src/icon.ts")).followWindowIcon();
     document.body.prepend(TitleBar({ platform: "windows" }), SearchBar());
     const { render } = await import("/node_modules/solid-js/web/dist/web.js");
@@ -54,6 +68,15 @@ async function mount(page, main) {
     await main.getByRole("button", { name: "Close viewer" }).click();
     await save.click();
     await main.waitForFunction(() => window.status.includes("Downloads/Notes.txt"));
+
+    const migrated = await main.evaluate(async () => {
+      localStorage.setItem("familiar.accent", "#007fff");
+      localStorage.setItem("familiar.panes", JSON.stringify({ folders: 210, list: 390 }));
+      localStorage.setItem("mock.config", JSON.stringify({ theme: "light", accent: "#b69cff" }));
+      await (await import("/src/importPreferences.ts")).importPreferences();
+      return [JSON.parse(localStorage.getItem("mock.config")), localStorage.getItem("familiar.accent")];
+    });
+    assert.deepEqual(migrated, [{ theme: "light", accent: "#b69cff", panes: { folders: 210, list: 390 } }, null]);
 
     const appearance = main.getByRole("button", { name: "Appearance" });
     await appearance.click();
@@ -118,7 +141,7 @@ async function mount(page, main) {
       }
       for (const colour of ["#ffff00", "#000000", "#ffffff", "#7000ca"]) {
         await picker.fill(colour);
-        await secondary.waitForFunction(c => localStorage.getItem("familiar.accent") === c, colour);
+        await secondary.waitForFunction(c => document.documentElement.style.getPropertyValue("--accent-source") === c, colour);
         const rendered = await main.evaluate(() => document.documentElement.style.getPropertyValue("--accent"));
         await secondary.waitForFunction(c => document.documentElement.style.getPropertyValue("--accent") === c, rendered);
         const passes = await main.evaluate(async () => {

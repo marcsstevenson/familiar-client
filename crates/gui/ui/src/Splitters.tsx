@@ -3,7 +3,7 @@
 // window has left, so resizing the window only changes the reading pane.
 import { createSignal } from "solid-js";
 
-const KEY = "familiar.panes";
+import { choose, preferences } from "./preferences";
 const DEFAULTS = { folders: 240, list: 400 };
 const MIN = { folders: 140, list: 260 };
 /** The reading pane keeps at least this much while dragging. */
@@ -12,32 +12,18 @@ const STEP = 16;
 
 type Widths = { folders: number; list: number };
 
-function load(): Widths {
-  try {
-    const w = JSON.parse(localStorage.getItem(KEY) ?? "null") as Partial<Widths> | null;
-    if (w && Number.isFinite(w.folders) && Number.isFinite(w.list)) {
-      // Widths saved in a wider window are cut back so the reading pane (and
-      // both splitters) still fit in this one.
-      const room = Math.max(MIN.folders + MIN.list, window.innerWidth - MIN_READING);
-      const folders = Math.min(Math.max(MIN.folders, w.folders!), room - MIN.list);
-      const list = Math.min(Math.max(MIN.list, w.list!), room - folders);
-      return { folders, list };
-    }
-  } catch {
-    // Defaults below.
-  }
-  return { ...DEFAULTS };
+const [dragWidths, setPaneWidths] = createSignal<Widths>();
+function paneWidths(): Widths {
+  const w = dragWidths() ?? preferences().panes ?? DEFAULTS;
+  const room = Math.max(MIN.folders + MIN.list, window.innerWidth - MIN_READING);
+  const folders = Math.min(Math.max(MIN.folders, w.folders), room - MIN.list);
+  const list = Math.min(Math.max(MIN.list, w.list), room - folders);
+  return { folders, list };
 }
-
 function save(w: Widths) {
-  try {
-    localStorage.setItem(KEY, JSON.stringify(w));
-  } catch {
-    // Not kept; the widths still apply until the window closes.
-  }
+  choose({ panes: w });
+  setPaneWidths(undefined);
 }
-
-export const [paneWidths, setPaneWidths] = createSignal<Widths>(load());
 
 /** `grid-template-columns` for the panes. */
 export const paneColumns = () => `${paneWidths().folders}px ${paneWidths().list}px 1fr`;

@@ -81,7 +81,10 @@ impl Reading {
             .ok()
             .map(|p| p.data_dir.join("reading.json"));
         Arc::new(Self {
-            senders: TrustedSenders::load(file),
+            senders: TrustedSenders::load(
+                familiar_config::paths::resolve(None).map(|(p, _)| p),
+                file,
+            ),
             shown: Mutex::default(),
             cid: Mutex::default(),
             prefetching: Arc::default(),
@@ -314,7 +317,7 @@ pub fn reading_trust_sender(
     state
         .senders
         .set(&address, trusted)
-        .map_err(|e| CommandError::internal(format!("save reading.json: {e}")))
+        .map_err(|e| CommandError::internal(format!("save trusted image senders: {e}")))
 }
 
 /// A message's attachments, without inline images.

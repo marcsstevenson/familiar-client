@@ -56,11 +56,12 @@ export function DayPanel(props: { full: boolean; location?: CalendarLocation; re
     props.onTargetOpened();
   });
   createEffect(() => props.remember({ date: date(), event: menu() ? undefined : selected() }));
-  const enabled = createMemo(() => calendars().filter(c => calendarVisible(c.id)));
+  const enabled = createMemo(() => calendars().filter(c => calendarVisible(c)));
   const sidebarCalendars = () => configuring() ? calendars() : enabled();
   const writable = createMemo(() => writableCalendars(calendars()));
+  const hiddenIds = createMemo(() => new Set(calendars().filter(c => !calendarVisible(c)).map(c => c.id)));
   const visible = createMemo(() => (result()?.events ?? [])
-    .filter(e => !e.cancelled && calendarVisible(e.calendar_id)));
+    .filter(e => !e.cancelled && !hiddenIds().has(e.calendar_id)));
   const [revision, setRevision] = createSignal(0);
   const color = (id: number) => {
     const value = calendars().find(c => c.id === id)?.color ?? "";
@@ -112,8 +113,8 @@ export function DayPanel(props: { full: boolean; location?: CalendarLocation; re
     </button>;
   }
   function checkbox(c: Calendar) {
-    return <label><input type="checkbox" checked={calendarVisible(c.id)}
-      onChange={e => setCalendarVisible(c.id, e.currentTarget.checked)} />
+    return <label><input type="checkbox" checked={calendarVisible(c)}
+      onChange={e => setCalendarVisible(c, e.currentTarget.checked)} />
       <i style={{ background: color(c.id) }} /><span>{!props.full && c.account + " · "}{c.name}{c.can_edit ? "" : " (read-only)"}</span></label>;
   }
   const rangeTitle = () => view() === "Month" ? new Date(date() + "T12:00").toLocaleDateString(undefined, { month: "long", year: "numeric" })

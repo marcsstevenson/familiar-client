@@ -89,6 +89,16 @@ pub fn check(c: &Config) -> Vec<Problem> {
             "must be a GUID like 00000000-0000-0000-0000-000000000000",
         ));
     }
+    if let Some(accent) = &c.desktop.accent
+        && !(accent.starts_with('#')
+            && accent.len() == 7
+            && accent.as_bytes()[1..].iter().all(u8::is_ascii_hexdigit))
+    {
+        p.push(Problem::error(
+            "desktop.accent",
+            "expected a colour such as #99D9EA",
+        ));
+    }
     if c.app.send_delay_seconds > MAX_SEND_DELAY_SECONDS {
         p.push(Problem::error(
             "app.send_delay_seconds",

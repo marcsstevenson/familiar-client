@@ -7,6 +7,8 @@ import { App } from "./App";
 import { Welcome, onboardingState } from "./onboarding/Welcome";
 import { ComposeWindow, composeSpec, installComposeKeys } from "./compose";
 import { followWindowIcon } from "./icon";
+import { flushPreferences, initPreferences } from "./preferences";
+import { importPreferences } from "./importPreferences";
 import { initTheme } from "./theme";
 import { ReadingPane } from "./reading/ReadingPane";
 import { SpamDialog } from "./spam/SpamDialog";
@@ -36,12 +38,16 @@ const windowKey = editorId ?? (reader ? "reader/" + reader[1] : "main");
 const rememberFocus = () => writeSession("active", windowKey);
 window.addEventListener("focus", rememberFocus);
 if (document.hasFocus()) rememberFocus();
-initTheme(info.theme, mainWindow);
+if (mainWindow && !info.bench && !info.config_error) {
+  await importPreferences().catch(e => notify("Couldn't import desktop settings: " + e, true));
+}
+await initPreferences();
+initTheme();
 if (info.platform !== "macos") followWindowIcon();
 if (mainWindow) {
   installComposeKeys();
   await getCurrentWindow().onCloseRequested(async e => {
-    try { await flushEditorWrites(); }
+    try { await Promise.all([flushEditorWrites(), flushPreferences()]); }
     catch (err) { e.preventDefault(); notify("Couldn't finish saving the session: " + err, true); }
   });
 }

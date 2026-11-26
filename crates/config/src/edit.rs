@@ -56,6 +56,82 @@ impl ConfigDocument {
             .map_err(|e| EditError(e.message().trim_end().to_string()))
     }
 
+    /// Locks the read/edit/save sequence across Familiar windows and CLI processes.
+    /// The lock file stays beside the config; closing the handle releases the lock.
+    pub fn lock(path: &Path) -> Result<std::fs::File, EditError> {
+        let io = |e| EditError(format!("could not lock {}: {e}", path.display()));
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent).map_err(io)?;
+        }
+        let mut lock_path = path.as_os_str().to_owned();
+        lock_path.push(".lock");
+        let file = std::fs::OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .read(true)
+            .write(true)
+            .open(lock_path)
+            .map_err(io)?;
+        fs4::fs_std::FileExt::lock_exclusive(&file).map_err(io)?;
+        Ok(file)
+    }
+
+    /// Edits the latest config under a lock, starting from the template if missing.
+    pub fn update(
+        path: &Path,
+        edit: impl FnOnce(&mut Self) -> Result<(), EditError>,
+    ) -> Result<(), EditError> {
+        let _lock = Self::lock(path)?;
+        let mut doc = if path.try_exists().map_err(|e| EditError(e.to_string()))? {
+            Self::open(path)?
+        } else {
+            Self::parse(crate::template::TEMPLATE)?
+        };
+        let before = doc.to_string();
+        edit(&mut doc)?;
+        if doc.to_string() != before {
+            doc.save(path)?;
+        }
+        Ok(())
+    }
+
+    /// Sets a typed value, including arrays and inline tables.
+    pub fn set_serialized(
+        &mut self,
+        path: &[&str],
+        value: &impl serde::Serialize,
+    ) -> Result<(), EditError> {
+        let value = value
+            .serialize(toml_edit::ser::ValueSerializer::new())
+            .map_err(|e| EditError(e.to_string()))?;
+        self.set(path, value)
+    }
+
+    /// Reads a typed value or table by key path.
+    pub fn get<T: serde::de::DeserializeOwned>(
+        &self,
+        path: &[&str],
+    ) -> Result<Option<T>, EditError> {
+        use serde::de::IntoDeserializer;
+        path.iter()
+            .try_fold(self.doc.as_item(), |item, key| item.get(key))
+            .map(|i| {
+                let value = i
+                    .clone()
+                    .into_value()
+                    .map_err(|_| EditError("expected a value".into()))?;
+                T::deserialize(value.into_deserializer()).map_err(|e| EditError(e.to_string()))
+            })
+            .transpose()
+    }
+
+    /// Whether this key was explicitly set in the file.
+    pub fn contains(&self, path: &[&str]) -> bool {
+        path.iter()
+            .try_fold(self.doc.as_item(), |item, key| item.get(key))
+            .is_some()
+    }
+
     /// Reads a config file for editing.
     pub fn open(path: &Path) -> Result<Self, EditError> {
         let text = std::fs::read_to_string(path)
@@ -82,6 +158,9 @@ impl ConfigDocument {
                 // Keep the comment and spacing around the old value.
                 *value.decor_mut() = old.decor().clone();
                 *old = value;
+            }
+            Some(item @ Item::Table(_)) if value.is_inline_table() => {
+                *item = Item::Value(value);
             }
             Some(_) => {
                 return Err(EditError(format!(
@@ -165,8 +244,8 @@ impl ConfigDocument {
         })
     }
 
-    fn table_mut(&mut self, path: &[&str]) -> Result<&mut Table, EditError> {
-        let mut table = self.doc.as_table_mut();
+    fn table_mut(&mut self, path: &[&str]) -> Result<&mut dyn toml_edit::TableLike, EditError> {
+        let mut table: &mut dyn toml_edit::TableLike = self.doc.as_table_mut();
         for (i, key) in path.iter().enumerate() {
             if !table.contains_key(key) {
                 let mut t = Table::new();
@@ -174,8 +253,8 @@ impl ConfigDocument {
                 t.set_implicit(i + 1 < path.len());
                 table.insert(key, Item::Table(t));
             }
-            table = match table.get_mut(key) {
-                Some(Item::Table(t)) => t,
+            table = match table.get_mut(key).and_then(Item::as_table_like_mut) {
+                Some(t) => t,
                 _ => {
                     return Err(EditError(format!(
                         "`{}` is not a table",

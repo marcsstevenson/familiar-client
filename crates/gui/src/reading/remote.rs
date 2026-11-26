@@ -8,7 +8,7 @@
 
 use std::collections::BTreeSet;
 use std::path::PathBuf;
-use std::sync::{Mutex, OnceLock};
+use std::sync::OnceLock;
 use std::time::Duration;
 
 use tauri::http::{Request, Response, StatusCode, header};
@@ -105,73 +105,70 @@ pub async fn proxy(request: Request<Vec<u8>>) -> Response<Vec<u8>> {
     }
 }
 
-/// Senders whose remote images are always shown, kept in `reading.json` in
-/// the data directory. Addresses are stored in lower case.
+/// The active config for the reader's trusted remote-image senders.
 pub struct TrustedSenders {
     file: Option<PathBuf>,
-    set: Mutex<BTreeSet<String>>,
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Default)]
+#[derive(serde::Deserialize)]
 struct ReadingFile {
-    #[serde(default)]
     image_senders: BTreeSet<String>,
 }
 
 impl TrustedSenders {
-    /// Loads the list from `file` (missing or unreadable is an empty list).
-    pub fn load(file: Option<PathBuf>) -> Self {
-        let set = file
-            .as_ref()
-            .and_then(|f| std::fs::read(f).ok())
-            .and_then(|b| match serde_json::from_slice::<ReadingFile>(&b) {
-                Ok(r) => Some(r.image_senders),
-                Err(e) => {
-                    eprintln!("familiar: ignoring an unreadable reading.json: {e}");
-                    None
-                }
-            })
-            .unwrap_or_default();
-        Self {
-            file,
-            set: Mutex::new(set),
+    /// Imports the old per-device sender list when the config has no explicit list.
+    pub fn load(file: Option<PathBuf>, legacy: Option<PathBuf>) -> Self {
+        if let (Some(config), Some(old)) = (&file, legacy)
+            && let Err(e) =
+                familiar_core::folder_prefs::import_legacy(config, &old, |doc, old: ReadingFile| {
+                    let path = ["reading", "image_senders"];
+                    if !doc.contains(&path) {
+                        doc.set_serialized(&path, &old.image_senders)?;
+                    }
+                    Ok(())
+                })
+        {
+            eprintln!("familiar: importing trusted image senders: {e}");
         }
+        Self { file }
     }
 
-    /// Whether `addr`'s images are always shown.
+    /// Whether the config allows this sender's images.
     pub fn contains(&self, addr: &str) -> bool {
-        let a = addr.trim().to_ascii_lowercase();
-        !a.is_empty() && self.set.lock().is_ok_and(|s| s.contains(&a))
+        !addr.trim().is_empty()
+            && self
+                .file
+                .as_ref()
+                .and_then(|f| familiar_config::load(f).ok())
+                .is_some_and(|c| {
+                    c.reading
+                        .image_senders
+                        .iter()
+                        .any(|s| s.eq_ignore_ascii_case(addr.trim()))
+                })
     }
 
-    /// Adds or removes `addr`, and saves the list.
+    /// Adds or removes an address in the current config.
     pub fn set(&self, addr: &str, trusted: bool) -> Result<(), String> {
         let a = addr.trim().to_ascii_lowercase();
         if a.is_empty() {
             return Err("the sender has no address".into());
         }
-        let snapshot = {
-            let mut s = self.set.lock().map_err(|_| "lock poisoned".to_string())?;
+        let path = self.file.as_ref().ok_or("no config path")?;
+        familiar_config::ConfigDocument::update(path, |doc| {
+            let mut set = doc
+                .check()
+                .config
+                .ok_or_else(|| familiar_config::edit::EditError("invalid config".into()))?
+                .reading
+                .image_senders;
+            set.retain(|s| !s.eq_ignore_ascii_case(&a));
             if trusted {
-                s.insert(a);
-            } else {
-                s.remove(&a);
+                set.insert(a);
             }
-            s.clone()
-        };
-        let Some(file) = &self.file else {
-            return Ok(());
-        };
-        let json = serde_json::to_vec_pretty(&ReadingFile {
-            image_senders: snapshot,
+            doc.set_serialized(&["reading", "image_senders"], &set)
         })
-        .map_err(|e| e.to_string())?;
-        if let Some(dir) = file.parent() {
-            std::fs::create_dir_all(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-        }
-        let tmp = file.with_extension("json.tmp");
-        std::fs::write(&tmp, json).map_err(|e| format!("{}: {e}", tmp.display()))?;
-        std::fs::rename(&tmp, file).map_err(|e| format!("{}: {e}", file.display()))
+        .map_err(|e| e.to_string())
     }
 }
 
@@ -197,16 +194,18 @@ mod tests {
 
     #[test]
     fn trusted_senders_persist() {
-        let dir = std::env::temp_dir().join(format!("fam-reading-{}", std::process::id()));
-        let file = dir.join("reading.json");
-        let t = TrustedSenders::load(Some(file.clone()));
+        let dir = tempfile::tempdir().unwrap();
+        let file = dir.path().join("config.toml");
+        let legacy = dir.path().join("reading.json");
+        std::fs::write(&legacy, r#"{"image_senders":["imported@example.org"]}"#).unwrap();
+        let t = TrustedSenders::load(Some(file.clone()), Some(legacy.clone()));
+        assert!(t.contains("imported@example.org"));
         assert!(!t.contains("news@shop.example"));
         t.set("News@Shop.example", true).unwrap();
         assert!(t.contains("news@shop.example"));
-        let again = TrustedSenders::load(Some(file.clone()));
+        let again = TrustedSenders::load(Some(file.clone()), Some(legacy.clone()));
         assert!(again.contains("NEWS@shop.example"));
         again.set("news@shop.example", false).unwrap();
-        assert!(!TrustedSenders::load(Some(file)).contains("news@shop.example"));
-        std::fs::remove_dir_all(&dir).unwrap();
+        assert!(!TrustedSenders::load(Some(file), None).contains("news@shop.example"));
     }
 }

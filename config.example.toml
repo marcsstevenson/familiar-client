@@ -16,12 +16,39 @@ client_id = "c6057b6a-a692-47dd-b34e-12629372e32a"
 theme = "system"           # system, light or dark
 send_delay_seconds = 10    # undo-send window, 0 to 120
 
+# Optional Google Desktop app credentials for Gmail.
+# [app.google]
+# client_file = "/path/to/google-client.json"
+
+[desktop]
+# The Appearance dialog writes these settings. Omit accent for Familiar blue.
+# accent = "#99D9EA"
+neon = false
+panes = { folders = 240, list = 400 }
+sort = "newest"            # newest, oldest, from or subject
+unread_only = false
+day_panel_open = false
+calendar_view = "Week"     # Day, Week, Month or Agenda
+collapsed = []             # "a:<account>" or "f:<account>:<provider folder ID>"
+hidden_calendars = []      # "<account>:<provider calendar ID>"
+# [desktop.sender_calendars]
+# "sender@example.org" = { account = "hotmail", name = "Family Room", remote_id = "provider-id" }
+
+[reading]
+# Senders whose remote images you always allow.
+image_senders = []
+
+# Folder colours, pins and positions use provider IDs and follow renames.
+# [folders.hotmail]
+# "provider-folder-id" = { color = "teal", pinned = true, order = 0, pin_order = 0 }
+
 # One table per account. The name after `accounts.` is what you pass to
 # `--account` and use in searches (`account:hotmail`).
 
 # A personal Microsoft account (Outlook.com, Hotmail, Live).
 [accounts.hotmail]
 email = "you@hotmail.example"
+# provider = "graph"       # graph or gmail
 tenant = "consumers"
 # Other addresses you send from, offered in the From menu.
 aliases = ["you@outlook.example"]
@@ -84,6 +111,7 @@ query = "account:parklands is:unread"
 name = "Delete firebaseapp spam"
 account = "hotmail"
 run = "server"
+enabled = true
 when = { sender_contains = ["firebaseapp"] }
 then = { delete = true, stop = true }
 
@@ -109,6 +137,8 @@ allow = ["read", "draft"]
 # [[hooks]]
 # name = "club"
 # on = "new_mail"
+# enabled = true
+# timeout_seconds = 60
 # match = "from:club"
 # run = "notify-send \"Club mail\" \"$FAMILIAR_SUBJECT\""
 
@@ -118,3 +148,6 @@ allow = ["read", "draft"]
 # [ai]
 # enabled = true
 # tool = "auto"          # Claude, else Codex, from PATH
+# model = "your-model"
+# timeout_seconds = 90
+# accounts = ["hotmail"]

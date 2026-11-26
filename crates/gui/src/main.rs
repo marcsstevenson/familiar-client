@@ -53,6 +53,7 @@ struct UiInfo {
     platform: &'static str,
     /// The `[app] theme` from config.toml: `system`, `light` or `dark`.
     theme: &'static str,
+    desktop: familiar_config::model::Desktop,
     /// Why config.toml could not be read, if it couldn't.
     config_error: Option<String>,
     /// `[keys]` from config.toml: action name to key, overriding the defaults.
@@ -107,9 +108,10 @@ fn ui_info() -> UiInfo {
                 .collect()
         })
         .unwrap_or_default();
-    let (theme, keys, views, processed) = match config {
+    let (theme, desktop, keys, views, processed) = match config {
         Some(c) => (
             theme_name(c.app.theme),
+            c.desktop,
             c.keys,
             c.views
                 .into_iter()
@@ -123,7 +125,13 @@ fn ui_info() -> UiInfo {
                 .filter_map(|(k, a)| a.processed_folder.map(|f| (k, f)))
                 .collect(),
         ),
-        None => ("system", Default::default(), Vec::new(), Default::default()),
+        None => (
+            "system",
+            Default::default(),
+            Default::default(),
+            Vec::new(),
+            Default::default(),
+        ),
     };
     UiInfo {
         session_store: familiar_core::daemon::DaemonPaths::resolve()
@@ -132,6 +140,7 @@ fn ui_info() -> UiInfo {
         version: env!("CARGO_PKG_VERSION"),
         platform: std::env::consts::OS,
         theme,
+        desktop,
         keys,
         views,
         processed,
@@ -141,6 +150,37 @@ fn ui_info() -> UiInfo {
         config_error,
         bench: std::env::var_os(BENCH_ENV).is_some(),
     }
+}
+
+/// Writes only the desktop keys changed by a gesture. During import an
+/// explicit config value always wins over an older webview preference.
+#[tauri::command]
+fn save_preferences(changes: serde_json::Map<String, Value>, import: bool) -> Result<(), String> {
+    let path = familiar_core::folder_prefs::config_path().map_err(|e| e.message)?;
+    write_preferences(&path, changes, import)
+}
+
+fn write_preferences(
+    path: &std::path::Path,
+    changes: serde_json::Map<String, Value>,
+    import: bool,
+) -> Result<(), String> {
+    familiar_config::ConfigDocument::update(path, |doc| {
+        for (key, value) in changes {
+            let section = if key == "theme" { "app" } else { "desktop" };
+            let path = [section, key.as_str()];
+            if import && doc.contains(&path) {
+                continue;
+            }
+            if value.is_null() {
+                doc.remove(&path);
+            } else {
+                doc.set_serialized(&path, &value)?;
+            }
+        }
+        Ok(())
+    })
+    .map_err(|e| e.to_string())
 }
 
 /// Names the file the bench results go to.
@@ -345,6 +385,7 @@ fn main() {
         .manage(std::sync::Arc::new(list::Lists::default()))
         .invoke_handler(tauri::generate_handler![
             ui_info,
+            save_preferences,
             open_config,
             onboarding::onboarding_state,
             config_watch::restart_app,
@@ -410,4 +451,53 @@ fn main() {
         })
         .run(tauri::generate_context!())
         .expect("error while running the Familiar app");
+}
+
+#[cfg(test)]
+mod preference_tests {
+    use super::write_preferences;
+    use serde_json::json;
+
+    #[test]
+    fn import_respects_toml_and_changes_round_trip_without_touching_other_settings() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("config.toml");
+        std::fs::write(
+            &path,
+            "version = 1
+[app]
+theme = 'dark' # mine
+",
+        )
+        .unwrap();
+        let change = |v: serde_json::Value, import| {
+            write_preferences(&path, v.as_object().unwrap().clone(), import)
+        };
+        change(
+            json!({"theme":"light", "accent":"#99d9ea", "neon":true}),
+            true,
+        )
+        .unwrap();
+        change(
+            json!({"panes":{"folders":299,"list":500}, "calendar_view":"Day"}),
+            false,
+        )
+        .unwrap();
+        let cfg = familiar_config::load(&path).unwrap();
+        assert_eq!(cfg.desktop.accent.as_deref(), Some("#99d9ea"));
+        assert_eq!(cfg.desktop.neon, Some(true));
+        assert_eq!(cfg.desktop.panes.unwrap().folders, 299);
+        let before = std::fs::read_to_string(&path).unwrap();
+        assert!(before.contains("theme = 'dark' # mine"));
+        assert!(change(json!({"accent":"#oops"}), false).is_err());
+        assert_eq!(std::fs::read_to_string(&path).unwrap(), before);
+        change(json!({"accent":null}), false).unwrap();
+        assert!(
+            familiar_config::load(&path)
+                .unwrap()
+                .desktop
+                .accent
+                .is_none()
+        );
+    }
 }

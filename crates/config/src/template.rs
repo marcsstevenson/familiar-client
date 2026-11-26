@@ -13,6 +13,13 @@ pub const TEMPLATE: &str = r#"# Familiar's settings. Every section is described 
 # Accounts follow `version` below; `fam account add` writes them for you.
 # Some settings you might change later, commented out so the defaults apply:
 #
+# Appearance (also editable in the desktop app).
+# [app]
+# theme = "system"
+# [desktop]
+# accent = '#99D9EA'
+# neon = false
+#
 # How much mail to keep on this computer.
 # [sync]
 # window = "1y"         # full messages for the last year

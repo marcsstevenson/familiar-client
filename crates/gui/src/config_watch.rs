@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT OR Apache-2.0
 //! Tells the window when config.toml changes, so it can offer a restart.
-//! The app and famd read the config only when they start.
+//! Desktop preferences are read live; daemon settings require a restart.
 
 use std::path::Path;
 use std::time::{Duration, Instant, SystemTime};
@@ -11,19 +11,35 @@ use tauri::{AppHandle, Emitter};
 /// How often the file's modified time is checked.
 const CHECK_EVERY: Duration = Duration::from_secs(2);
 
-/// Emits `config_changed` each time config.toml's modified time changes.
+/// Reloads live preferences and offers a restart when other settings change.
 pub fn watch(app: AppHandle) {
     let Some((path, _)) = familiar_config::paths::resolve(None) else {
         return;
     };
     std::thread::spawn(move || {
         let mut last = modified(&path);
+        let mut previous = familiar_config::load(&path).ok();
         loop {
             std::thread::sleep(CHECK_EVERY);
             let now = modified(&path);
             if now != last {
                 last = now;
-                let _ = app.emit("config_changed", ());
+                let mut next = familiar_config::load(&path).ok();
+                if previous.as_ref().map(|c| &c.folders) != next.as_ref().map(|c| &c.folders) {
+                    let _ = app.emit("folder_preferences_changed", ());
+                }
+                let full = next.clone();
+                for c in previous.iter_mut().chain(next.iter_mut()) {
+                    c.desktop = Default::default();
+                    c.app.theme = Default::default();
+                    c.folders.clear();
+                    c.reading = Default::default();
+                }
+                if previous != next || next.is_none() {
+                    let _ = app.emit("config_changed", ());
+                }
+                previous = full;
+                let _ = app.emit("preferences_changed", ());
             }
         }
     });
