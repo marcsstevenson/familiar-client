@@ -178,11 +178,14 @@ button {
 .accent-hex { width: 9ch; box-sizing: content-box; font-family: var(--font-mono); }
 .accent-hex[aria-invalid=true] { border-color: var(--danger); }
 .accent-format { color: var(--danger); margin-block: var(--space-3); }
+.accent-preset-label { margin-top: var(--space-4); }
 .accent-palette {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(8, minmax(0, 1fr));
+  justify-items: center;
   gap: var(--space-3);
-  padding-block: var(--space-4);
+  padding-block: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--border);
 }
 .accent-swatch {
   width: 28px;
@@ -195,13 +198,7 @@ button {
 }
 .accent-swatch[aria-pressed=true] { border: 2px solid var(--text); padding: 2px; }
 .accent-swatch:focus-visible { outline-offset: 2px; }
-.appearance-dialog footer { display: flex; justify-content: space-between; margin-top: var(--space-5); }
-.appearance-dialog footer button:not(.primary) {
-  padding: var(--field-padding);
-  border-radius: var(--radius-sm);
-  border: 1px solid var(--border);
-  background: var(--bg-sidebar);
-}
+.appearance-dialog footer { display: flex; justify-content: flex-end; margin-top: var(--space-5); }
 .appearance-dialog footer button:disabled { color: var(--text-muted); opacity: .6; }
 button.primary:focus-visible { outline-color: var(--text-on-accent); }
 

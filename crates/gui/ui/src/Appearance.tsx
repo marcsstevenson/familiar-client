@@ -3,9 +3,10 @@ import type { Theme } from "./api";
 import { DEFAULT_ACCENT, accent, chooseAccent, chooseTheme, theme } from "./theme";
 
 const PALETTE = [
-  ["Familiar blue", DEFAULT_ACCENT], ["Sky", "#99d9ea"], ["Teal", "#008578"],
-  ["Leaf", "#638446"], ["Amber", "#d39734"], ["Coral", "#d96b5d"],
-  ["Rose", "#c55486"], ["Violet", "#8a5cf6"],
+  ["Familiar blue", DEFAULT_ACCENT], ["Windows blue", "#0078d4"], ["Sky", "#99d9ea"], ["Cyan", "#00b7c3"],
+  ["Teal", "#008578"], ["Forest", "#107c10"], ["Leaf", "#638446"], ["Mint", "#4cc2a1"],
+  ["Amber", "#d39734"], ["Orange", "#f7630c"], ["Coral", "#d96b5d"], ["Red", "#d13438"],
+  ["Rose", "#c55486"], ["Magenta", "#b146c2"], ["Violet", "#8a5cf6"], ["Slate", "#69797e"],
 ] as const;
 
 export function Appearance(props: { ref: (el: HTMLDialogElement) => void }) {
@@ -17,11 +18,11 @@ export function Appearance(props: { ref: (el: HTMLDialogElement) => void }) {
 
   function enterHex(text: string) {
     setHex(text);
-    if (validHex()) chooseAccent("#" + text.trim().replace(/^#/, "").toLowerCase());
+    if (validHex()) selectColour("#" + text.trim().replace(/^#/, "").toLowerCase());
   }
 
-  function selectColour(value: string | null) {
-    chooseAccent(value);
+  function selectColour(value: string) {
+    chooseAccent(value.toLowerCase() === DEFAULT_ACCENT ? null : value);
     syncHex();
   }
 
@@ -37,6 +38,14 @@ export function Appearance(props: { ref: (el: HTMLDialogElement) => void }) {
           <option value="dark">Dark</option>
         </select>
       </div>
+      <div id="accent-preset-label" class="accent-preset-label">Accent presets</div>
+      <div class="accent-palette" role="group" aria-labelledby="accent-preset-label">
+        <For each={PALETTE}>{([name, value]) =>
+          <button type="button" class="accent-swatch" title={name} aria-label={name}
+            aria-pressed={(accent() ?? DEFAULT_ACCENT).toLowerCase() === value}
+            style={{ "--swatch": value }} onClick={() => selectColour(value)} />
+        }</For>
+      </div>
       <div class="appearance-row">
         <label for="appearance-accent">Accent colour</label>
         <div class="accent-inputs">
@@ -51,15 +60,7 @@ export function Appearance(props: { ref: (el: HTMLDialogElement) => void }) {
       <Show when={!validHex()}>
         <p id="accent-format" class="accent-format">Enter six hexadecimal digits, for example #99D9EA.</p>
       </Show>
-      <div class="accent-palette" role="group" aria-label="Example colours">
-        <For each={PALETTE}>{([name, value]) =>
-          <button type="button" class="accent-swatch" title={name} aria-label={name}
-            aria-pressed={(accent() ?? DEFAULT_ACCENT).toLowerCase() === value}
-            style={{ "--swatch": value }} onClick={() => selectColour(value)} />
-        }</For>
-      </div>
       <footer>
-        <button type="button" disabled={!accent() && validHex()} onClick={() => selectColour(null)}>Reset accent</button>
         <button type="button" class="primary" disabled={!validHex()} onClick={() => dialog.close()}>Done</button>
       </footer>
     </dialog>
