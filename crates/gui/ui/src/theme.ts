@@ -9,14 +9,31 @@ import type { Theme } from "./api";
 const ACCENT_KEY = "familiar.accent";
 export const DEFAULT_ACCENT = "#1f5fc7";
 const [accent, setAccentSignal] = createSignal<string | null>(null);
-export { accent };
+const NEON_KEY = "familiar.neon";
+const [neon, setNeon] = createSignal(false);
+export { accent, neon };
 
-function storedAccent(): string | null {
+function stored(key: string): string | null {
   try {
-    const value = localStorage.getItem(ACCENT_KEY);
-    return value && /^#[0-9a-f]{6}$/i.test(value) ? value : null;
+    return localStorage.getItem(key);
   } catch {
     return null;
+  }
+}
+
+function storedAccent(): string | null {
+  const value = stored(ACCENT_KEY);
+  return value && /^#[0-9a-f]{6}$/i.test(value) ? value : null;
+}
+
+export function chooseNeon(enabled: boolean): void {
+  setNeon(enabled);
+  apply();
+  try {
+    if (enabled) localStorage.setItem(NEON_KEY, "true");
+    else localStorage.removeItem(NEON_KEY);
+  } catch {
+    // The preference still applies in this window.
   }
 }
 
@@ -24,9 +41,11 @@ function storedAccent(): string | null {
 // accent text readable on the selected row (the strongest neutral surface).
 export function applyAccent(root: HTMLElement, value: string | null, dark: boolean): void {
   if (!value) {
+    root.style.removeProperty("--accent-source");
     root.style.removeProperty("--accent");
     return;
   }
+  root.style.setProperty("--accent-source", value);
   const rgb = [1, 3, 5].map(i => parseInt(value.slice(i, i + 2), 16));
   const end = dark ? 255 : 0;
   for (let step = 0; step <= 100; step++) {
@@ -68,6 +87,7 @@ export const resolvedTheme = (): "light" | "dark" =>
 // light and one dark set.
 function apply(): void {
   document.documentElement.dataset.theme = resolvedTheme();
+  document.documentElement.toggleAttribute("data-neon", neon());
   applyAccent(document.documentElement, accent(), resolvedTheme() === "dark");
 }
 
@@ -80,12 +100,8 @@ const ORDER: Theme[] = ["system", "light", "dark"];
 const KEY = "familiar.theme";
 
 function storedChoice(): Theme | null {
-  try {
-    const t = localStorage.getItem(KEY) as Theme | null;
-    return t && ORDER.includes(t) ? t : null;
-  } catch {
-    return null;
-  }
+  const t = stored(KEY) as Theme | null;
+  return t && ORDER.includes(t) ? t : null;
 }
 
 /**
@@ -101,10 +117,15 @@ export function initTheme(config: Theme, main: boolean): void {
     }
   }
   setAccentSignal(storedAccent());
+  setNeon(stored(NEON_KEY) === "true");
   setTheme(storedChoice() ?? config);
   window.addEventListener("storage", (e) => {
     if (e.key === ACCENT_KEY || e.key === null) {
       setAccentSignal(storedAccent());
+      apply();
+    }
+    if (e.key === NEON_KEY || e.key === null) {
+      setNeon(stored(NEON_KEY) === "true");
       apply();
     }
     if (e.key === KEY) setTheme(storedChoice() ?? config);

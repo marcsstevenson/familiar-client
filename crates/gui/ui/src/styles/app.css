@@ -202,6 +202,47 @@ button {
 .appearance-dialog footer button:disabled { color: var(--text-muted); opacity: .6; }
 button.primary:focus-visible { outline-color: var(--text-on-accent); }
 
+/* Keep the glow on small accent marks and around the outside of controls. */
+.neon-option { cursor: pointer; }
+.neon-switch {
+  appearance: none;
+  display: grid;
+  align-items: center;
+  width: 34px;
+  height: 20px;
+  margin: 0;
+  padding: 2px;
+  border: 1px solid var(--text-muted);
+  border-radius: 999px;
+  background: var(--bg);
+  cursor: pointer;
+}
+.neon-switch::before {
+  content: "";
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--text-muted);
+}
+.neon-switch:checked { border-color: var(--accent); background: var(--accent); }
+.neon-switch:checked::before { justify-self: end; background: var(--text-on-accent); }
+.neon-switch:focus-visible { outline-offset: 2px; }
+
+@media (forced-colors: none) {
+  :root[data-neon] {
+    --neon-glow: color-mix(in srgb, var(--accent-source, var(--accent)) 60%, transparent);
+  }
+  [data-neon] :is(.titlebar-icon, .welcome-icon) { filter: drop-shadow(0 0 4px var(--neon-glow)); }
+  [data-neon] :is(.primary:enabled, .contact-primary:enabled, .accent-swatch[aria-pressed=true], .neon-switch:checked) {
+    box-shadow: 0 0 3px var(--neon-glow), 0 0 9px var(--neon-glow);
+  }
+  [data-neon] .view-tabs button[aria-selected=true] { box-shadow: inset 0 -6px 7px -6px var(--neon-glow); }
+}
+@media (forced-colors: active) {
+  .neon-switch { appearance: auto; }
+  .neon-switch::before { content: none; }
+}
+
 /* Panes */
 .main-view { display: grid; min-height: 0; min-width: 0; }
 .panes {

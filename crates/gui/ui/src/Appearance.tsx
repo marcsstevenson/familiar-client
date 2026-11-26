@@ -1,12 +1,14 @@
 import { For, Show, createEffect, createSignal } from "solid-js";
 import type { Theme } from "./api";
-import { DEFAULT_ACCENT, accent, chooseAccent, chooseTheme, theme } from "./theme";
+import { DEFAULT_ACCENT, accent, chooseAccent, chooseNeon, chooseTheme, neon, theme } from "./theme";
 
 const PALETTE = [
-  ["Familiar blue", DEFAULT_ACCENT], ["Windows blue", "#0078d4"], ["Sky", "#99d9ea"], ["Cyan", "#00b7c3"],
-  ["Teal", "#008578"], ["Forest", "#107c10"], ["Leaf", "#638446"], ["Mint", "#4cc2a1"],
+  ["Familiar blue", DEFAULT_ACCENT], ["Windows blue", "#0078d4"], ["Sky", "#99d9ea"], ["Electric blue", "#007fff"],
+  ["Indigo", "#5145cd"], ["Violet", "#8a5cf6"], ["Lavender", "#b69cff"], ["Slate", "#69797e"],
+  ["Teal", "#008578"], ["Cyan", "#00b7c3"], ["Turquoise", "#40e0d0"], ["Mint", "#4cc2a1"],
+  ["Forest", "#107c10"], ["Leaf", "#638446"], ["Lime", "#a3e635"], ["Lemon", "#f5df45"],
   ["Amber", "#d39734"], ["Orange", "#f7630c"], ["Coral", "#d96b5d"], ["Red", "#d13438"],
-  ["Rose", "#c55486"], ["Magenta", "#b146c2"], ["Violet", "#8a5cf6"], ["Slate", "#69797e"],
+  ["Cherry", "#b51241"], ["Rose", "#c55486"], ["Hot pink", "#ff69b4"], ["Magenta", "#b146c2"],
 ] as const;
 
 export function Appearance(props: { ref: (el: HTMLDialogElement) => void }) {
@@ -60,6 +62,11 @@ export function Appearance(props: { ref: (el: HTMLDialogElement) => void }) {
       <Show when={!validHex()}>
         <p id="accent-format" class="accent-format">Enter six hexadecimal digits, for example #99D9EA.</p>
       </Show>
+      <label class="appearance-row neon-option">
+        <span>Neon</span>
+        <input class="neon-switch" type="checkbox" role="switch" checked={neon()}
+          onChange={e => chooseNeon(e.currentTarget.checked)} />
+      </label>
       <footer>
         <button type="button" class="primary" disabled={!validHex()} onClick={() => dialog.close()}>Done</button>
       </footer>
