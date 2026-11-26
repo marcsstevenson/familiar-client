@@ -5,6 +5,7 @@ import { type JSX, Show } from "solid-js";
 import { invoke } from "@tauri-apps/api/core";
 import { isCommandError } from "./api";
 import { iconUrl } from "./icon";
+import { resolvedTheme } from "./theme";
 import { openCompose } from "./compose/spec";
 import { notify } from "./state";
 import { Appearance } from "./Appearance";
@@ -21,7 +22,7 @@ export function TitleBar(props: { platform: string; title?: string; navigation?:
   const mac = () => props.platform === "macos";
   return (
     <header class="titlebar" classList={{ mac: mac() }} data-tauri-drag-region>
-      <img class="titlebar-icon" src={iconUrl()} alt="" data-tauri-drag-region />
+      <img class="titlebar-icon" src={iconUrl(resolvedTheme() === "light" ? "transparent" : "contrast")} alt="" data-tauri-drag-region />
       <span class="titlebar-name" data-tauri-drag-region>
         {props.title ?? "Familiar"}
       </span>

@@ -102,6 +102,20 @@ async function mount(page, main) {
     for (const theme of ["light", "dark"]) {
       await dialog.getByLabel("Theme", { exact: true }).selectOption(theme);
       await secondary.waitForFunction(t => document.documentElement.dataset.theme === t, theme);
+      await picker.fill("#99d9ea");
+      for (const page of [main, secondary]) {
+        const mark = page.locator(".titlebar-icon");
+        await page.waitForFunction(() => decodeURIComponent(document.querySelector(".titlebar-icon").src).includes("#99d9ea"));
+        const feather = await mark.evaluate(async el => {
+          await el.decode();
+          const canvas = document.createElement("canvas");
+          canvas.width = canvas.height = 100;
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(el, 0, 0, 100, 100);
+          return [...ctx.getImageData(15, 32, 1, 1).data];
+        });
+        assert.deepEqual(feather, theme === "light" ? [0, 0, 0, 0] : [34, 34, 34, 255]);
+      }
       for (const colour of ["#ffff00", "#000000", "#ffffff", "#7000ca"]) {
         await picker.fill(colour);
         await secondary.waitForFunction(c => localStorage.getItem("familiar.accent") === c, colour);
