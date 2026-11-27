@@ -1,7 +1,7 @@
 // The reading pane's own IPC commands (crates/gui/src/reading). Everything
 // else goes through `run` in ../api.ts.
 import { invoke } from "@tauri-apps/api/core";
-import { notify } from "../state";
+import { type SpamResult, notify } from "../state";
 import type { AttachmentInfo, MailFetchOutput } from "../../../../../bindings/commands";
 
 export type { AttachmentInfo, MailFetchOutput };
@@ -23,6 +23,15 @@ export type ReadView = {
   inline_pending: boolean;
   took_ms: number;
 };
+
+export type SpamStatus =
+  | { state: "unchecked" | "pending" }
+  | { state: "running"; previous: SpamResult | null }
+  | { state: "failed"; reason: string; previous: SpamResult | null }
+  | { state: "checked"; result: SpamResult };
+
+export const spamStatus = (message: number) =>
+  invoke<SpamStatus>("reading_spam_status", { message });
 
 export type Preview =
   | { kind: "image"; src: string }

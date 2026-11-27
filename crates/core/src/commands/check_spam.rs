@@ -14,7 +14,11 @@
 //! in `spam_checks.json`, so the app can show it again later.
 
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::fs::File;
+use std::io::{self, Read, Seek, Write};
+use std::path::{Path, PathBuf};
+
+use fs4::fs_std::FileExt;
 
 use familiar_store::{MessageId, Reader};
 use schemars::JsonSchema;
@@ -22,7 +26,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 use crate::ai;
-use crate::commands::attachments::{graph_get, list_at, locate};
+use crate::commands::attachments::{graph_get, list_at};
 use crate::commands::auth::config;
 use crate::commands::cal_write::open;
 use crate::daemon::DaemonPaths;
@@ -395,6 +399,16 @@ pub const AUTO_WINDOW: i64 = 24 * 3600;
 /// Messages read from the store at a time while looking for candidates.
 const AUTO_PAGE: usize = 100;
 
+/// A local row can be recycled. Keep the server identity alongside it.
+pub struct Candidate {
+    /// Account key.
+    pub account: String,
+    /// Server message ID.
+    pub remote: String,
+    /// Current local row.
+    pub id: i64,
+}
+
 /// The messages famd's background check should look at now, newest first:
 /// in Inbox or Junk Email of a `spam_auto` account, arrived within
 /// [`AUTO_WINDOW`] of `now`, with the body synced, and not checked yet.
@@ -403,7 +417,7 @@ pub fn auto_candidates(
     paths: &DaemonPaths,
     cfg: &familiar_config::Config,
     now: i64,
-) -> Result<Vec<(String, i64)>, CommandError> {
+) -> Result<Vec<Candidate>, CommandError> {
     let keys: Vec<&String> = cfg
         .accounts
         .iter()
@@ -438,7 +452,7 @@ pub fn auto_candidates(
                         id: m.id.0,
                     });
                     if m.body.is_some() && !done.is_some_and(|d| d.contains_key(&m.remote_id)) {
-                        out.push((m.received_at, key.clone(), m.id.0));
+                        out.push((m.received_at, key.clone(), m.id.0, m.remote_id));
                     }
                 }
                 if !full {
@@ -448,7 +462,158 @@ pub fn auto_candidates(
         }
     }
     out.sort_unstable_by(|a, b| b.cmp(a));
-    Ok(out.into_iter().map(|(_, k, id)| (k, id)).collect())
+    Ok(out
+        .into_iter()
+        .map(|(_, account, id, remote)| Candidate {
+            account,
+            id,
+            remote,
+        })
+        .collect())
+}
+
+/// Latest check state for the reading pane.
+#[derive(Debug, Serialize)]
+#[serde(tag = "state", rename_all = "snake_case")]
+pub enum CheckStatus {
+    /// Eligible for a background check.
+    Pending,
+    /// No automatic check is due.
+    Unchecked,
+    /// The daemon or a user is checking this message.
+    Running {
+        /// Previous grade while rechecking.
+        previous: Option<Box<CheckSpamOutput>>,
+    },
+    /// The latest attempt needs a retry.
+    Failed {
+        /// What prevented a grade.
+        reason: String,
+        /// Previous grade remains available if a recheck fails.
+        previous: Option<Box<CheckSpamOutput>>,
+    },
+    /// Saved grade, including results from earlier versions.
+    Checked {
+        /// Grade and evidence.
+        result: Box<CheckSpamOutput>,
+    },
+}
+
+struct Target {
+    message: familiar_store::Message,
+    account: String,
+    folder: String,
+}
+
+impl Target {
+    fn load(r: &Reader, id: i64) -> Result<Self, CommandError> {
+        let message = r
+            .message(MessageId(id))
+            .map_err(store_err)?
+            .ok_or_else(|| {
+                CommandError::new(
+                    ErrorKind::NotFound,
+                    format!("no message {id} on this device"),
+                )
+            })?;
+        let account = r
+            .accounts()
+            .map_err(store_err)?
+            .into_iter()
+            .find(|a| a.id == message.account)
+            .ok_or_else(|| CommandError::internal("missing message account"))?
+            .key;
+        let folder = r
+            .folder(message.folder)
+            .map_err(store_err)?
+            .map(|f| f.well_known.unwrap_or(f.name))
+            .unwrap_or_default();
+        Ok(Self {
+            message,
+            account,
+            folder,
+        })
+    }
+
+    fn saved(&self, dir: &Path) -> Option<CheckSpamOutput> {
+        let mut output = Saved::load(dir)
+            .0
+            .get_mut(&self.account)?
+            .remove(&self.message.remote_id)?;
+        output.message = self.message.id.0;
+        output.folder.clone_from(&self.folder);
+        Some(output)
+    }
+
+    fn attempt_path(&self, dir: &Path) -> PathBuf {
+        let key = format!("{}\0{}", self.account, self.message.remote_id);
+        dir.join("spam_attempts")
+            .join(blake3::hash(key.as_bytes()).to_hex().as_str())
+    }
+}
+
+fn io_err(error: io::Error) -> CommandError {
+    CommandError::internal(format!("scam check status: {error}"))
+}
+
+fn open_lock(path: &Path) -> io::Result<File> {
+    File::options()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(path)
+}
+
+fn write_reason(file: &mut File, reason: &str) -> io::Result<()> {
+    file.rewind()?;
+    file.set_len(0)?;
+    file.write_all(reason.as_bytes())
+}
+
+/// Reads the current attempt without starting a check or contacting the provider.
+pub fn status_at(paths: &DaemonPaths, id: i64, now: i64) -> Result<CheckStatus, CommandError> {
+    let t = Target::load(&open(paths)?, id)?;
+    match File::open(t.attempt_path(&paths.data_dir)) {
+        Ok(mut f) => {
+            if !FileExt::try_lock_shared(&f).map_err(io_err)? {
+                return Ok(CheckStatus::Running {
+                    previous: t.saved(&paths.data_dir).map(Box::new),
+                });
+            }
+            let mut reason = String::new();
+            f.read_to_string(&mut reason).map_err(io_err)?;
+            if !reason.is_empty() {
+                return Ok(CheckStatus::Failed {
+                    reason,
+                    previous: t.saved(&paths.data_dir).map(Box::new),
+                });
+            }
+        }
+        Err(e) if e.kind() == io::ErrorKind::NotFound => {}
+        Err(e) => return Err(io_err(e)),
+    }
+    if let Some(result) = t.saved(&paths.data_dir) {
+        return Ok(CheckStatus::Checked {
+            result: Box::new(result),
+        });
+    }
+    let eligible = matches!(t.folder.as_str(), "inbox" | "junkemail")
+        && t.message.received_at >= now - AUTO_WINDOW
+        && config()?.is_some_and(|c| {
+            c.ai.enabled
+                && c.ai.tool != "none"
+                && c.ai
+                    .accounts
+                    .as_ref()
+                    .is_none_or(|a| a.contains(&t.account))
+                && c.accounts.get(&t.account).is_some_and(|a| a.spam_auto)
+        });
+    Ok(if eligible {
+        CheckStatus::Pending
+    } else {
+        CheckStatus::Unchecked
+    })
 }
 
 /// Runs `fam mail check-spam` against the store and famd at `paths`.
@@ -458,52 +623,105 @@ pub fn check_at(
     input: &CheckSpamInput,
     now: i64,
 ) -> Result<CheckSpamOutput, CommandError> {
+    check_target(paths, cfg, input, now, None)
+}
+
+/// Checks a candidate only if its local row still belongs to the scanned email.
+pub fn check_candidate(
+    paths: &DaemonPaths,
+    cfg: &familiar_config::Config,
+    candidate: &Candidate,
+    now: i64,
+) -> Result<CheckSpamOutput, CommandError> {
+    let input = CheckSpamInput {
+        message: candidate.id,
+        saved: false,
+        no_ai: false,
+    };
+    check_target(paths, Some(cfg), &input, now, Some(candidate))
+}
+
+fn check_target(
+    paths: &DaemonPaths,
+    cfg: Option<&familiar_config::Config>,
+    input: &CheckSpamInput,
+    now: i64,
+    candidate: Option<&Candidate>,
+) -> Result<CheckSpamOutput, CommandError> {
     let r = open(paths)?;
-    let m = r
-        .message(MessageId(input.message))
-        .map_err(store_err)?
-        .ok_or_else(|| {
+    let target = Target::load(&r, input.message)?;
+    if candidate
+        .is_some_and(|c| c.account != target.account || c.remote != target.message.remote_id)
+    {
+        return Err(CommandError::new(
+            ErrorKind::Conflict,
+            "The candidate has moved since the background scan",
+        ));
+    }
+    if input.saved {
+        return target.saved(&paths.data_dir).ok_or_else(|| {
             CommandError::new(
                 ErrorKind::NotFound,
-                format!("no message {} on this device", input.message),
+                format!(
+                    "message {} has no saved spam check on this device",
+                    input.message
+                ),
             )
-        })?;
-    let (key, remote) = locate(paths, input.message)?;
-    let folder = r.folder(m.folder).map_err(store_err)?;
-    let folder_name = folder
-        .as_ref()
-        .map(|f| f.well_known.clone().unwrap_or_else(|| f.name.clone()))
-        .unwrap_or_default();
-    if input.saved {
-        return Saved::load(&paths.data_dir)
-            .0
-            .get(&key)
-            .and_then(|a| a.get(&remote))
-            .cloned()
-            .map(|mut o| {
-                // The local ID and folder can change; the remote ID is what's kept.
-                o.message = input.message;
-                o.folder = folder_name.clone();
-                o
-            })
-            .ok_or_else(|| {
-                CommandError::new(
-                    ErrorKind::NotFound,
-                    format!(
-                        "message {} hasn't been checked on this device",
-                        input.message
-                    ),
-                )
-            });
+        });
     }
-    let in_sent = folder
-        .as_ref()
-        .and_then(|f| f.well_known.as_deref())
-        .is_some_and(|w| matches!(w, "sentitems" | "drafts" | "outbox"));
+    let source = crate::agent::session_source();
+    let track = !input.no_ai && source != "mcp" && !source.starts_with("agent:");
+    let mut attempt = if track {
+        std::fs::create_dir_all(paths.data_dir.join("spam_attempts")).map_err(io_err)?;
+        let mut f = open_lock(&target.attempt_path(&paths.data_dir)).map_err(io_err)?;
+        if !f.try_lock_exclusive().map_err(io_err)? {
+            return Err(CommandError::new(
+                ErrorKind::Conflict,
+                "A scam check is already running for this message",
+            ));
+        }
+        if let Some(saved) = candidate.and_then(|_| target.saved(&paths.data_dir)) {
+            return Ok(saved);
+        }
+        write_reason(&mut f, "The previous check was interrupted.").map_err(io_err)?;
+        Some(f)
+    } else {
+        None
+    };
+    let result = assess(paths, cfg, input, now, &r, target);
+    if let Some(f) = &mut attempt {
+        let reason = match &result {
+            Ok(r) if r.ai.is_some() => "",
+            Ok(r) => r
+                .notes
+                .last()
+                .map_or("No grade was returned.", String::as_str),
+            Err(e) => &e.message,
+        };
+        write_reason(f, reason).map_err(io_err)?;
+    }
+    result
+}
+
+fn assess(
+    paths: &DaemonPaths,
+    cfg: Option<&familiar_config::Config>,
+    input: &CheckSpamInput,
+    now: i64,
+    r: &Reader,
+    target: Target,
+) -> Result<CheckSpamOutput, CommandError> {
+    let Target {
+        message: m,
+        account: key,
+        folder,
+    } = target;
+    let remote = m.remote_id.clone();
+    let in_sent = matches!(folder.as_str(), "sentitems" | "drafts" | "outbox");
     let mut out = CheckSpamOutput {
         message: input.message,
         account: key.clone(),
-        folder: folder_name,
+        folder,
         facts: Vec::new(),
         ai: None,
         checked_at: now,
@@ -533,7 +751,7 @@ pub fn check_at(
     }));
     out.facts.extend(spam::list_facts(&hs));
 
-    let (text, html, have_body) = body(&r, &m);
+    let (text, html, have_body) = body(r, &m);
     if !have_body {
         out.notes
             .push("the body isn't on this device, so only its preview was read".into());
@@ -608,11 +826,11 @@ pub fn check_at(
     {
         Ok(g) => {
             out.ai = Some(g);
+            let lock = open_lock(&paths.data_dir.join("spam_checks.lock")).map_err(io_err)?;
+            FileExt::lock_exclusive(&lock).map_err(io_err)?;
             let mut saved = Saved::load(&paths.data_dir);
             saved.0.entry(key).or_default().insert(remote, out.clone());
-            if let Err(e) = saved.save(&paths.data_dir) {
-                out.notes.push(format!("the result couldn't be saved: {e}"));
-            }
+            saved.save(&paths.data_dir).map_err(io_err)?;
         }
         Err(why) => out.notes.push(why),
     }

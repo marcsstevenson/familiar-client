@@ -14,6 +14,8 @@
 pub mod remote;
 pub mod sanitize;
 
+use familiar_core::commands::check_spam::{CheckStatus, status_at};
+
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
@@ -53,6 +55,17 @@ pub async fn open_reader(
         .build()
         .map(|_| ())
         .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+pub async fn reading_spam_status(message: i64) -> Result<CheckStatus, CommandError> {
+    blocking(move || {
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default();
+        status_at(&DaemonPaths::resolve()?, message, now.as_secs() as i64)
+    })
+    .await
 }
 
 /// How many of the following messages are prefetched when one is opened.

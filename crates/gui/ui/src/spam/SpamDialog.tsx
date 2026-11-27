@@ -5,7 +5,7 @@
 import { For, Match, Show, Switch, createResource, createSignal } from "solid-js";
 import { isCommandError, run } from "../api";
 import { toolWords } from "../calendar/proposals";
-import { type SpamResult, aiSettings, rememberSpam, removeFromList } from "../state";
+import { type SpamResult, aiSettings, removeFromList } from "../state";
 import "../calendar/calendar.css";
 import "./spam.css";
 
@@ -35,9 +35,7 @@ export function SpamDialog(props: { message: number; saved?: SpamResult; onClose
   const [round, setRound] = createSignal(props.saved ? 0 : 1);
   const [result] = createResource(round, async (n) => {
     if (n === 0) return run("mail.check-spam", { message, saved: true });
-    const r = await run("mail.check-spam", { message });
-    if (r.ai) rememberSpam(message, r);
-    return r;
+    return run("mail.check-spam", { message });
   });
 
   function report(label: string, input: { not_junk?: boolean; phishing?: boolean }) {
@@ -56,6 +54,7 @@ export function SpamDialog(props: { message: number; saved?: SpamResult; onClose
               <h2>Spam and scam check</h2>
               <p class="warn" role="alert">{errorText(result.error)}</p>
               <div class="event-actions">
+                <button onClick={() => setRound(n => n + 1)}>Retry</button>
                 <button onClick={props.onClose}>Close</button>
               </div>
             </div>
@@ -133,8 +132,8 @@ export function SpamDialog(props: { message: number; saved?: SpamResult; onClose
                 </div>
                 <div class="event-actions spam-actions">
                   <button onClick={props.onClose}>Close</button>
-                  <Show when={round() === 0}>
-                    <button onClick={() => setRound(1)}>Check again</button>
+                  <Show when={round() === 0 || !r().ai}>
+                    <button onClick={() => setRound(n => n + 1)}>{r().ai ? "Check again" : "Retry"}</button>
                   </Show>
                   <span class="spacer" />
                   <button
