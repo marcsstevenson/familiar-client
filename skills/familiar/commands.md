@@ -300,6 +300,7 @@ Saves a contact in the specified Outlook or Google account. Requires a connectio
 - `--emails <emails>` (repeatable): Email addresses. An empty list clears the field.
 - `--name <name>`: Full display name.
 - `--phones <phones>` (repeatable): Phone numbers. An empty list clears the field.
+- `--starred`: Set Google favourite status.
 
 ## contacts.delete
 
@@ -313,6 +314,7 @@ Deletes one contact from its owning Outlook or Google account. Requires --yes.
 
 - `--account <account>` (required): Account that owns the saved record.
 - `CONTACT` (required): Local contact ID from contacts list.
+- `--expected-json <expected-json>`: JSON snapshot of the reviewed name, company, emails, phones and starred flag.
 - `--remote-id <remote-id>`: Provider ID from the selected card, to detect a stale selection.
 - `--yes`: Confirm deletion from the provider account.
 
@@ -330,9 +332,11 @@ Updates the supplied fields on one contact in its owning account. Omit fields to
 - `--company <company>`: Company or organization.
 - `CONTACT` (required): Local contact ID from contacts list.
 - `--emails <emails>` (repeatable): Email addresses. An empty list clears the field.
+- `--expected-json <expected-json>`: JSON snapshot of the reviewed name, company, emails, phones and starred flag.
 - `--name <name>`: Full display name.
 - `--phones <phones>` (repeatable): Phone numbers. An empty list clears the field.
 - `--remote-id <remote-id>`: Provider ID from the selected card, to detect a stale selection.
+- `--starred`: Set Google favourite status.
 
 ## contacts.list
 

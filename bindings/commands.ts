@@ -714,6 +714,8 @@ export type ContactCard = {
   company: string;
   /** All saved email addresses. */
   emails: Array<string>;
+  /** Google account email for opening this card on the web. */
+  google_account?: string | null;
   /** Local record ID. */
   id: number;
   /** Display name. */
@@ -722,6 +724,8 @@ export type ContactCard = {
   phones: Array<string>;
   /** Provider record ID. */
   remote_id: string;
+  /** Google favourite status. */
+  starred: boolean;
 };
 
 export type ContactCreateInput = {
@@ -735,6 +739,8 @@ export type ContactCreateInput = {
   name?: string | null;
   /** Phone numbers. An empty list clears the field. */
   phones?: Array<string> | null;
+  /** Set Google favourite status. */
+  starred?: boolean | null;
 };
 
 export type ContactDeleteInput = {
@@ -742,6 +748,8 @@ export type ContactDeleteInput = {
   account: string;
   /** Local contact ID from contacts list. */
   contact: number;
+  /** JSON snapshot of the reviewed name, company, emails, phones and starred flag. */
+  expected_json?: string | null;
   /** Provider ID from the selected card, to detect a stale selection. */
   remote_id?: string | null;
   /** Confirm deletion from the provider account. */
@@ -757,12 +765,16 @@ export type ContactEditInput = {
   contact: number;
   /** Email addresses. An empty list clears the field. */
   emails?: Array<string> | null;
+  /** JSON snapshot of the reviewed name, company, emails, phones and starred flag. */
+  expected_json?: string | null;
   /** Full display name. */
   name?: string | null;
   /** Phone numbers. An empty list clears the field. */
   phones?: Array<string> | null;
   /** Provider ID from the selected card, to detect a stale selection. */
   remote_id?: string | null;
+  /** Set Google favourite status. */
+  starred?: boolean | null;
 };
 
 export type ContactWritten = {

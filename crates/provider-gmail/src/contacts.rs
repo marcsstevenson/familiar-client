@@ -13,7 +13,9 @@ use serde_json::{Map, Value as Json, json};
 
 use crate::{Error, GmailApi, Priority, Result, api::enc};
 
-const CONTACT_FIELDS: &str = "personFields=names,emailAddresses,organizations,phoneNumbers";
+const CONTACT_FIELDS: &str =
+    "personFields=names,emailAddresses,organizations,phoneNumbers,memberships";
+const STARRED: &str = "contactGroups/starred";
 
 #[derive(Default, Deserialize)]
 #[serde(default, rename_all = "camelCase")]
@@ -26,6 +28,7 @@ struct Page {
 #[serde(default, rename_all = "camelCase")]
 struct Person {
     resource_name: String,
+    memberships: Vec<Json>,
     names: Vec<Name>,
     email_addresses: Vec<Value>,
     organizations: Vec<Organization>,
@@ -61,6 +64,7 @@ impl Person {
         NewContact {
             account,
             remote_id: self.resource_name.clone(),
+            starred: self.memberships.iter().any(is_starred),
             display_name: display.clone(),
             company: self
                 .organizations
@@ -98,8 +102,30 @@ fn person_path(remote: &str) -> Result<String> {
     Ok(format!("/people/{}", enc(id)))
 }
 
+fn is_starred(membership: &Json) -> bool {
+    membership["contactGroupMembership"]["contactGroupResourceName"] == STARRED
+}
+
 fn contact_fields(fields: &ContactChanges, current: &Json) -> Map<String, Json> {
     let mut body = Map::new();
+    if let Some(starred) = fields.starred {
+        let mut groups = current["memberships"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
+        if starred != groups.iter().any(is_starred) {
+            groups.retain(|group| {
+                !is_starred(group) && group.get("contactGroupMembership").is_some()
+            });
+            if groups.is_empty() {
+                groups.push(json!({"contactGroupMembership":{"contactGroupResourceName":"contactGroups/myContacts"}}));
+            }
+            if starred {
+                groups.push(json!({"contactGroupMembership":{"contactGroupResourceName":STARRED}}));
+            }
+            body.insert("memberships".into(), Json::Array(groups));
+        }
+    }
     if let Some(name) = &fields.name
         && current["names"][0]["displayName"].as_str() != Some(name)
     {
@@ -162,6 +188,25 @@ fn contact_fields(fields: &ContactChanges, current: &Json) -> Map<String, Json> 
 }
 
 impl GmailApi {
+    async fn contact_json(&self, path: &str) -> Result<Json> {
+        self.client()
+            .people_request(
+                Method::GET,
+                // Google may also return profile data, which belongs to
+                // another source and must not be copied into the contact.
+                &format!("{path}?{CONTACT_FIELDS},metadata&sources=READ_SOURCE_TYPE_CONTACT"),
+                None,
+                Priority::User,
+            )
+            .await
+    }
+
+    /// Reads the current contact fields before a reviewed merge step.
+    pub async fn get_contact(&self, account: AccountId, remote: &str) -> Result<NewContact> {
+        let current = self.contact_json(&person_path(remote)?).await?;
+        Ok(serde_json::from_value::<Person>(current)?.to_new(account))
+    }
+
     /// Creates or patches one saved contact, returning the server's copy.
     pub async fn save_contact(
         &self,
@@ -171,17 +216,7 @@ impl GmailApi {
     ) -> Result<NewContact> {
         let (method, path, body) = if let Some(remote) = remote_id {
             let path = person_path(remote)?;
-            let current = self
-                .client()
-                .people_request(
-                    Method::GET,
-                    // Google may also return profile data, which belongs to
-                    // another source and must not be copied into the contact.
-                    &format!("{path}?{CONTACT_FIELDS},metadata&sources=READ_SOURCE_TYPE_CONTACT"),
-                    None,
-                    Priority::User,
-                )
-                .await?;
+            let current = self.contact_json(&path).await?;
             let mut changes = contact_fields(fields, &current);
             if changes.is_empty() {
                 return Ok(serde_json::from_value::<Person>(current)?.to_new(account));

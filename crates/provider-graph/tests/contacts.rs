@@ -21,6 +21,7 @@ async fn create_update_clear_and_delete() {
                 company: Some("Example".into()),
                 emails: Some(vec!["chris@example.com".into()]),
                 phones: Some(vec!["555-0100".into()]),
+                ..Default::default()
             },
         )
         .await

@@ -67,6 +67,11 @@ pub const MIGRATIONS: &[Migration] = &[
         name: "links between events and their source email",
         sql: include_str!("../migrations/0009_event_mail.sql"),
     },
+    Migration {
+        version: 10,
+        name: "Google contact favourites",
+        sql: include_str!("../migrations/0010_contact_favourites.sql"),
+    },
 ];
 
 /// The schema version this build reads and writes.
@@ -132,7 +137,7 @@ mod tests {
         let mut c = mem();
         assert_eq!(
             migrate(&mut c, MIGRATIONS).unwrap(),
-            vec![1, 2, 3, 4, 5, 6, 7, 8, 9]
+            vec![1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
         );
         assert_eq!(version(&c).unwrap(), SCHEMA_VERSION);
         assert_eq!(
