@@ -48,6 +48,8 @@ export function Contacts() {
   const rows = createMemo(() => ordered().filter(c => (!account() || c.account === account())
     && matches(c, query()) && (view() !== "favourites" || c.starred)
     && (view() !== "duplicates" || duplicates().has(key(c)))));
+  // A store refresh returns new objects even for unchanged contacts. Key the DOM rows by card identity.
+  const visibleByKey = createMemo(() => new Map(rows().map(c => [key(c), c])));
   const selected = createMemo(() => rows().filter(c => checked().has(key(c))));
   const sameAccount = () => selected().every(c => c.account === selected()[0]?.account);
   const current = createMemo(() => rows().find(c =>
@@ -207,17 +209,18 @@ export function Contacts() {
           </Show>
         </div>
         <div class="contacts-list" aria-label="Saved contacts">
-          <For each={rows()}>{c =>
-            <div class="contact-row" classList={{ active: c === current() }}>
-              <input type="checkbox" aria-label={"Select " + title(c) + " in " + c.account}
-                disabled={busy()} checked={checked().has(key(c))} onChange={() => toggle(c)} />
-              <button id={"contact-" + c.id} aria-current={c === current() ? "true" : undefined}
-                onFocus={() => select(c)} onClick={() => select(c)} onKeyDown={move}>
-                <strong>{c.starred ? "★ " : ""}{title(c)}</strong>
-                <span>{[c.emails[0], c.phones[0]].filter(Boolean).join(" · ")}</span><small>{c.account}</small>
+          <For each={[...visibleByKey().keys()]}>{id => {
+            const card = () => visibleByKey().get(id)!;
+            return <div class="contact-row" classList={{ active: card() === current() }}>
+              <input type="checkbox" aria-label={"Select " + title(card()) + " in " + card().account}
+                disabled={busy()} checked={checked().has(id)} onChange={() => toggle(card())} />
+              <button id={"contact-" + card().id} aria-current={card() === current() ? "true" : undefined}
+                onFocus={() => select(card())} onClick={() => select(card())} onKeyDown={move}>
+                <strong>{card().starred ? "★ " : ""}{title(card())}</strong>
+                <span>{[card().emails[0], card().phones[0]].filter(Boolean).join(" · ")}</span><small>{card().account}</small>
               </button>
-            </div>
-          }</For>
+            </div>;
+          }}</For>
         </div>
       </Show>
     </section>
