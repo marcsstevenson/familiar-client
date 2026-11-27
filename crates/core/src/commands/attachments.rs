@@ -263,6 +263,8 @@ pub fn save_unique(dir: &Path, name: &str, bytes: &[u8]) -> Result<PathBuf, Comm
                 f.write_all(bytes).map_err(|e| {
                     CommandError::internal(format!("write {}: {e}", path.display()))
                 })?;
+                drop(f);
+                mark_from_internet(&path);
                 return Ok(path);
             }
             Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
@@ -278,6 +280,21 @@ pub fn save_unique(dir: &Path, name: &str, bytes: &[u8]) -> Result<PathBuf, Comm
         "{} already has too many files called {name}",
         dir.display()
     )))
+}
+
+/// Marks a saved attachment as downloaded from the internet (the Windows
+/// "Mark of the Web"), as browsers and Outlook do, so SmartScreen checks a
+/// program before it runs and Office opens documents in Protected View.
+/// Elsewhere, and on drives without alternate data streams, nothing happens.
+fn mark_from_internet(path: &Path) {
+    #[cfg(windows)]
+    {
+        let mut stream = path.as_os_str().to_owned();
+        stream.push(":Zone.Identifier");
+        let _ = std::fs::write(stream, "[ZoneTransfer]\r\nZoneId=3\r\n");
+    }
+    #[cfg(not(windows))]
+    let _ = path;
 }
 
 /// Runs `fam mail attachments` against the daemon and store at `paths`.

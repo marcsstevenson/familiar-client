@@ -74,6 +74,7 @@ fn run() -> Result<(), (u8, String)> {
         .and_then(|p| p.with_calendar(&config.calendar))
         .map_err(config_err)?;
     let paths = DaemonPaths::resolve().map_err(|e| (e.exit_code(), e.message))?;
+    keep_private(&paths.data_dir);
     let auth = Arc::new(Auth::from_env().map_err(|e| (3, e.to_string()))?);
     let graph = auth.endpoints().graph.clone();
     let gmail = auth.endpoints().gmail.clone();
@@ -124,4 +125,25 @@ fn run() -> Result<(), (u8, String)> {
         daemon.stop().await;
         Ok(())
     })
+}
+
+/// Makes the data directory (store, bodies, search index, socket) readable by
+/// this user only. On Unix it would otherwise be created with the umask,
+/// usually 0755, so other local users could read the mail. Windows folders
+/// under the user's profile are already private. Fails open with a log line.
+fn keep_private(dir: &std::path::Path) {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        let done = std::fs::create_dir_all(dir)
+            .and_then(|()| std::fs::set_permissions(dir, std::fs::Permissions::from_mode(0o700)));
+        if let Err(e) = done {
+            log(&format!(
+                "couldn't make {} private (0700): {e}",
+                dir.display()
+            ));
+        }
+    }
+    #[cfg(not(unix))]
+    let _ = dir;
 }

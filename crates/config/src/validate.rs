@@ -266,6 +266,16 @@ pub fn check(c: &Config) -> Vec<Problem> {
         if h.run.trim().is_empty() {
             p.push(Problem::error(format!("{path}.run"), "must not be empty"));
         }
+        if let Some(var) = cmd_expanded_mail_var(&h.run) {
+            p.push(Problem::warning(
+                format!("{path}.run"),
+                format!(
+                    "`%{var}%` is pasted into the command line by cmd before it runs, \
+                     so an email's subject or sender could run commands; read it in a \
+                     script instead (PowerShell `$env:{var}`, or the JSON line on stdin)"
+                ),
+            ));
+        }
         if h.matches.as_deref().is_some_and(|m| m.trim().is_empty()) {
             p.push(Problem::error(
                 format!("{path}.match"),
@@ -491,6 +501,24 @@ pub fn parse_size(s: &str) -> Option<u64> {
         _ => return None,
     };
     if n == 0 { None } else { n.checked_mul(mult) }
+}
+
+/// A mail-derived hook variable written as cmd's `%NAME%`, which cmd expands
+/// into the command line before parsing it (so `&` in a subject runs).
+fn cmd_expanded_mail_var(run: &str) -> Option<&'static str> {
+    const MAIL_VARS: &[&str] = &[
+        "FAMILIAR_SUBJECT",
+        "FAMILIAR_FROM",
+        "FAMILIAR_FROM_NAME",
+        "FAMILIAR_FOLDER",
+        "FAMILIAR_ACCOUNT",
+        "FAMILIAR_HOOK",
+    ];
+    let upper = run.to_ascii_uppercase();
+    MAIL_VARS
+        .iter()
+        .find(|v| upper.contains(&format!("%{v}%")) || upper.contains(&format!("%{v}:")))
+        .copied()
 }
 
 #[cfg(test)]

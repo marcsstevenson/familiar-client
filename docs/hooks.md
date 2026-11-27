@@ -51,10 +51,17 @@ anything. It comes two ways:
   `FAMILIAR_FOLDER`, `FAMILIAR_FROM`, `FAMILIAR_FROM_NAME`,
   `FAMILIAR_SUBJECT`.
 
-Quote the variables in your command (`"$FAMILIAR_SUBJECT"`, or
-`%FAMILIAR_SUBJECT%` in `cmd`) and treat their contents as untrusted:
-anyone can send you an email with any subject. `FAMILIAR_MESSAGE_ID` works
-with the other commands, for example `fam mail thread $FAMILIAR_MESSAGE_ID`.
+Treat their contents as untrusted: anyone can send you an email with any
+subject or sender name. In a `sh` command, always quote them
+(`"$FAMILIAR_SUBJECT"`); the shell then passes them as plain text.
+
+On Windows, `run` goes through `cmd`, and **never write `%FAMILIAR_SUBJECT%`
+(or another mail field) in it**. `cmd` pastes `%...%` values into the
+command line before reading it, so a subject such as `x" & del /q C:\*`
+runs the second command, quotes or not. Use a script that reads the
+variable instead (PowerShell `$env:FAMILIAR_SUBJECT`, below), or the JSON
+line on stdin. `fam config validate` warns about this. `%FAMILIAR_MESSAGE_ID%`
+is only ever a number, so `fam mail thread %FAMILIAR_MESSAGE_ID%` is fine.
 
 On Windows, a PowerShell script works as
 `run = "powershell -NoProfile -File C:\\Users\\me\\club.ps1"`; read the

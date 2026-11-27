@@ -387,6 +387,27 @@ timeout_seconds = 0
 }
 
 #[test]
+fn cmd_style_mail_variables_in_hooks_are_warned_about() {
+    let text = r#"version = 1
+[accounts.home]
+email = "me@example.com"
+tenant = "consumers"
+[[hooks]]
+on = "new_mail"
+run = "msg * \"%familiar_subject%\""
+[[hooks]]
+on = "new_mail"
+run = "fam mail thread %FAMILIAR_MESSAGE_ID%"
+"#;
+    let r = check(text);
+    let paths: Vec<&str> = r.problems.iter().map(|p| p.path.as_str()).collect();
+    assert_eq!(paths, vec!["hooks[0].run"], "{:#?}", r.problems);
+    assert!(r.problems[0].message.contains("$env:FAMILIAR_SUBJECT"));
+    // A warning: the config still loads.
+    assert!(r.config.is_some());
+}
+
+#[test]
 fn gmail_accounts_have_no_tenant() {
     let r = check(
         "version = 1\n[app.google]\nclient_file = \"g.json\"\n[accounts.gmail]\nemail = \"me@gmail.com\"\nprovider = \"gmail\"\n",
