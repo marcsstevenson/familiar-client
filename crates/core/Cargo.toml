@@ -10,6 +10,8 @@ publish.workspace = true
 
 [dependencies]
 base64 = "0.22"
+blake3 = "1"
+fs4 = { version = "0.13", features = ["sync"] }
 chrono = { version = "0.4", default-features = false, features = ["std"] }
 chrono-tz = { version = "0.10", features = ["case-insensitive"] }
 iana-time-zone = "0.1"

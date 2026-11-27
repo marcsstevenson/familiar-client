@@ -158,13 +158,6 @@ export const [readingFrom, setReadingFrom] = createSignal<string>("");
  * show instead of checking again. */
 export const [spamDialog, setSpamDialog] = createSignal<{ message: number; saved?: SpamResult } | null>(null);
 
-/** Spam check results known this session, by message ID: checked in the
- * dialog, or read back from the saved results. */
-export const [spamResults, setSpamResults] = createSignal<Record<number, SpamResult | null>>({});
-export function rememberSpam(id: number, r: SpamResult | null): void {
-  setSpamResults((all) => ({ ...all, [id]: r }));
-}
-
 /** [accounts] with spam_check or spam_auto = true, from config.toml. */
 export const spamSettings: { accounts: string[] } = { accounts: [] };
 

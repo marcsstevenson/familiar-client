@@ -13,7 +13,9 @@ use common::{Env, KEY, fast_policy};
 use familiar_config::Config;
 #[cfg(unix)]
 use familiar_config::model::Account;
-use familiar_core::commands::check_spam::{CheckSpamInput, CheckSpamOutput, check_at};
+use familiar_core::commands::check_spam::{
+    Candidate, CheckSpamInput, CheckSpamOutput, CheckStatus, check_at, check_candidate, status_at,
+};
 use familiar_mock_graph::{EmailAddress, Message};
 
 const LIMIT: Duration = Duration::from_secs(60);
@@ -259,6 +261,16 @@ async fn facts_grade_and_saved_result() {
         out.notes
     );
 
+    assert!(matches!(status_at(&env.paths, id, now(&env)).unwrap(),
+        CheckStatus::Failed { reason, previous: Some(_) } if reason.contains("Credit balance is too low")));
+    mode("answer");
+    let retried = check(&env, Some(cfg(true)), "gui", input(id)).await;
+    assert!(retried.ai.is_some());
+    assert!(matches!(
+        status_at(&env.paths, id, now(&env)).unwrap(),
+        CheckStatus::Checked { .. }
+    ));
+
     // An agent gets the facts, not another agent.
     mode("answer");
     let out = check(&env, Some(cfg(true)), "mcp", input(id)).await;
@@ -300,6 +312,26 @@ async fn without_famd_the_store_facts_are_still_given() {
         ),
         "{out:#?}"
     );
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 4)]
+async fn recycled_row_cannot_take_another_emails_check_or_failure() {
+    let mut env = Env::new(5).await;
+    let remote = env.mock.mailbox(KEY).add_message(phish(&env)).unwrap();
+    env.start(fast_policy());
+    let id = synced(&env, &remote).await;
+    let stale = Candidate {
+        account: KEY.into(),
+        remote: "previous-message".into(),
+        id,
+    };
+    let cfg = Config::default();
+    let err = check_candidate(&env.paths, &cfg, &stale, now(&env)).unwrap_err();
+    assert_eq!(err.kind, familiar_core::ErrorKind::Conflict);
+    assert!(!env.paths.data_dir.join("spam_attempts").exists());
+    check(&env, None, "gui", input(id)).await;
+    assert!(matches!(status_at(&env.paths, id, now(&env)).unwrap(),
+        CheckStatus::Failed { reason, previous: None } if reason.contains("config.toml")));
 }
 
 /// `spam_auto`: famd checks new Inbox mail on its own and saves the grade.

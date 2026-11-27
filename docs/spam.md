@@ -101,8 +101,11 @@ so turning it off needs no restart.
 
 In the desktop app, a grade stands out under the reading pane's header
 only when it disagrees with where the message is: 50% or more outside
-Junk Email, or under 50% in it. Otherwise it shows only while the pointer
-is over the header.
+Junk Email, or under 50% in it. Hover over the message header or move keyboard focus into it to see
+the grade and open Details. Before a grade arrives, the header shows whether
+the message is awaiting an automatic check, being checked, or available to
+check manually. If a check fails, the header shows the reason and a Retry
+button. The status updates while the message is open.
 
 ## Saved results
 

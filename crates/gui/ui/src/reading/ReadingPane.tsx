@@ -11,12 +11,12 @@ import { onStoreChanged } from "../list/api";
 import { dateWords } from "../calendar/proposals";
 import { run } from "../api";
 import { openCompose } from "../compose/spec";
-import { type SpamResult, multiPicked, rememberSpam, selectedMessage, setReadingFrom, setSpamDialog, spamResults, spamSettings } from "../state";
+import { type SpamResult, multiPicked, selectedMessage, setReadingFrom, setSpamDialog, spamDialog, spamSettings } from "../state";
 import { gradeLevel, gradeWords } from "../spam/SpamDialog";
 import { resolvedTheme } from "../theme";
 import { Attachments } from "./Attachments";
 import { CopyButton } from "./CopyButton";
-import { type MailFetchOutput, type ReadView, errorText, openLink, openMessage, trustSender } from "./api";
+import { type MailFetchOutput, type ReadView, type SpamStatus, spamStatus, errorText, openLink, openMessage, trustSender } from "./api";
 import { mismatch } from "./links";
 import { type HoverLink, MessageFrame } from "./MessageFrame";
 import { PickedSummary } from "./PickedSummary";
@@ -115,23 +115,53 @@ export function ReadingPane(props: { standalone?: boolean }) {
     openLink(href).catch((e) => setStatus(`Couldn't open the link: ${errorText(e)}`));
   };
 
-  // How long opening took, for the performance checks (WP 3.7).
-  // A spam check saved for the open message (spam_check and spam_auto
-  // accounts only). Read on every open: famd's background check can save
-  // one at any time, and it's a small local file.
-  createEffect(
-    on(view, (v) => {
-      const m = v?.message;
-      if (!m || !spamSettings.accounts.includes(m.account)) return;
-      run("mail.check-spam", { message: m.id, saved: true }).then(
-        (r) => rememberSpam(m.id, r),
-        () => rememberSpam(m.id, null),
-      );
-    }),
-  );
-  const spam = () => {
+  const [headerActive, setHeaderActive] = createSignal(false);
+  const [check, setCheck] = createSignal<SpamStatus | { state: "unavailable"; reason: string }>();
+  const [reloadCheck, setReloadCheck] = createSignal(0);
+  // Refresh on open, hover, keyboard focus and closing the check dialog.
+  // While the header is visible, follow attempts made in any window or by famd.
+  const checkId = () => {
     const m = view()?.message;
-    return m ? (spamResults()[m.id] ?? null) : null;
+    return m && spamSettings.accounts.includes(m.account) ? m.id : null;
+  };
+  createEffect(on(checkId, () => setCheck(undefined)));
+  createEffect(() => {
+    reloadCheck();
+    const id = checkId();
+    const visible = headerActive();
+    const dialog = spamDialog();
+    if (id === null || dialog) return;
+    let active = true;
+    let timer: number;
+    const refresh = async () => {
+      try {
+        const latest = await spamStatus(id);
+        if (!active) return;
+        setCheck(latest);
+        if (visible || latest.state === "running" || latest.state === "pending") {
+          timer = window.setTimeout(refresh, visible || latest.state === "running" ? 3000 : 15000);
+        }
+      } catch (e) {
+        if (active) setCheck({ state: "unavailable", reason: errorText(e) });
+      }
+    };
+    void refresh();
+    onCleanup(() => { active = false; window.clearTimeout(timer); });
+  });
+  const spam = () => {
+    const latest = check();
+    return latest?.state === "checked" ? latest.result : latest && "previous" in latest ? latest.previous : null;
+  };
+  const checkLabel = () => {
+    const latest = check();
+    switch (latest?.state) {
+      case "unavailable": return `Couldn’t read scam check status. ${latest.reason}`;
+      case "failed": return `Scam check needs a retry. ${latest.reason}`;
+      case "pending": return "Awaiting automatic scam check";
+      case "running": return "Checking for spam or scam…";
+      case "unchecked": return "Scam check hasn’t run";
+      default: return "Loading scam check status…";
+    }
   };
   // The result stands out only when it disagrees with where the message is:
   // 50% or more outside Junk, or under 50% in Junk. Otherwise it shows only
@@ -163,7 +193,11 @@ export function ReadingPane(props: { standalone?: boolean }) {
           const m = () => v().message;
           return (
             <div class="reading-message">
-              <header class="reading-header">
+              <header class="reading-header"
+                onPointerEnter={() => setHeaderActive(true)}
+                onPointerLeave={e => setHeaderActive(e.currentTarget.contains(document.activeElement))}
+                onFocusIn={() => setHeaderActive(true)}
+                onFocusOut={e => setHeaderActive(e.currentTarget.matches(":hover") || e.currentTarget.contains(e.relatedTarget as Node | null))}>
                 <div class="reading-title">
                   <h1 class="reading-subject reading-copyable">
                     {m().subject || "(no subject)"}
@@ -223,6 +257,16 @@ export function ReadingPane(props: { standalone?: boolean }) {
                       <button onClick={() => setSpamDialog({ message: m().id, saved: r() })}>Details</button>
                     </div>
                   )}
+                </Show>
+                <Show when={checkId() !== null && check()?.state !== "checked"}>
+                  <div class="reading-trusted" role="note">
+                    <span>{checkLabel()}</span>
+                    <Show when={check() && check()?.state !== "running"}>
+                      <button onClick={() => check()?.state === "unavailable" ? setReloadCheck(n => n + 1) : setSpamDialog({ message: m().id })}>
+                        {check()?.state === "unavailable" ? "Refresh status" : check()?.state === "failed" ? "Retry" : "Check now"}
+                      </button>
+                    </Show>
+                  </div>
                 </Show>
                 <Show when={v().sender_trusted}>
                   <div class="reading-trusted" role="note">

@@ -14,7 +14,7 @@ use std::collections::HashSet;
 use std::path::PathBuf;
 use std::time::Duration;
 
-use familiar_core::commands::check_spam::{CheckSpamInput, auto_candidates, check_at};
+use familiar_core::commands::check_spam::{auto_candidates, check_candidate};
 use familiar_core::daemon::DaemonPaths;
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
@@ -83,7 +83,7 @@ fn round(
     paths: &DaemonPaths,
     clock: &Clock,
     stop: &watch::Receiver<bool>,
-    tried: &mut HashSet<i64>,
+    tried: &mut HashSet<(String, String)>,
 ) {
     // famd logged the config at start; a bad edit since then is the desktop
     // app's to report.
@@ -100,31 +100,33 @@ fn round(
             return;
         }
     };
-    for (key, id) in ids {
+    for candidate in ids {
+        let id = candidate.id;
+        let identity = (candidate.account.clone(), candidate.remote.clone());
         if *stop.borrow() {
             return;
         }
-        if tried.contains(&id) {
+        if tried.contains(&identity) {
             continue;
         }
         // Still wanted? The setting may have been turned off mid-backlog.
         let Ok(cfg) = familiar_config::load(config) else {
             return;
         };
-        if !cfg.ai.enabled || !cfg.accounts.get(&key).is_some_and(|a| a.spam_auto) {
+        if !cfg.ai.enabled || !cfg.accounts.get(&identity.0).is_some_and(|a| a.spam_auto) {
             continue;
         }
-        tried.insert(id);
-        let input = CheckSpamInput {
-            message: id,
-            no_ai: false,
-            saved: false,
-        };
         // Checks famd makes on its own are never an agent's, whatever
         // environment famd was started from.
         let res = familiar_core::agent::with_source("famd", || {
-            check_at(paths, Some(&cfg), &input, clock())
+            check_candidate(paths, &cfg, &candidate, clock())
         });
+        if matches!(&res, Err(e) if e.kind == familiar_core::ErrorKind::Conflict) {
+            continue;
+        }
+        if !matches!(&res, Ok(out) if out.ai.is_some()) {
+            tried.insert(identity);
+        }
         match res {
             Ok(out) => match &out.ai {
                 Some(g) => log(&format!(

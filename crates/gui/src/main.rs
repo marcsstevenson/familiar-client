@@ -393,6 +393,7 @@ fn main() {
             daemon_state,
             daemon::retry_sync,
             reading::reading_open,
+            reading::reading_spam_status,
             reading::open_reader,
             reading::reading_trust_sender,
             reading::reading_attachments,
