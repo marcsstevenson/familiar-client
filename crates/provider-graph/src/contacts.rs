@@ -127,6 +127,7 @@ impl GraphContact {
         NewContact {
             account,
             remote_id: self.id.clone(),
+            starred: false,
             display_name: display.clone(),
             company: self.company_name.clone().unwrap_or_default(),
             emails: self
@@ -177,7 +178,8 @@ impl ContactsApi {
         Self { client }
     }
 
-    async fn get_contact(&self, remote_id: &str) -> Result<GraphContact> {
+    /// Reads the current card, including its folder for writes.
+    pub async fn get_contact(&self, remote_id: &str) -> Result<GraphContact> {
         let path = format!(
             "/me/contacts/{}?$select={CONTACT_FIELDS},parentFolderId",
             encode_query_value(remote_id)

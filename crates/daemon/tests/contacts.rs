@@ -193,6 +193,14 @@ async fn provider_writes_update_the_book_and_require_the_selected_identity() {
         ErrorKind::Conflict
     );
     delete["remote_id"] = json!(card.remote_id);
+    let mut expected = json!({"name":card.name,"company":card.company,"phones":card.phones,"emails":card.emails,"starred":false});
+    delete["expected_json"] = json!(expected.to_string());
+    assert_eq!(
+        write(delete.clone()).await.unwrap_err().kind,
+        ErrorKind::Conflict
+    );
+    expected["company"] = json!("Club");
+    delete["expected_json"] = json!(expected.to_string());
     write(delete).await.unwrap();
     assert!(
         list_at(&env.paths)

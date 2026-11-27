@@ -25,6 +25,7 @@ async fn create_edit_clear_and_delete_a_contact() {
                 company: Some("Company".into()),
                 emails: Some(vec!["test@example.org".into()]),
                 phones: Some(vec!["+15555550100".into()]),
+                ..Default::default()
             },
         )
         .await
@@ -36,7 +37,7 @@ async fn create_edit_clear_and_delete_a_contact() {
     assert_eq!(contact.company, "Company");
     let remote = &contact.remote_id;
     let read_path = format!(
-        "/{remote}?personFields=names,emailAddresses,phoneNumbers,organizations,biographies,metadata"
+        "/{remote}?personFields=names,emailAddresses,phoneNumbers,organizations,biographies,memberships,metadata"
     );
     let read = || {
         api.client()
@@ -96,6 +97,7 @@ async fn create_edit_clear_and_delete_a_contact() {
                 emails: Some(vec![]),
                 phones: Some(vec![]),
                 name: Some("Renamed Contact".into()),
+                ..Default::default()
             },
         )
         .await
@@ -109,6 +111,29 @@ async fn create_edit_clear_and_delete_a_contact() {
         "Manager"
     );
 
+    let label =
+        json!({"contactGroupMembership":{"contactGroupResourceName":"contactGroups/family"}});
+    let mut person = read().await.unwrap();
+    person["memberships"] = json!([label]);
+    mock.mailbox("default").set_contacts(vec![person]);
+    for starred in [true, false] {
+        let saved = api
+            .save_contact(
+                account,
+                Some(remote),
+                &ContactChanges {
+                    starred: Some(starred),
+                    ..Default::default()
+                },
+            )
+            .await
+            .unwrap();
+        assert_eq!(saved.starred, starred);
+        let person = read().await.unwrap();
+        let groups = person["memberships"].as_array().unwrap();
+        assert!(groups.contains(&label));
+        assert_eq!(groups.len(), if starred { 2 } else { 1 });
+    }
     api.delete_contact(remote).await.unwrap();
     assert!(matches!(read().await, Err(Error::NotFound(_))));
 }

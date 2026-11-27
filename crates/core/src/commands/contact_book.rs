@@ -41,6 +41,10 @@ pub struct ContactCard {
     pub emails: Vec<String>,
     /// All saved phone numbers.
     pub phones: Vec<String>,
+    /// Google account email for opening this card on the web.
+    pub google_account: Option<String>,
+    /// Google favourite status.
+    pub starred: bool,
 }
 
 /// All synced accounts and their saved contacts.
@@ -66,6 +70,8 @@ pub fn list_at(paths: &DaemonPaths) -> Result<ContactBook, CommandError> {
                 name: c.display_name,
                 company: c.company,
                 phones: c.phones,
+                google_account: (account.provider == "gmail").then(|| account.email.clone()),
+                starred: c.starred,
                 emails: c.emails.into_iter().map(|e| e.addr).collect(),
             });
         }
@@ -131,6 +137,8 @@ pub struct ContactTarget {
     pub contact: i64,
     /// Provider ID from the selected card, to detect a stale selection.
     pub remote_id: Option<String>,
+    /// JSON snapshot of the reviewed name, company, emails, phones and starred flag.
+    pub expected_json: Option<String>,
 }
 
 /// Selected record and changed fields.

@@ -30,6 +30,8 @@ pub struct NewContact {
     pub emails: Vec<Address>,
     /// Phone numbers.
     pub phones: Vec<String>,
+    /// Google starred group membership.
+    pub starred: bool,
 }
 
 /// Editable fields shared by Outlook and Google. Omitted fields are left alone.
@@ -45,6 +47,8 @@ pub struct ContactChanges {
     pub emails: Option<Vec<String>>,
     /// Phone numbers. An empty list clears the field.
     pub phones: Option<Vec<String>>,
+    /// Set Google favourite status.
+    pub starred: Option<bool>,
 }
 
 /// A stored contact.
@@ -64,6 +68,8 @@ pub struct Contact {
     pub emails: Vec<Address>,
     /// Phone numbers.
     pub phones: Vec<String>,
+    /// Google starred group membership.
+    pub starred: bool,
 }
 
 /// Someone to write to: a contact's address or a past correspondent.
@@ -121,12 +127,12 @@ impl WriteTx<'_> {
         let phones = serde_json::to_string(&c.phones).expect("phones serialise");
         let id: ContactId = self.tx.query_row(
             "INSERT INTO contacts (account_id, remote_id, display_name, company, emails_json,
-                                   phones_json, round)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+                                   phones_json, starred, round)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
              ON CONFLICT (account_id, remote_id) DO UPDATE SET
                display_name = excluded.display_name, company = excluded.company,
                emails_json = excluded.emails_json, phones_json = excluded.phones_json,
-               round = excluded.round
+               starred = excluded.starred, round = excluded.round
              RETURNING id",
             params![
                 c.account,
@@ -135,6 +141,7 @@ impl WriteTx<'_> {
                 c.company,
                 emails,
                 phones,
+                c.starred,
                 round
             ],
             |r| r.get(0),
@@ -185,7 +192,7 @@ impl WriteTx<'_> {
 
 fn contacts_of(c: &Connection, account: AccountId) -> Result<Vec<Contact>> {
     let mut s = c.prepare_cached(
-        "SELECT id, account_id, remote_id, display_name, company, emails_json, phones_json
+        "SELECT id, account_id, remote_id, display_name, company, emails_json, phones_json, starred
            FROM contacts WHERE account_id = ?1 ORDER BY display_name COLLATE NOCASE, id",
     )?;
     let rows = s.query_map([account], |r| {
@@ -197,6 +204,7 @@ fn contacts_of(c: &Connection, account: AccountId) -> Result<Vec<Contact>> {
             company: r.get(4)?,
             emails: json(&r.get::<_, String>(5)?),
             phones: json(&r.get::<_, String>(6)?),
+            starred: r.get(7)?,
         })
     })?;
     Ok(rows.collect::<rusqlite::Result<_>>()?)

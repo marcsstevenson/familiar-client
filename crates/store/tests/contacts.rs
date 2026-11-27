@@ -100,6 +100,7 @@ fn correspondents_contacts_and_search() {
             })
             .collect(),
         phones: vec!["021 555".into()],
+        starred: false,
     };
     w.write(|tx| {
         let round = tx.begin_contact_round(a)?;

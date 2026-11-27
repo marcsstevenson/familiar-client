@@ -146,6 +146,39 @@ impl Service {
             .as_ref()
             .map(|t| self.contact_remote(account, t))
             .transpose()?;
+        if change.as_ref().is_some_and(|c| c.starred.is_some())
+            && matches!(handle.api, AccountApi::Graph(_))
+        {
+            return Err(CommandError::usage(
+                "Favourites are supported for Google contacts.",
+            ));
+        }
+        if let Some(expected) = target.as_ref().and_then(|t| t.expected_json.as_ref()) {
+            let expected: ContactChanges = serde_json::from_str(expected)
+                .map_err(|_| CommandError::usage("Invalid contact snapshot JSON."))?;
+            let id = remote.as_deref().expect("a reviewed contact has a target");
+            let current = match &handle.api {
+                AccountApi::Graph(api) => ContactsApi::new(api.client().clone())
+                    .get_contact(id)
+                    .await
+                    .map(|c| c.to_new(account)),
+                AccountApi::Gmail(api) => api.get_contact(account, id).await,
+            }
+            .map_err(|err| provider_error(err, &handle.key))?;
+            let snapshot = ContactChanges {
+                name: Some(current.display_name),
+                company: Some(current.company),
+                emails: Some(current.emails.into_iter().map(|e| e.addr).collect()),
+                phones: Some(current.phones),
+                starred: Some(current.starred),
+            };
+            if expected != snapshot {
+                return Err(CommandError::new(
+                    ErrorKind::Conflict,
+                    "The provider's contact has changed since this preview. Sync contacts and review the merge again.",
+                ));
+            }
+        }
         let old = target.as_ref().map(|t| ContactId(t.contact));
         let outcome = match change {
             Some(mut fields) => {

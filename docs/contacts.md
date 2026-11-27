@@ -8,6 +8,16 @@ Existing accounts with read-only contact access can continue browsing. To grant 
 
 The same operations are available through `fam contacts list`, `create`, `edit` and `delete`. Use `fam contacts list --json` to get local IDs and accounts. For example, `fam contacts create --account work --name "Jane Coach" --emails jane@example.org`. Deleting a card needs `--yes`.
 
+## Select, merge and delete
+
+Check a card to select it, or use the checkbox above the list to select the visible results. **Delete…** asks once for the selected contacts and names the affected accounts. If a provider rejects a deletion, Familiar stops and reports how many cards it removed.
+
+**Likely duplicates** finds cards in the same account with a matching name, email address or phone number. Choose a card to see the matching value and select its matches. You can also select cards manually. **Merge…** lets you choose which card to keep and review the result. It keeps the first available name and company, starting with your chosen card, and combines email addresses, phone numbers and Google favourite status. The other cards are deleted after the result is saved and checked. Provider-only details such as photos, labels and notes stay with the card you keep. Details of that kind on the other cards are lost.
+
+## Google favourites and links
+
+The **Favourites** view shows starred cards from your synced Google accounts. Use the star on a Google card to change its favourite status in Google Contacts. Stars changed in Google appear on the next contact sync. **Open in Google Contacts** opens the selected person in your browser with the owning Google account.
+
 ## Recipient suggestions
 
 `fam contacts search <words>` (WP 2.5) finds people to write to, for
