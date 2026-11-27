@@ -229,6 +229,39 @@ async fn a_401_refreshes_the_token_once() {
     );
 }
 
+/// A token store that a new sign-in can change under the client.
+struct Signed(std::sync::Mutex<String>);
+
+impl TokenSource for Signed {
+    fn access_token(&self) -> familiar_provider_graph::Result<String> {
+        Ok(self.0.lock().unwrap().clone())
+    }
+    fn refresh(&self) -> familiar_provider_graph::Result<String> {
+        self.access_token()
+    }
+}
+
+#[tokio::test]
+async fn a_403_retries_once_with_a_newer_stored_token() {
+    let mock = MockGraph::start().await.unwrap();
+    let tokens = Arc::new(Signed(std::sync::Mutex::new("test-token".into())));
+    let c = GraphClient::new(ClientOptions::with_base(mock.base_url()), tokens.clone()).unwrap();
+    c.get("/me/mailFolders", Priority::User, &[]).await.unwrap();
+
+    // Same stored token: the 403 stands.
+    mock.push_fault(Fault::access_denied().times(1));
+    let err = c
+        .get("/me/mailFolders", Priority::User, &[])
+        .await
+        .unwrap_err();
+    assert!(err.to_string().contains("ErrorAccessDenied"), "{err}");
+
+    // A new sign-in stored another token: it is used and the request retried.
+    *tokens.0.lock().unwrap() = "default-token".into();
+    mock.push_fault(Fault::access_denied().times(1));
+    c.get("/me/mailFolders", Priority::User, &[]).await.unwrap();
+}
+
 #[tokio::test]
 async fn a_gateway_timeout_repeats_a_read_but_not_a_write() {
     let mock = MockGraph::start().await.unwrap();
