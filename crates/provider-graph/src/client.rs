@@ -160,6 +160,12 @@ impl GraphClient {
         Ok(t)
     }
 
+    /// Reads the stored token again; true if it isn't the one `used`.
+    async fn reload(&self, used: &str) -> Result<bool> {
+        *self.inner.token.lock().unwrap_or_else(|e| e.into_inner()) = None;
+        Ok(self.token(false).await? != used)
+    }
+
     /// GETs a path under the base URL (`/me/mailFolders`) or a link Graph
     /// returned (`@odata.nextLink`, `@odata.deltaLink`), and returns the JSON.
     ///
@@ -254,6 +260,13 @@ impl GraphClient {
                 return Ok(serde_json::from_slice(&body)?);
             }
             let (code, message) = graph_error(&body);
+            // A new sign-in (say, one granting Contacts.ReadWrite) leaves this
+            // cached token behind: on a 403, use the stored one if it differs.
+            if status == StatusCode::FORBIDDEN && !refreshed && self.reload(&token).await? {
+                refreshed = true;
+                attempt -= 1;
+                continue;
+            }
             match status {
                 StatusCode::UNAUTHORIZED if !refreshed => {
                     refreshed = true;
