@@ -243,6 +243,11 @@
   font-weight: 600;
   min-width: 0;
 }
+.attachment-viewer-status:not(:empty) {
+  padding: var(--space-2) var(--space-5);
+  border-bottom: 1px solid var(--border);
+  overflow-wrap: anywhere;
+}
 .attachment-viewer-zoom {
   min-width: 3.5em;
   text-align: center;

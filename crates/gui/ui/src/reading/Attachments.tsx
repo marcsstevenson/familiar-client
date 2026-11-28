@@ -24,6 +24,7 @@ export function Attachments(props: { message: number; onStatus: (s: string) => v
   // The attachments the viewer steps through: real files, not Outlook items or links.
   const files = () => (list() ?? []).filter((a) => a.kind === "file");
   const [busy, setBusy] = createSignal<string | null>(null);
+  const [saveStatus, setSaveStatus] = createSignal("");
 
   const open = async (a: AttachmentInfo) => {
     setBusy(a.id);
@@ -32,6 +33,7 @@ export function Attachments(props: { message: number; onStatus: (s: string) => v
       if (p.kind === "none") {
         props.onStatus(`No preview for ${a.name}; use Save to open it in its own app.`);
       } else {
+        setSaveStatus("");
         setViewing({ index: files().findIndex((f) => f.id === a.id), first: p });
       }
     } catch (e) {
@@ -43,13 +45,16 @@ export function Attachments(props: { message: number; onStatus: (s: string) => v
 
   const save = async (a: AttachmentInfo) => {
     setBusy(a.id);
+    setSaveStatus(`Saving ${a.name}…`);
+    let result: string;
     try {
-      props.onStatus(`Saved to ${await saveAttachment(props.message, a.id)}`);
+      result = `Saved to ${await saveAttachment(props.message, a.id)}`;
     } catch (e) {
-      props.onStatus(`Couldn't save ${a.name}: ${errorText(e)}`);
-    } finally {
-      setBusy(null);
+      result = `Couldn't save ${a.name}: ${errorText(e)}`;
     }
+    setBusy(null);
+    setSaveStatus(result);
+    props.onStatus(result);
   };
 
   return (
@@ -92,6 +97,8 @@ export function Attachments(props: { message: number; onStatus: (s: string) => v
             first={v().first}
             onIndex={(index) => setViewing({ ...v(), index })}
             onSave={save}
+            saving={busy() !== null}
+            saveStatus={saveStatus()}
             onClose={() => setViewing(null)}
           />
         )}

@@ -23,6 +23,8 @@ export function AttachmentViewer(props: {
   first: Preview;
   onIndex: (i: number) => void;
   onSave: (a: AttachmentInfo) => void;
+  saving: boolean;
+  saveStatus: string;
   onClose: () => void;
 }) {
   const [loaded, setLoaded] = createSignal<Loaded>({ state: "ready", p: props.first });
@@ -140,11 +142,12 @@ export function AttachmentViewer(props: {
             100%
           </button>
         </Show>
-        <button onClick={() => props.onSave(current())}>Save</button>
+        <button disabled={props.saving} title="Save to Downloads" onClick={() => props.onSave(current())}>Save</button>
         <button onClick={props.onClose} aria-label="Close viewer" title="Close (Esc)">
           Close
         </button>
       </div>
+      <div class="attachment-viewer-status" role="status">{props.saveStatus}</div>
       <Switch>
         <Match when={loaded().state === "loading"}>
           <div class="attachment-viewer-empty muted">Loading {current().name}…</div>

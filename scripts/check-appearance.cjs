@@ -29,7 +29,13 @@ async function mount(page, main) {
       if (cmd === "set_accent_icon") window.iconPixels = Array.from(new Uint8Array(args));
       if (cmd === "reading_attachments") return [{ kind: "file", id: "1", name: "Notes.txt", size: 120 }];
       if (cmd === "reading_preview") return { kind: "text", text: "Attachment preview" };
-      if (cmd === "reading_save") return "Downloads/Notes.txt";
+      if (cmd === "reading_save") {
+        if (window.holdSave) return new Promise((resolve, reject) => {
+          window.finishSave = resolve;
+          window.failSave = reject;
+        });
+        return "Downloads/Notes.txt";
+      }
     });
     const { TitleBar } = await import("/src/TitleBar.tsx");
     const { SearchBar } = await import("/src/list/SearchBar.tsx");
@@ -65,6 +71,17 @@ async function mount(page, main) {
     assert.equal(await save.evaluate(border), "0px");
     await file.click();
     await main.getByText("Attachment preview", { exact: true }).waitFor();
+    const viewer = main.getByRole("dialog", { name: "Viewing Notes.txt" });
+    const viewerSave = viewer.getByRole("button", { name: "Save", exact: true });
+    await main.evaluate(() => { window.holdSave = true; });
+    await viewerSave.click();
+    assert.ok(await viewerSave.isDisabled(), "Save should be disabled during the write");
+    await main.evaluate(() => window.failSave("Disk full"));
+    await viewer.getByRole("status").filter({ hasText: "Disk full" }).waitFor();
+    await viewerSave.click();
+    await main.evaluate(() => window.finishSave("Downloads/Notes (2).txt"));
+    await viewer.getByRole("status").filter({ hasText: "Downloads/Notes (2).txt" }).waitFor();
+    await main.evaluate(() => { window.holdSave = false; });
     await main.getByRole("button", { name: "Close viewer" }).click();
     await save.click();
     await main.waitForFunction(() => window.status.includes("Downloads/Notes.txt"));
